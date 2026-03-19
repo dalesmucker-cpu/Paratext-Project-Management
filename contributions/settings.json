@@ -1,0 +1,92 @@
+[
+  {
+    "name": "paratextProjectManager.currentUser",
+    "default": "",
+    "definition": {
+      "type": "string",
+      "title": "%setting_currentUser_title%",
+      "description": "%setting_currentUser_description%"
+    }
+  },
+  {
+    "name": "paratextProjectManager.projectsBasePath",
+    "default": "",
+    "definition": {
+      "type": "string",
+      "title": "%setting_projectsBasePath_title%",
+      "description": "%setting_projectsBasePath_description%"
+    }
+  },
+  {
+    "name": "paratextProjectManager.gcalClientId",
+    "default": "",
+    "definition": {
+      "type": "string",
+      "title": "%setting_gcalClientId_title%",
+      "description": "%setting_gcalClientId_description%"
+    }
+  },
+  {
+    "name": "paratextProjectManager.gcalClientSecret",
+    "default": "",
+    "definition": {
+      "type": "string",
+      "title": "%setting_gcalClientSecret_title%",
+      "description": "%setting_gcalClientSecret_description%"
+    }
+  },
+  {
+    "name": "paratextProjectManager.gcalCalendarId",
+    "default": "primary",
+    "definition": {
+      "type": "string",
+      "title": "%setting_gcalCalendarId_title%",
+      "description": "%setting_gcalCalendarId_description%"
+    }
+  },
+  {
+    "name": "paratextProjectManager.gcalAccessToken",
+    "default": "",
+    "definition": {
+      "type": "string",
+      "title": "%setting_gcalAccessToken_title%",
+      "description": "%setting_gcalAccessToken_description%"
+    }
+  },
+  {
+    "name": "paratextProjectManager.gcalRefreshToken",
+    "default": "",
+    "definition": {
+      "type": "string",
+      "title": "%setting_gcalRefreshToken_title%",
+      "description": "%setting_gcalRefreshToken_description%"
+    }
+  },
+  {
+    "name": "paratextProjectManager.gcalTokenExpiry",
+    "default": "0",
+    "definition": {
+      "type": "string",
+      "title": "%setting_gcalTokenExpiry_title%",
+      "description": "%setting_gcalTokenExpiry_description%"
+    }
+  },
+  {
+    "name": "paratextProjectManager.gcalLastSync",
+    "default": "",
+    "definition": {
+      "type": "string",
+      "title": "%setting_gcalLastSync_title%",
+      "description": "%setting_gcalLastSync_description%"
+    }
+  },
+  {
+    "name": "paratextProjectManager.gcalUserEmail",
+    "default": "",
+    "definition": {
+      "type": "string",
+      "title": "%setting_gcalUserEmail_title%",
+      "description": "%setting_gcalUserEmail_description%"
+    }
+  }
+]
