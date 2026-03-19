@@ -1,0 +1,18 @@
+{
+  "name": "paratextProjectManager",
+  "version": "0.1.0",
+  "publisher": "dale",
+  "displayData": "assets/displayData.json",
+  "author": "Dale",
+  "license": "MIT",
+  "main": "src/main.js",
+  "extensionDependencies": {},
+  "elevatedPrivileges": ["createProcess"],
+  "types": "src/types/project-manager.d.ts",
+  "menus": "contributions/menus.json",
+  "settings": "contributions/settings.json",
+  "projectSettings": "contributions/projectSettings.json",
+  "localizedStrings": "contributions/localizedStrings.json",
+  "themes": "contributions/themes.json",
+  "activationEvents": ["onCommand:paratextProjectManager.openTaskBoard"]
+}

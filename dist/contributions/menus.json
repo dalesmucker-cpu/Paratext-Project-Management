@@ -1,0 +1,60 @@
+{
+  "mainMenu": {
+    "columns": {},
+    "groups": {
+      "paratextProjectManager.projectManagerGroup": {
+        "order": 1.6,
+        "isExtensible": true,
+        "menuItem": "paratextProjectManager.submenu"
+      }
+    },
+    "items": [
+      {
+        "id": "paratextProjectManager.submenu",
+        "label": "%mainMenu_projectManagerSubmenu%",
+        "localizeNotes": "Application main menu > Project > Project Manager",
+        "group": "platform.projectProjects",
+        "order": 1000.2
+      },
+      {
+        "label": "%mainMenu_openTaskBoard%",
+        "localizeNotes": "Application main menu > Project > Project Manager > Open Task Board",
+        "group": "paratextProjectManager.projectManagerGroup",
+        "order": 1,
+        "command": "paratextProjectManager.openTaskBoard"
+      },
+      {
+        "label": "%mainMenu_openMyTasks%",
+        "localizeNotes": "Application main menu > Project > Project Manager > Open My Tasks",
+        "group": "paratextProjectManager.projectManagerGroup",
+        "order": 2,
+        "command": "paratextProjectManager.openMyTasks"
+      },
+      {
+        "label": "%mainMenu_openProjectOverview%",
+        "localizeNotes": "Application main menu > Project > Project Manager > Open Project Overview",
+        "group": "paratextProjectManager.projectManagerGroup",
+        "order": 3,
+        "command": "paratextProjectManager.openProjectOverview"
+      }
+    ]
+  },
+  "defaultWebViewTopMenu": {
+    "columns": {},
+    "groups": {},
+    "items": [
+      {
+        "label": "%mainMenu_openTaskBoard%",
+        "localizeNotes": "Web view top menu > Open Task Board",
+        "group": "platform.projectTop",
+        "order": 10,
+        "command": "paratextProjectManager.openTaskBoard"
+      }
+    ]
+  },
+  "defaultWebViewContextMenu": {
+    "groups": {},
+    "items": []
+  },
+  "webViewMenus": {}
+}

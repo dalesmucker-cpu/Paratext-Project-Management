@@ -1,0 +1,12 @@
+{
+  "icon": "",
+  "moreInfoUrl": "",
+  "supportUrl": "",
+  "localizedDisplayInfo": {
+    "en": {
+      "displayName": "Paratext Track Changes",
+      "shortSummary": "Track changes in Bible translations",
+      "description": "assets/descriptions/description-en.md"
+    }
+  }
+}
