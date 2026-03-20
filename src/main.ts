@@ -297,17 +297,31 @@ function mergeTaskStores(localJson: string, driveJson: string): string {
   return JSON.stringify(merged, null, 2);
 }
 
+// Concurrency locks — prevent multiple simultaneous token refreshes
+let driveTokenRefreshing: Promise<void> | null = null;
+let gcalTokenRefreshing: Promise<void> | null = null;
+
 /** Returns a valid Drive access token, refreshing if expired. Empty string if not configured. */
 async function getValidDriveToken(): Promise<string> {
   try {
     const config = await readTasksDriveConfig();
     if (!config.refreshToken || !config.clientId) return '';
     if (Date.now() < config.expiryDate - 5 * 60 * 1000) return config.accessToken;
-    // Token expired — refresh it
-    const result = await runGcalHelper('refresh', [config.clientId, config.clientSecret, config.refreshToken]);
-    const data = JSON.parse(result);
-    await writeTasksDriveConfig({ accessToken: data.access_token, expiryDate: data.expiry_date });
-    return data.access_token;
+    // Token expired — only one refresh at a time
+    if (!driveTokenRefreshing) {
+      driveTokenRefreshing = (async () => {
+        const result = await runGcalHelper(
+          'refresh',
+          [config.clientId, config.clientSecret, config.refreshToken],
+          undefined,
+          15_000,
+        );
+        const data = JSON.parse(result);
+        await writeTasksDriveConfig({ accessToken: data.access_token, expiryDate: data.expiry_date });
+      })().finally(() => { driveTokenRefreshing = null; });
+    }
+    await driveTokenRefreshing;
+    return (await readTasksDriveConfig()).accessToken;
   } catch (_) {
     return '';
   }
@@ -335,11 +349,21 @@ async function getValidAccessToken(): Promise<string> {
     // Still valid (with 5-minute buffer)?
     if (Date.now() < config.expiryDate - 5 * 60 * 1000) return config.accessToken;
 
-    // Token expired — refresh it
-    const result = await runGcalHelper('refresh', [config.clientId, config.clientSecret, config.refreshToken]);
-    const data = JSON.parse(result);
-    await writeGcalConfig({ accessToken: data.access_token, expiryDate: data.expiry_date });
-    return data.access_token;
+    // Token expired — only one refresh at a time
+    if (!gcalTokenRefreshing) {
+      gcalTokenRefreshing = (async () => {
+        const result = await runGcalHelper(
+          'refresh',
+          [config.clientId, config.clientSecret, config.refreshToken],
+          undefined,
+          15_000,
+        );
+        const data = JSON.parse(result);
+        await writeGcalConfig({ accessToken: data.access_token, expiryDate: data.expiry_date });
+      })().finally(() => { gcalTokenRefreshing = null; });
+    }
+    await gcalTokenRefreshing;
+    return (await readGcalConfig()).accessToken;
   } catch (_) {
     return '';
   }

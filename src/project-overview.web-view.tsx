@@ -712,9 +712,11 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
 
   // Background auto-refresh — silently picks up changes saved by other computers
   const lastRefreshRef = useRef(0);
+  const refreshInProgressRef = useRef(false);
 
   const silentRefresh = useCallback(async () => {
-    if (!projectId) return;
+    if (!projectId || refreshInProgressRef.current) return;
+    refreshInProgressRef.current = true;
     try {
       const result = await papi.commands.sendCommand('paratextProjectManager.getTasks', projectId);
       const store = JSON.parse(result as string) as TaskStore;
@@ -736,7 +738,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         return Array.from(merged.values());
       });
       if (store.stageConfig && Object.keys(store.stageConfig).length > 0) setStageConfig(store.stageConfig);
-    } catch (_) { /* silent */ }
+    } catch (_) { /* silent */ } finally { refreshInProgressRef.current = false; }
   }, [projectId]);
 
   // Periodic refresh every 60 s

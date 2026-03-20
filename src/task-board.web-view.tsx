@@ -937,9 +937,11 @@ globalThis.webViewComponent = function TaskBoardWebView({
 
   /** Silently merges Drive data into local state without showing a loading spinner. */
   const lastRefreshRef = useRef(0);
+  const refreshInProgressRef = useRef(false);
 
   const silentRefresh = useCallback(async () => {
-    if (!projectId || savingRef.current) return;
+    if (!projectId || savingRef.current || refreshInProgressRef.current) return;
+    refreshInProgressRef.current = true;
     try {
       const result = await papi.commands.sendCommand('paratextProjectManager.getTasks', projectId);
       const store = JSON.parse(result as string) as TaskStore;
@@ -969,7 +971,7 @@ globalThis.webViewComponent = function TaskBoardWebView({
         const pending = JSON.parse(pendingRaw as string) as string[];
         if (!pending.includes(projectId)) setSyncPending(false);
       } catch (_) { /* ignore */ }
-    } catch (_) { /* silent */ }
+    } catch (_) { /* silent */ } finally { refreshInProgressRef.current = false; }
   }, [projectId]);
 
   // Periodic refresh every 60 s
