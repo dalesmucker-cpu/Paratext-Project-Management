@@ -14,6 +14,17 @@ import {
   STAGES,
 } from './types/task.types';
 
+/** Safely convert any caught value (including papi plain-object errors) to a readable string. */
+function errMsg(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (typeof e === 'object' && e !== null) {
+    const obj = e as Record<string, unknown>;
+    if (typeof obj.message === 'string') return obj.message;
+    return JSON.stringify(obj);
+  }
+  return String(e);
+}
+
 interface GcalStatus {
   connected: boolean;
   email: string;
@@ -697,7 +708,23 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       if (membersResult) setTeamMembers(JSON.parse(membersResult as string) as string[]);
       if (userResult && typeof userResult === 'string' && userResult.length > 0) setCurrentUser(userResult);
     } catch (e) {
-      setError(`Error al cargar: ${e}`);
+      // Auto-retry once after 3s — handles papi timeouts after long idle
+      try {
+        await new Promise((r) => setTimeout(r, 3000));
+        const [result, membersResult, userResult] = await Promise.all([
+          papi.commands.sendCommand('paratextProjectManager.getTasks', projectId),
+          papi.commands.sendCommand('paratextProjectManager.getTeamMembers'),
+          papi.commands.sendCommand('paratextProjectManager.getCurrentUser'),
+        ]);
+        const store = JSON.parse(result) as TaskStore;
+        setTasks(store.tasks ?? []);
+        setStageConfig(store.stageConfig ?? {});
+        extrasRef.current = { activityLog: store.activityLog, deletedTaskIds: store.deletedTaskIds };
+        if (membersResult) setTeamMembers(JSON.parse(membersResult as string) as string[]);
+        if (userResult && typeof userResult === 'string' && userResult.length > 0) setCurrentUser(userResult);
+      } catch (e2) {
+        setError(`Error al cargar: ${errMsg(e2)}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -824,8 +851,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         driveClientSecret.trim(),
       );
     } catch (e) {
-      const msg = e instanceof Error ? e.message : (typeof e === 'object' && e !== null ? JSON.stringify(e) : String(e));
-      setDriveError(`Error al iniciar: ${msg}`);
+      setDriveError(`Error al iniciar: ${errMsg(e)}`);
       setDriveMessage('');
       setDriveConnecting(false);
       return;
@@ -1012,8 +1038,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       );
       await pollGcalAuth();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : (typeof e === 'object' && e !== null ? JSON.stringify(e) : String(e));
-      setGcalError(`Error: ${msg}`);
+      setGcalError(`Error: ${errMsg(e)}`);
       setGcalMessage('');
       setGcalConnecting(false);
     }
@@ -1036,10 +1061,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         setGcalConnecting(false);
       }
     } catch (e) {
-      const msg = e instanceof Error
-        ? e.message
-        : (typeof e === 'object' && e !== null ? JSON.stringify(e) : String(e));
-      setGcalError(`Error: ${msg}`);
+      setGcalError(`Error: ${errMsg(e)}`);
       setGcalMessage('');
       setGcalConnecting(false);
     }
@@ -1053,7 +1075,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       setGcalMessage('');
       setGcalError('');
     } catch (e) {
-      setGcalError(`Error al desconectar: ${e}`);
+      setGcalError(`Error al desconectar: ${errMsg(e)}`);
     }
   }, []);
 
@@ -1070,7 +1092,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       await papi.commands.sendCommand('paratextProjectManager.gcalSetCalendarId', calId);
       setGcalStatus((prev) => ({ ...prev, calendarId: calId }));
     } catch (e) {
-      setGcalError(`Error: ${e}`);
+      setGcalError(`Error: ${errMsg(e)}`);
     }
   }, []);
 
@@ -1093,7 +1115,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       );
       await loadGcalStatus();
     } catch (e) {
-      setGcalError(`Error al sincronizar: ${e}`);
+      setGcalError(`Error al sincronizar: ${errMsg(e)}`);
     } finally {
       setGcalSyncing(false);
     }
