@@ -307,20 +307,20 @@ async function getValidDriveToken(): Promise<string> {
     const config = await readTasksDriveConfig();
     if (!config.refreshToken || !config.clientId) return '';
     if (Date.now() < config.expiryDate - 5 * 60 * 1000) return config.accessToken;
-    // Token expired — only one refresh at a time
-    if (!driveTokenRefreshing) {
-      driveTokenRefreshing = (async () => {
-        const result = await runGcalHelper(
-          'refresh',
-          [config.clientId, config.clientSecret, config.refreshToken],
-          undefined,
-          15_000,
-        );
-        const data = JSON.parse(result);
-        await writeTasksDriveConfig({ accessToken: data.access_token, expiryDate: data.expiry_date });
-      })().finally(() => { driveTokenRefreshing = null; });
-    }
-    await driveTokenRefreshing;
+      // Token expired — only one refresh at a time
+      if (!driveTokenRefreshing) {
+        driveTokenRefreshing = (async () => {
+          const result = await runGcalHelper(
+            'refresh',
+            [config.clientId, config.clientSecret, config.refreshToken],
+            undefined,
+            15_000,
+          );
+          const data = JSON.parse(result);
+          await writeTasksDriveConfig({ accessToken: data.access_token, expiryDate: data.expiry_date });
+        })().catch((err) => { logger.warn(`Drive token refresh failed: ${err}`); }).finally(() => { driveTokenRefreshing = null; });
+      }
+      await driveTokenRefreshing;
     return (await readTasksDriveConfig()).accessToken;
   } catch (_) {
     return '';
@@ -360,7 +360,7 @@ async function getValidAccessToken(): Promise<string> {
         );
         const data = JSON.parse(result);
         await writeGcalConfig({ accessToken: data.access_token, expiryDate: data.expiry_date });
-      })().finally(() => { gcalTokenRefreshing = null; });
+      })().catch((err) => { logger.warn(`GCal token refresh failed: ${err}`); }).finally(() => { gcalTokenRefreshing = null; });
     }
     await gcalTokenRefreshing;
     return (await readGcalConfig()).accessToken;
@@ -667,6 +667,9 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
             }
             // No local file yet — use Drive as source of truth
             logger.info(`Project Manager: getTasks from Drive only for "${projectId}"`);
+            if (tasksPath) {
+              try { await runFileHelper('write', tasksPath, driveContent); } catch (_) { /* ignore */ }
+            }
             return driveContent;
           }
         }

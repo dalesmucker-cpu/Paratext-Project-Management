@@ -183,7 +183,7 @@ function EditTaskModal({
             Cancelar
           </button>
           <button
-            className="px-3 py-1.5 bg-slate-600 text-white rounded text-sm hover:bg-slate-700"
+            className="px-3 py-1.5 bg-primary text-primary-foreground rounded text-sm hover:bg-primary/90"
             onClick={handleSave}
           >
             Guardar
@@ -318,9 +318,9 @@ function StageConfigPanel({
   };
 
   return (
-    <div className="bg-slate-50 border-b border-slate-200 px-3 py-2 text-sm">
+    <div className="bg-background border-b border-border px-3 py-2 text-sm">
       <div className="flex justify-between items-center mb-2">
-        <span className="font-semibold text-slate-700 text-xs">Configurar Etapas</span>
+        <span className="font-semibold text-foreground text-xs">Configurar Etapas</span>
         <button className="text-xs text-gray-500 hover:text-gray-700" onClick={onClose}>
           ✕
         </button>
@@ -383,12 +383,12 @@ function StageConfigPanel({
                       <span className="text-xs text-gray-400 italic">todos los libros</span>
                     )}
                     {sa.books.map((b) => (
-                      <span key={b} className="text-xs bg-slate-100 text-slate-700 px-1 rounded flex items-center gap-0.5">
+                      <span key={b} className="text-xs bg-secondary text-secondary-foreground px-1 rounded flex items-center gap-0.5">
                         {b}
                         <button
                           type="button"
                           onClick={() => removeAssigneeBook(stage, sa.person, b)}
-                          className="text-slate-500 hover:text-red-500 leading-none ml-0.5"
+                          className="text-muted-foreground hover:text-destructive leading-none ml-0.5"
                         >
                           ×
                         </button>
@@ -436,7 +436,7 @@ function StageConfigPanel({
         />
         <button
           onClick={addStage}
-          className="px-3 py-1 text-xs bg-slate-500 text-white rounded hover:bg-slate-600 flex-shrink-0"
+          className="px-3 py-1 text-xs bg-primary/80 text-primary-foreground rounded hover:bg-primary/90 flex-shrink-0"
         >
           + Agregar
         </button>
@@ -449,7 +449,7 @@ function StageConfigPanel({
           Cancelar
         </button>
         <button
-          className="px-2 py-1 text-xs bg-slate-600 text-white rounded hover:bg-slate-700"
+          className="px-2 py-1 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90"
           onClick={() => {
             onUpdateConfig(localConfig);
             onClose();
@@ -480,9 +480,9 @@ function ActivityLogPanel({
   onClose: () => void;
 }) {
   return (
-    <div className="bg-slate-50 border-b border-slate-200 px-3 py-2 text-xs">
+    <div className="bg-background border-b border-border px-3 py-2 text-xs">
       <div className="flex justify-between items-center mb-2">
-        <span className="font-semibold text-slate-700">Registro de Actividad</span>
+        <span className="font-semibold text-foreground">Registro de Actividad</span>
         <button className="text-gray-500 hover:text-gray-700" onClick={onClose}>
           ✕
         </button>
@@ -605,7 +605,7 @@ function TaskCard({
           </div>
           <div className="flex gap-1">
             <button
-              className="px-1.5 py-0.5 rounded bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100 text-xs"
+              className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground border border-border hover:bg-secondary/80 text-xs"
               onClick={() => onEdit(task)}
             >
               Editar
@@ -755,7 +755,7 @@ function NewTaskModal({
               />
             </div>
             {count > 1 && (
-              <p className="text-xs text-slate-500 mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 Se crearán {count} tareas (caps. {chapterFrom}–{chapterTo})
               </p>
             )}
@@ -849,7 +849,7 @@ function NewTaskModal({
             Cancelar
           </button>
           <button
-            className="px-3 py-1.5 bg-slate-600 text-white rounded text-sm hover:bg-slate-700"
+            className="px-3 py-1.5 bg-primary text-primary-foreground rounded text-sm hover:bg-primary/90"
             onClick={handleCreate}
           >
             {count > 1 ? `Crear ${count} Tareas` : 'Crear Tarea'}
@@ -1218,7 +1218,7 @@ globalThis.webViewComponent = function TaskBoardWebView({
       <div className="flex flex-col items-center justify-center h-full p-8 text-center gap-4 text-sm">
         <p className="text-gray-600">Ningún proyecto seleccionado.</p>
         <button
-          className="px-4 py-2 bg-slate-600 text-white rounded hover:bg-slate-700"
+          className="px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90"
           onClick={selectProject}
         >
           Seleccionar Proyecto
@@ -1273,7 +1273,7 @@ globalThis.webViewComponent = function TaskBoardWebView({
           <button
             className={`px-2 py-0.5 rounded text-xs border ${
               hideCompleted
-                ? 'bg-slate-100 text-slate-700 border-slate-300'
+                ? 'bg-secondary text-secondary-foreground border-border'
                 : 'bg-gray-100 text-gray-500 hover:bg-gray-200 border-transparent'
             }`}
             onClick={() => setHideCompleted(!hideCompleted)}
@@ -1282,7 +1282,7 @@ globalThis.webViewComponent = function TaskBoardWebView({
             {hideCompleted ? '🙈 Completas' : '👁 Completas'}
           </button>
           <button
-            className="px-2 py-0.5 bg-slate-600 text-white rounded text-xs hover:bg-slate-700"
+            className="px-2 py-0.5 bg-primary text-primary-foreground rounded text-xs hover:bg-primary/90"
             onClick={() => setShowNewTask(true)}
           >
             + Nueva
@@ -1290,7 +1290,7 @@ globalThis.webViewComponent = function TaskBoardWebView({
           <button
             className={`px-2 py-0.5 rounded text-xs border ${
               showStageConfig
-                ? 'bg-slate-100 text-slate-700 border-slate-300'
+                ? 'bg-secondary text-secondary-foreground border-border'
                 : 'bg-gray-100 hover:bg-gray-200 border-transparent'
             }`}
             onClick={() => setShowStageConfig((v) => !v)}
@@ -1301,7 +1301,7 @@ globalThis.webViewComponent = function TaskBoardWebView({
           <button
             className={`px-2 py-0.5 rounded text-xs border relative ${
               showActivityLog
-                ? 'bg-slate-100 text-slate-700 border-slate-300'
+                ? 'bg-secondary text-secondary-foreground border-border'
                 : 'bg-gray-100 hover:bg-gray-200 border-transparent'
             }`}
             onClick={() => setShowActivityLog((v) => !v)}
@@ -1309,7 +1309,7 @@ globalThis.webViewComponent = function TaskBoardWebView({
           >
             📋 Registro
             {activityLog.length > 0 && !showActivityLog && (
-              <span className="absolute -top-1 -right-1 bg-slate-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center leading-none text-[10px]">
+              <span className="absolute -top-1 -right-1 bg-primary/80 text-primary-foreground text-xs rounded-full w-4 h-4 flex items-center justify-center leading-none text-[10px]">
                 {activityLog.length > 99 ? '99+' : activityLog.length}
               </span>
             )}
@@ -1368,7 +1368,7 @@ globalThis.webViewComponent = function TaskBoardWebView({
               <div
                 key={stage}
                 className={`flex-shrink-0 w-48 flex flex-col rounded transition-colors ${
-                  isOver ? 'ring-2 ring-slate-400 ring-inset' : ''
+                  isOver ? 'ring-2 ring-primary/50 ring-inset' : ''
                 }`}
                 onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverStage(stage); }}
                 onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverStage(null); }}
@@ -1381,7 +1381,7 @@ globalThis.webViewComponent = function TaskBoardWebView({
                 }}
               >
                 <div className={`rounded-t px-2 py-1.5 font-medium text-xs flex items-center justify-between transition-colors ${
-                  isOver ? 'bg-slate-300 text-slate-700' : 'bg-gray-200 text-gray-700'
+                  isOver ? 'bg-secondary/80 text-secondary-foreground' : 'bg-secondary text-secondary-foreground'
                 }`}>
                   <span className="truncate">{getStageLabel(stage, stageConfig)}</span>
                   <div className="flex items-center gap-0.5 flex-shrink-0 ml-1">
@@ -1394,7 +1394,7 @@ globalThis.webViewComponent = function TaskBoardWebView({
                   </div>
                 </div>
                 <div className={`flex-1 rounded-b p-1.5 space-y-1.5 min-h-16 overflow-y-auto max-h-[calc(100vh-120px)] transition-colors ${
-                  isOver ? 'bg-slate-200' : 'bg-gray-100'
+                  isOver ? 'bg-background' : 'bg-muted'
                 }`}>
                   {stageTasks.map((task) => (
                     <TaskCard

@@ -535,7 +535,7 @@ function CalendarTabContent({
                 )}
 
                 <button
-                  className="w-full text-xs px-3 py-1.5 bg-slate-600 text-white rounded hover:bg-slate-700 disabled:opacity-50"
+                  className="w-full text-xs px-3 py-1.5 bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50"
                   onClick={saveTimeEntry}
                   disabled={logTimeSaving}
                 >
@@ -1541,7 +1541,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       <div className="flex flex-col items-center justify-center h-full p-8 text-center gap-4 text-sm">
         <p className="text-gray-600">Ningún proyecto seleccionado.</p>
         <button
-          className="px-4 py-2 bg-slate-600 text-white rounded hover:bg-slate-700"
+          className="px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90"
           onClick={selectProject}
         >
           Seleccionar Proyecto
@@ -1587,7 +1587,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
             ↓ CSV
           </button>
           <button
-            className="px-2 py-0.5 bg-slate-600 text-white rounded hover:bg-slate-700 disabled:opacity-50"
+            className="px-2 py-0.5 bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50"
             onClick={exportPdf}
             title="Abrir tabla en navegador para imprimir/PDF"
           >
@@ -1633,7 +1633,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
             key={tab}
             className={`px-4 py-1.5 text-xs font-medium border-b-2 transition-colors ${
               currentTab === tab
-                ? 'border-slate-600 text-slate-700'
+                ? 'border-primary text-primary'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
             onClick={() => setCurrentTab(tab)}
@@ -1662,12 +1662,12 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
               {teamMembers.map((m) => (
                 <span
                   key={m}
-                  className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 text-xs px-2 py-0.5 rounded-full"
+                  className="inline-flex items-center gap-1 bg-secondary text-secondary-foreground text-xs px-2 py-0.5 rounded-full"
                 >
                   {m}
                   <button
                     type="button"
-                    className="text-slate-400 hover:text-red-500 leading-none font-bold"
+                    className="text-muted-foreground hover:text-destructive leading-none font-bold"
                     title={`Quitar a ${m}`}
                     onClick={async () => {
                       const updated = teamMembers.filter((x) => x !== m);
@@ -1728,7 +1728,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
               />
               <button
                 type="submit"
-                className="px-3 py-1 bg-slate-600 text-white text-xs rounded hover:bg-slate-700 disabled:opacity-50"
+                className="px-3 py-1 bg-primary text-primary-foreground text-xs rounded hover:bg-primary/90 disabled:opacity-50"
                 disabled={teamSaving || !teamInput.trim()}
               >
                 + Agregar
@@ -1890,7 +1890,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                           {gcalSyncing ? '⟳ Sincronizando…' : '↑ Sincronizar Fechas'}
                         </button>
                         <button
-                          className="text-xs px-2 py-1 rounded bg-slate-100 text-slate-700 hover:bg-slate-200"
+                          className="text-xs px-2 py-1 rounded bg-secondary text-secondary-foreground hover:bg-secondary/80"
                           onClick={flushPendingTime}
                         >
                           ⟳ Sincronizar horas pendientes

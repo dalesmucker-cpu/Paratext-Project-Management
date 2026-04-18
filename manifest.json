@@ -14,5 +14,9 @@
   "projectSettings": "contributions/projectSettings.json",
   "localizedStrings": "contributions/localizedStrings.json",
   "themes": "contributions/themes.json",
-  "activationEvents": ["onCommand:paratextProjectManager.openTaskBoard"]
+  "activationEvents": [
+    "onCommand:paratextProjectManager.openTaskBoard",
+    "onCommand:paratextProjectManager.openMyTasks",
+    "onCommand:paratextProjectManager.openProjectOverview"
+  ]
 }

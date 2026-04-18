@@ -110,7 +110,7 @@ function TaskRow({
             </>
           ) : task.status === 'flagged' ? (
             <button
-              className="px-2 py-1 text-xs bg-slate-50 text-slate-600 border border-slate-200 rounded hover:bg-slate-100 whitespace-nowrap"
+              className="px-2 py-1 text-xs bg-secondary text-secondary-foreground border border-border rounded hover:bg-secondary/80 whitespace-nowrap"
               onClick={() => onStatusChange(task.id, 'pending')}
             >
               ↩ Retomar
@@ -505,7 +505,7 @@ globalThis.webViewComponent = function MyTasksWebView({
       <div className="flex flex-col items-center justify-center h-full p-8 text-center gap-4 text-sm">
         <p className="text-gray-600">Ningún proyecto seleccionado.</p>
         <button
-          className="px-4 py-2 bg-slate-600 text-white rounded hover:bg-slate-700"
+          className="px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90"
           onClick={selectProject}
         >
           Seleccionar Proyecto
@@ -525,7 +525,7 @@ globalThis.webViewComponent = function MyTasksWebView({
               <span className={`rounded-full px-1.5 py-0.5 text-xs font-normal ${
                 counts.flagged > 0
                   ? 'bg-red-100 text-red-700'
-                  : 'bg-slate-200 text-slate-600'
+                  : 'bg-secondary text-secondary-foreground'
               }`}>
                 {counts.flagged + counts['in-progress'] + counts.pending}
               </span>
@@ -571,7 +571,7 @@ globalThis.webViewComponent = function MyTasksWebView({
                   Usuario: <strong>{currentUser}</strong>
                 </span>
                 <button
-                  className="text-slate-500 hover:underline text-xs"
+                  className="text-muted-foreground hover:underline text-xs"
                   onClick={() => setShowUserPicker(true)}
                 >
                   Cambiar
@@ -633,7 +633,7 @@ globalThis.webViewComponent = function MyTasksWebView({
               key={key}
               className={`px-2 py-0.5 rounded text-xs border ${
                 filterStatus === key
-                  ? 'bg-slate-600 text-white border-slate-600'
+                  ? 'bg-primary text-primary-foreground border-primary'
                   : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
               }`}
               onClick={() => setFilterStatus(key)}
@@ -650,7 +650,7 @@ globalThis.webViewComponent = function MyTasksWebView({
             placeholder="Buscar libro, cap., notas, etapa…"
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
-            className="w-full border border-gray-200 rounded px-2 py-0.5 text-xs pr-6 focus:outline-none focus:border-slate-400"
+            className="w-full border border-gray-200 rounded px-2 py-0.5 text-xs pr-6 focus:outline-none focus:border-primary"
           />
           {searchText && (
             <button
@@ -724,18 +724,18 @@ globalThis.webViewComponent = function MyTasksWebView({
 
       {/* Notification banner */}
       {notifications.length > 0 && (
-        <div className="mx-2 mt-2 p-2.5 bg-slate-50 border border-slate-300 rounded-lg">
+        <div className="mx-2 mt-2 p-2.5 bg-background border border-border rounded-lg">
           <div className="flex items-start justify-between gap-2">
             <div className="space-y-1">
               {notifications.map((msg, i) => (
-                <p key={i} className="text-xs text-slate-700">
+                <p key={i} className="text-xs text-foreground">
                   🔔 {msg}
                 </p>
               ))}
             </div>
             <button
               onClick={markSeen}
-              className="text-xs text-slate-600 hover:text-slate-800 whitespace-nowrap flex-shrink-0 border border-slate-300 rounded px-2 py-0.5"
+              className="text-xs text-foreground hover:text-foreground/80 whitespace-nowrap flex-shrink-0 border border-border rounded px-2 py-0.5"
             >
               Cerrar
             </button>

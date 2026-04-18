@@ -1,6 +1,6 @@
-# Paratext Track Changes Extension
+# Paratext Project Manager
 
-A Platform.Bible extension for tracking changes in Paratext 10 Studio.
+A modern project management extension for Paratext 10 Studio, built on Platform.Bible.
 
 ## Setup Instructions
 
@@ -18,12 +18,14 @@ npm --version
 
 ### Installation Steps
 
-1. **Navigate to this folder:**
+1. **Create a workspace folder:**
+   It is recommended to put the core and extensions next to each other.
    ```powershell
-   cd "C:\Users\Dale\paratect-track-changes"
+   mkdir C:\Users\Dale\paratext-dev
+   cd C:\Users\Dale\paratext-dev
    ```
 
-2. **Clone paranext-core (same parent folder):**
+2. **Clone paranext-core:**
    ```powershell
    git clone https://github.com/paranext/paranext-core.git
    cd paranext-core
@@ -31,8 +33,10 @@ npm --version
    cd ..
    ```
 
-3. **Install this extension's dependencies:**
+3. **Clone and install this extension:**
    ```powershell
+   git clone https://github.com/dalesmucker-cpu/Paratext-Project-Management.git
+   cd Paratext-Project-Management
    npm install
    ```
 
@@ -49,50 +53,43 @@ npm --version
 
 ### Loading in Paratext
 
-**Option 1: Copy to Paratext's extension directory**
+**Option 1: Copy to Paratext's extension directory (Recommended for users)**
 ```powershell
-$extDir = "$HOME\.paratext-10-studio\installed-extensions\paratext-track-changes"
+$extDir = "$HOME\.paratext-10-studio\installed-extensions\paratextProjectManager"
 New-Item -ItemType Directory -Force -Path $extDir
 Copy-Item -Recurse -Force dist\* $extDir
 ```
 
-**Option 2: Run Paratext with command line argument**
+**Option 2: Run Paratext with command line argument (For developers)**
 ```powershell
-$distPath = (Get-Item dist).FullName
-& "$HOME\AppData\Local\Programs\paratext-10-studio\Paratext 10 Studio.exe" --extensions $distPath
+npm run start
+# Automatically loads the extension into a development instance of Paratext 10.
 ```
 
 ### Development Workflow
 
-For active development (auto-rebuild on file changes):
+For active development (auto-rebuild on file changes and auto-launch Paratext):
 ```powershell
-npm run watch
+npm run start
 ```
-
-In another terminal, run Paratext with your extension.
 
 ## Folder Structure
 
 ```
-paratext-track-changes/
+Paratext-Project-Management/
 ├── src/
-│   ├── main.ts                    # Main entry point
+│   ├── main.ts                          # Main entry point
+│   ├── task-board.web-view.tsx          # Task Board Component
+│   ├── my-tasks.web-view.tsx            # My Tasks Component
+│   ├── project-overview.web-view.tsx    # Details Component
 │   └── types/
-│       └── paratext-track-changes.d.ts  # TypeScript types
-├── dist/                          # Built extension (created by npm run build)
-│   ├── src/
-│   │   └── main.js               # Compiled bundle
-│   ├── manifest.json
-│   └── ...
+│       └── project-manager.d.ts         # TypeScript types
+├── dist/                                # Built extension
 ├── assets/
-│   ├── displayData.json
-│   └── descriptions/
-│       └── description-en.md
+│   └── displayData.json
 ├── contributions/
-│   ├── menus.json
-│   ├── settings.json
-│   └── ...
-├── webpack/                       # Webpack configuration
+│   └── menus.json
+├── webpack/                             # Webpack configuration
 ├── package.json
 ├── manifest.json
 └── README.md
@@ -100,9 +97,9 @@ paratext-track-changes/
 
 ## Troubleshooting
 
-### Extension appears blank
+### Extension appears blank or commands do not work
 - Make sure you ran `npm run build`
-- Verify `dist/src/main.js` exists and is ~700KB
+- Verify `dist/src/main.js` exists
 - Check you're loading from the `dist/` folder, not root
 
 ### "Cannot use import statement outside a module"
@@ -110,8 +107,8 @@ paratext-track-changes/
 - Or Paratext is loading from wrong folder
 
 ### npm install fails
-- Make sure paranext-core is in the parent directory
-- Check paths in package.json match your folder structure
+- Make sure `paranext-core` is checked out in the *parent* directory alongside this extension folder.
+- Ensure you have built/installed `paranext-core` (`npm install` inside it).
 
 ### Build fails
 ```powershell
@@ -121,12 +118,6 @@ Remove-Item package-lock.json
 npm install
 npm run build
 ```
-
-## Next Steps
-
-- Modify `src/main.ts` to add your track changes functionality
-- Add WebViews by creating `.web-view.tsx` files
-- Read the Platform.Bible documentation: https://github.com/paranext/paranext-extension-template/wiki
 
 ## License
 
