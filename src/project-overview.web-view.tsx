@@ -2,7 +2,13 @@ import { WebViewProps } from '@papi/core';
 import papi from '@papi/frontend';
 import { useDialogCallback } from '@papi/frontend/react';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import type { ProjectTask, TaskStatus, StageConfig, TaskStore, TimeEntry } from './types/task.types';
+import type {
+  ProjectTask,
+  TaskStatus,
+  StageConfig,
+  TaskStore,
+  TimeEntry,
+} from './types/task.types';
 import {
   BIBLE_BOOKS,
   getOrderedStages,
@@ -66,10 +72,10 @@ function aggregateStatus(tasks: ProjectTask[]): TaskStatus | null {
 }
 
 const CELL_STYLES: Partial<Record<TaskStatus, string>> = {
-  pending: 'bg-gray-100 text-gray-500',
-  'in-progress': 'bg-yellow-100 text-yellow-700',
-  complete: 'bg-green-100 text-green-700',
-  flagged: 'bg-red-100 text-red-700',
+  pending: 'tw:bg-gray-100 tw:text-gray-500',
+  'in-progress': 'tw:bg-yellow-100 tw:text-yellow-700',
+  complete: 'tw:bg-green-100 tw:text-green-700',
+  flagged: 'tw:bg-red-100 tw:text-red-700',
 };
 
 const CELL_ICONS: Partial<Record<TaskStatus, string>> = {
@@ -179,48 +185,51 @@ function CalendarTabContent({
   const dayTotalHours = dayTimeEntries.reduce((s, e) => s + e.hours, 0);
 
   return (
-    <div className="flex flex-1 overflow-hidden">
+    <div className="tw:flex tw:flex-1 tw:overflow-hidden">
       {/* Left: monthly grid */}
-      <div className={`flex flex-col overflow-auto ${selectedDay ? 'w-3/5' : 'w-full'}`}>
+      <div
+        className={`tw:flex tw:flex-col tw:overflow-auto ${selectedDay ? 'tw:w-3/5' : 'tw:w-full'}`}
+      >
         {/* Month navigation */}
-        <div className="flex items-center gap-2 px-3 py-2 bg-white border-b sticky top-0 z-10">
+        <div className="tw:flex tw:items-center tw:gap-2 tw:px-3 tw:py-2 tw:bg-white tw:border-b tw:sticky tw:top-0 tw:z-10">
           <button
-            className="px-2 py-0.5 bg-gray-100 rounded hover:bg-gray-200 text-xs"
+            className="tw:px-2 tw:py-0.5 tw:bg-gray-100 tw:rounded tw:hover:bg-gray-200 tw:text-xs"
             onClick={prevMonth}
           >
             ‹ Ant
           </button>
-          <span className="font-semibold text-sm text-gray-700 capitalize flex-1 text-center">
+          <span className="tw:font-semibold tw:text-sm tw:text-gray-700 tw:capitalize tw:flex-1 tw:text-center">
             {monthLabel}
           </span>
           <button
-            className="px-2 py-0.5 bg-gray-100 rounded hover:bg-gray-200 text-xs"
+            className="tw:px-2 tw:py-0.5 tw:bg-gray-100 tw:rounded tw:hover:bg-gray-200 tw:text-xs"
             onClick={goToday}
           >
             Hoy
           </button>
           <button
-            className="px-2 py-0.5 bg-gray-100 rounded hover:bg-gray-200 text-xs"
+            className="tw:px-2 tw:py-0.5 tw:bg-gray-100 tw:rounded tw:hover:bg-gray-200 tw:text-xs"
             onClick={nextMonth}
           >
             Sig ›
           </button>
-          {gcalEventsLoading && (
-            <span className="text-xs text-blue-500">⟳ GCal…</span>
-          )}
+          {gcalEventsLoading && <span className="tw:text-xs tw:text-blue-500">⟳ GCal…</span>}
         </div>
 
         {/* Day-of-week header */}
-        <div className="grid grid-cols-7 border-b bg-gray-50">
+        <div className="tw:grid tw:grid-cols-7 tw:border-b tw:bg-gray-50">
           {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map((d) => (
-            <div key={d} className="text-center text-xs font-medium text-gray-500 py-1">
+            <div
+              key={d}
+              className="tw:text-center tw:text-xs tw:font-medium tw:text-gray-500 tw:py-1"
+            >
               {d}
             </div>
           ))}
         </div>
 
         {/* Calendar grid */}
-        <div className="grid grid-cols-7 flex-1 auto-rows-min">
+        <div className="tw:grid tw:grid-cols-7 tw:flex-1 tw:auto-rows-min">
           {calendarDays.map((cell) => {
             const deadlineTasks = tasksByDeadline[cell.date] ?? [];
             const eventsOnDay = gcalEventsByDate[cell.date] ?? [];
@@ -233,41 +242,49 @@ function CalendarTabContent({
             return (
               <div
                 key={cell.date}
-                className={`min-h-14 p-1 border-b border-r border-gray-100 cursor-pointer transition-colors ${
-                  isOtherMonth ? 'bg-gray-50 opacity-50' : 'bg-white hover:bg-blue-50'
-                } ${isSelected ? 'bg-blue-100 ring-1 ring-inset ring-blue-400' : ''} ${
-                  isToday && !isSelected ? 'bg-yellow-50' : ''
+                className={`tw:min-h-14 tw:p-1 tw:border-b tw:border-r tw:border-gray-100 tw:cursor-pointer tw:transition-colors ${
+                  isOtherMonth ? 'tw:bg-gray-50 tw:opacity-50' : 'tw:bg-white tw:hover:bg-blue-50'
+                } ${isSelected ? 'tw:bg-blue-100 tw:ring-1 tw:ring-inset tw:ring-blue-400' : ''} ${
+                  isToday && !isSelected ? 'tw:bg-yellow-50' : ''
                 }`}
                 onClick={() => setSelectedDay(isSelected ? null : cell.date)}
               >
                 {/* Day number */}
-                <div className={`text-xs font-medium mb-0.5 leading-none ${
-                  isToday
-                    ? 'bg-blue-600 text-white rounded-full w-5 h-5 flex items-center justify-center'
-                    : isOtherMonth
-                    ? 'text-gray-300'
-                    : 'text-gray-700'
-                }`}>
+                <div
+                  className={`tw:text-xs tw:font-medium tw:mb-0.5 tw:leading-none ${
+                    isToday
+                      ? 'tw:bg-blue-600 tw:text-white tw:rounded-full tw:w-5 tw:h-5 tw:flex tw:items-center tw:justify-center'
+                      : isOtherMonth
+                        ? 'tw:text-gray-300'
+                        : 'tw:text-gray-700'
+                  }`}
+                >
                   {cell.dayNum}
                 </div>
 
                 {/* Deadline task status dots */}
                 {deadlineTasks.length > 0 && (
-                  <div className="flex flex-wrap gap-0.5 mb-0.5">
+                  <div className="tw:flex tw:flex-wrap tw:gap-0.5 tw:mb-0.5">
                     {deadlineTasks.slice(0, 3).map((t) => (
                       <span
                         key={t.id}
-                        className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                          t.status === 'complete' ? 'bg-green-500' :
-                          t.status === 'flagged' ? 'bg-red-500' :
-                          t.status === 'in-progress' ? 'bg-yellow-500' :
-                          'bg-gray-400'
+                        className={`tw:inline-block tw:w-1.5 tw:h-1.5 tw:rounded-full tw:flex-shrink-0 ${
+                          t.status === 'tw:complete'
+                            ? 'tw:bg-green-500'
+                            : t.status === 'tw:flagged'
+                              ? 'tw:bg-red-500'
+                              : t.status === 'tw:in-progress'
+                                ? 'tw:bg-yellow-500'
+                                : 'tw:bg-gray-400'
                         }`}
                         title={`${t.book} ${t.chapter} — ${getStageLabel(t.stage, stageConfig)} (${t.status})`}
                       />
                     ))}
                     {deadlineTasks.length > 3 && (
-                      <span className="text-gray-400 leading-none" style={{ fontSize: '9px' }}>
+                      <span
+                        className="tw:text-gray-400 tw:leading-none"
+                        style={{ fontSize: '9px' }}
+                      >
                         +{deadlineTasks.length - 3}
                       </span>
                     )}
@@ -278,7 +295,7 @@ function CalendarTabContent({
                 {eventsOnDay.slice(0, 2).map((ev) => (
                   <div
                     key={ev.id}
-                    className="text-blue-700 bg-blue-100 rounded px-0.5 truncate mb-0.5"
+                    className="tw:text-blue-700 tw:bg-blue-100 tw:rounded tw:px-0.5 tw:truncate tw:mb-0.5"
                     style={{ fontSize: '9px' }}
                     title={ev.summary}
                   >
@@ -286,7 +303,7 @@ function CalendarTabContent({
                   </div>
                 ))}
                 {eventsOnDay.length > 2 && (
-                  <div className="text-blue-500" style={{ fontSize: '9px' }}>
+                  <div className="tw:text-blue-500" style={{ fontSize: '9px' }}>
                     +{eventsOnDay.length - 2} más
                   </div>
                 )}
@@ -294,7 +311,7 @@ function CalendarTabContent({
                 {/* Hours-logged badge */}
                 {hoursOnDay > 0 && (
                   <div
-                    className="text-purple-700 bg-purple-100 rounded px-0.5 font-medium leading-none"
+                    className="tw:text-purple-700 tw:bg-purple-100 tw:rounded tw:px-0.5 tw:font-medium tw:leading-none"
                     style={{ fontSize: '9px' }}
                   >
                     {hoursOnDay}h
@@ -306,29 +323,45 @@ function CalendarTabContent({
         </div>
 
         {/* Legend */}
-        <div className="flex gap-3 px-3 py-2 text-xs text-gray-500 border-t bg-white flex-wrap">
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-gray-400 inline-block" /> Pendiente
+        <div className="tw:flex tw:gap-3 tw:px-3 tw:py-2 tw:text-xs tw:text-gray-500 tw:border-t tw:bg-white tw:flex-wrap">
+          <span className="tw:flex tw:items-center tw:gap-1">
+            <span className="tw:w-2 tw:h-2 tw:rounded-full tw:bg-gray-400 tw:inline-block" />{' '}
+            Pendiente
           </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-yellow-500 inline-block" /> En progreso
+          <span className="tw:flex tw:items-center tw:gap-1">
+            <span className="tw:w-2 tw:h-2 tw:rounded-full tw:bg-yellow-500 tw:inline-block" /> En
+            progreso
           </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-green-500 inline-block" /> Completo
+          <span className="tw:flex tw:items-center tw:gap-1">
+            <span className="tw:w-2 tw:h-2 tw:rounded-full tw:bg-green-500 tw:inline-block" />{' '}
+            Completo
           </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-red-500 inline-block" /> ⚑ Bandera
+          <span className="tw:flex tw:items-center tw:gap-1">
+            <span className="tw:w-2 tw:h-2 tw:rounded-full tw:bg-red-500 tw:inline-block" /> ⚑
+            Bandera
           </span>
           {gcalConnected && (
-            <span className="flex items-center gap-1">
-              <span className="bg-blue-100 text-blue-700 rounded px-1 leading-none" style={{ fontSize: '9px' }}>ev</span> GCal
+            <span className="tw:flex tw:items-center tw:gap-1">
+              <span
+                className="tw:bg-blue-100 tw:text-blue-700 tw:rounded tw:px-1 tw:leading-none"
+                style={{ fontSize: '9px' }}
+              >
+                ev
+              </span>{' '}
+              GCal
             </span>
           )}
-          <span className="flex items-center gap-1">
-            <span className="bg-purple-100 text-purple-700 rounded px-1 leading-none" style={{ fontSize: '9px' }}>2h</span> Horas
+          <span className="tw:flex tw:items-center tw:gap-1">
+            <span
+              className="tw:bg-purple-100 tw:text-purple-700 tw:rounded tw:px-1 tw:leading-none"
+              style={{ fontSize: '9px' }}
+            >
+              2h
+            </span>{' '}
+            Horas
           </span>
           {!gcalConnected && (
-            <span className="text-orange-500 text-xs">
+            <span className="tw:text-orange-500 tw:text-xs">
               (Conecta Google Calendar en la pestaña Resumen para ver eventos)
             </span>
           )}
@@ -337,10 +370,10 @@ function CalendarTabContent({
 
       {/* Right: day detail panel */}
       {selectedDay && (
-        <div className="w-2/5 border-l border-gray-200 flex flex-col overflow-auto bg-white">
+        <div className="tw:w-2/5 tw:border-l tw:border-gray-200 tw:flex tw:flex-col tw:overflow-auto tw:bg-white">
           {/* Panel header */}
-          <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b sticky top-0 z-10">
-            <span className="font-semibold text-xs text-gray-700 capitalize">
+          <div className="tw:flex tw:items-center tw:justify-between tw:px-3 tw:py-2 tw:bg-gray-50 tw:border-b tw:sticky tw:top-0 tw:z-10">
+            <span className="tw:font-semibold tw:text-xs tw:text-gray-700 tw:capitalize">
               {new Date(selectedDay + 'T12:00:00').toLocaleDateString('es', {
                 weekday: 'long',
                 year: 'numeric',
@@ -349,41 +382,54 @@ function CalendarTabContent({
               })}
             </span>
             <button
-              className="text-gray-400 hover:text-gray-600 text-sm leading-none"
+              className="tw:text-gray-400 tw:hover:text-gray-600 tw:text-sm tw:leading-none"
               onClick={() => setSelectedDay(null)}
             >
               ✕
             </button>
           </div>
 
-          <div className="flex-1 overflow-auto p-3 space-y-4">
+          <div className="tw:flex-1 tw:overflow-auto tw:p-3 tw:space-y-4">
             {/* Tasks due this day */}
             <section>
-              <h4 className="font-semibold text-xs text-gray-500 mb-1 uppercase tracking-wide">
+              <h4 className="tw:font-semibold tw:text-xs tw:text-gray-500 tw:mb-1 tw:uppercase tw:tracking-wide">
                 Tareas con fecha límite
               </h4>
               {dayDeadlineTasks.length === 0 ? (
-                <p className="text-xs text-gray-400">Ninguna tarea con fecha límite este día.</p>
+                <p className="tw:text-xs tw:text-gray-400">
+                  Ninguna tarea con fecha límite este día.
+                </p>
               ) : (
-                <ul className="space-y-1">
+                <ul className="tw:space-y-1">
                   {dayDeadlineTasks.map((task) => (
                     <li
                       key={task.id}
-                      className={`text-xs px-2 py-1 rounded border-l-2 ${
-                        task.status === 'complete' ? 'border-green-400 bg-green-50' :
-                        task.status === 'flagged' ? 'border-red-400 bg-red-50' :
-                        task.status === 'in-progress' ? 'border-yellow-400 bg-yellow-50' :
-                        'border-gray-300 bg-gray-50'
+                      className={`tw:text-xs tw:px-2 tw:py-1 tw:rounded tw:border-l-2 ${
+                        task.status === 'tw:complete'
+                          ? 'tw:border-green-400 tw:bg-green-50'
+                          : task.status === 'tw:flagged'
+                            ? 'tw:border-red-400 tw:bg-red-50'
+                            : task.status === 'tw:in-progress'
+                              ? 'tw:border-yellow-400 tw:bg-yellow-50'
+                              : 'tw:border-gray-300 tw:bg-gray-50'
                       }`}
                     >
-                      <span className="font-medium">{task.book} {task.chapter}</span>
+                      <span className="tw:font-medium">
+                        {task.book} {task.chapter}
+                      </span>
                       {' — '}
-                      <span className="text-gray-600">{getStageLabel(task.stage, stageConfig)}</span>
-                      <span className={`ml-1.5 px-1 rounded text-xs ${STATUS_COLORS[task.status]}`}>
+                      <span className="tw:text-gray-600">
+                        {getStageLabel(task.stage, stageConfig)}
+                      </span>
+                      <span
+                        className={`tw:ml-1.5 tw:px-1 tw:rounded tw:text-xs ${STATUS_COLORS[task.status]}`}
+                      >
                         {STATUS_LABELS[task.status]}
                       </span>
                       {(task.assignedTo ?? []).length > 0 && (
-                        <span className="text-gray-400 ml-1">({(task.assignedTo ?? []).join(', ')})</span>
+                        <span className="tw:text-gray-400 tw:ml-1">
+                          ({(task.assignedTo ?? []).join(', ')})
+                        </span>
                       )}
                     </li>
                   ))}
@@ -394,25 +440,25 @@ function CalendarTabContent({
             {/* GCal events (only if connected) */}
             {gcalConnected && (
               <section>
-                <h4 className="font-semibold text-xs text-gray-500 mb-1 uppercase tracking-wide">
+                <h4 className="tw:font-semibold tw:text-xs tw:text-gray-500 tw:mb-1 tw:uppercase tw:tracking-wide">
                   Eventos de Google Calendar
                 </h4>
                 {gcalEventsLoading ? (
-                  <p className="text-xs text-gray-400">⟳ Cargando…</p>
+                  <p className="tw:text-xs tw:text-gray-400">⟳ Cargando…</p>
                 ) : dayGcalEvents.length === 0 ? (
-                  <p className="text-xs text-gray-400">Ningún evento este día.</p>
+                  <p className="tw:text-xs tw:text-gray-400">Ningún evento este día.</p>
                 ) : (
-                  <ul className="space-y-1">
+                  <ul className="tw:space-y-1">
                     {dayGcalEvents.map((ev) => (
                       <li
                         key={ev.id}
-                        className="text-xs bg-blue-50 border border-blue-100 rounded px-2 py-1"
+                        className="tw:text-xs tw:bg-blue-50 tw:border tw:border-blue-100 tw:rounded tw:px-2 tw:py-1"
                       >
-                        <div className="flex items-start justify-between gap-1">
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium text-blue-800">{ev.summary}</div>
+                        <div className="tw:flex tw:items-start tw:justify-between tw:gap-1">
+                          <div className="tw:flex-1 tw:min-w-0">
+                            <div className="tw:font-medium tw:text-blue-800">{ev.summary}</div>
                             {!ev.allDay && ev.start && (
-                              <div className="text-blue-600">
+                              <div className="tw:text-blue-600">
                                 {new Date(ev.start).toLocaleTimeString('es', {
                                   hour: '2-digit',
                                   minute: '2-digit',
@@ -428,15 +474,13 @@ function CalendarTabContent({
                                 )}
                               </div>
                             )}
-                            {ev.allDay && (
-                              <div className="text-blue-500">Todo el día</div>
-                            )}
+                            {ev.allDay && <div className="tw:text-blue-500">Todo el día</div>}
                             {ev.description && (
-                              <div className="text-gray-500 truncate">{ev.description}</div>
+                              <div className="tw:text-gray-500 tw:truncate">{ev.description}</div>
                             )}
                           </div>
                           <button
-                            className="flex-shrink-0 text-gray-300 hover:text-red-500 transition-colors leading-none"
+                            className="tw:flex-shrink-0 tw:text-gray-300 tw:hover:text-red-500 tw:transition-colors tw:leading-none"
                             title="Eliminar evento"
                             onClick={() => deleteGcalEvent(ev.id)}
                           >
@@ -451,13 +495,15 @@ function CalendarTabContent({
             )}
 
             {/* Log time form */}
-            <section className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-              <h4 className="font-semibold text-xs text-gray-700 mb-2">Registrar tiempo</h4>
-              <div className="space-y-2">
+            <section className="tw:border tw:border-gray-200 tw:rounded-lg tw:p-3 tw:bg-gray-50">
+              <h4 className="tw:font-semibold tw:text-xs tw:text-gray-700 tw:mb-2">
+                Registrar tiempo
+              </h4>
+              <div className="tw:space-y-2">
                 <div>
-                  <label className="block text-xs text-gray-500 mb-0.5">Tarea</label>
+                  <label className="tw:block tw:text-xs tw:text-gray-500 tw:mb-0.5">Tarea</label>
                   <select
-                    className="w-full border border-gray-300 rounded px-2 py-1 text-xs bg-white"
+                    className="tw:w-full tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:text-xs tw:bg-white"
                     value={logTimeTask}
                     onChange={(e) => setLogTimeTask(e.target.value)}
                   >
@@ -465,7 +511,9 @@ function CalendarTabContent({
                     {tasks.map((task) => (
                       <option key={task.id} value={task.id}>
                         {task.book} {task.chapter} — {getStageLabel(task.stage, stageConfig)}
-                        {(task.assignedTo ?? []).length > 0 ? ` (${(task.assignedTo ?? []).join(', ')})` : ''}
+                        {(task.assignedTo ?? []).length > 0
+                          ? ` (${(task.assignedTo ?? []).join(', ')})`
+                          : ''}
                       </option>
                     ))}
                     <option value="__otro__">─── Otro… ───</option>
@@ -475,10 +523,12 @@ function CalendarTabContent({
                 {/* Free-text label when "Otro" is selected */}
                 {logTimeTask === '__otro__' && (
                   <div>
-                    <label className="block text-xs text-gray-500 mb-0.5">Descripción</label>
+                    <label className="tw:block tw:text-xs tw:text-gray-500 tw:mb-0.5">
+                      Descripción
+                    </label>
                     <input
                       type="text"
-                      className="w-full border border-gray-300 rounded px-2 py-1 text-xs"
+                      className="tw:w-full tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:text-xs"
                       value={logTimeCustomLabel}
                       onChange={(e) => setLogTimeCustomLabel(e.target.value)}
                       placeholder="Ej: Reunión de equipo, Capacitación…"
@@ -489,26 +539,28 @@ function CalendarTabContent({
                 )}
 
                 <div>
-                  <label className="block text-xs text-gray-500 mb-0.5">Usuario</label>
+                  <label className="tw:block tw:text-xs tw:text-gray-500 tw:mb-0.5">Usuario</label>
                   <select
-                    className="w-full border border-gray-300 rounded px-2 py-1 text-xs bg-white"
+                    className="tw:w-full tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:text-xs tw:bg-white"
                     value={logTimeUser}
                     onChange={(e) => setLogTimeUser(e.target.value)}
                   >
                     <option value="">— Selecciona —</option>
                     {teamMembers.map((m) => (
-                      <option key={m} value={m}>{m}</option>
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
                     ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-xs text-gray-500 mb-0.5">Horas</label>
+                  <label className="tw:block tw:text-xs tw:text-gray-500 tw:mb-0.5">Horas</label>
                   <input
                     type="number"
                     min="0.25"
                     step="0.25"
-                    className="w-full border border-gray-300 rounded px-2 py-1 text-xs"
+                    className="tw:w-full tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:text-xs"
                     value={logTimeHours}
                     onChange={(e) => setLogTimeHours(e.target.value)}
                     placeholder="1.5"
@@ -516,26 +568,26 @@ function CalendarTabContent({
                 </div>
 
                 <div>
-                  <label className="block text-xs text-gray-500 mb-0.5">Nota (opcional)</label>
+                  <label className="tw:block tw:text-xs tw:text-gray-500 tw:mb-0.5">
+                    Nota (opcional)
+                  </label>
                   <input
                     type="text"
-                    className="w-full border border-gray-300 rounded px-2 py-1 text-xs"
+                    className="tw:w-full tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:text-xs"
                     value={logTimeNote}
                     onChange={(e) => setLogTimeNote(e.target.value)}
                     placeholder="Descripción del trabajo realizado…"
-                    onKeyDown={(e) => { if (e.key === 'Enter') saveTimeEntry(); }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') saveTimeEntry();
+                    }}
                   />
                 </div>
 
-                {logTimeError && (
-                  <p className="text-xs text-red-600">{logTimeError}</p>
-                )}
-                {logTimeSuccess && (
-                  <p className="text-xs text-green-600">{logTimeSuccess}</p>
-                )}
+                {logTimeError && <p className="tw:text-xs tw:text-red-600">{logTimeError}</p>}
+                {logTimeSuccess && <p className="tw:text-xs tw:text-green-600">{logTimeSuccess}</p>}
 
                 <button
-                  className="w-full text-xs px-3 py-1.5 bg-slate-600 text-white rounded hover:bg-slate-700 disabled:opacity-50"
+                  className="tw:w-full tw:text-xs tw:px-3 tw:py-1.5 tw:bg-slate-600 tw:text-white tw:rounded tw:hover:bg-slate-700 tw:disabled:opacity-50"
                   onClick={saveTimeEntry}
                   disabled={logTimeSaving}
                 >
@@ -546,35 +598,37 @@ function CalendarTabContent({
 
             {/* Hours logged this day */}
             <section>
-              <h4 className="font-semibold text-xs text-gray-500 mb-1 uppercase tracking-wide">
+              <h4 className="tw:font-semibold tw:text-xs tw:text-gray-500 tw:mb-1 tw:uppercase tw:tracking-wide">
                 Horas del día
                 {dayTotalHours > 0 && (
-                  <span className="ml-2 font-normal text-purple-700 normal-case">
+                  <span className="tw:ml-2 tw:font-normal tw:text-purple-700 tw:normal-case">
                     {dayTotalHours}h total
                   </span>
                 )}
               </h4>
               {dayTimeEntries.length === 0 ? (
-                <p className="text-xs text-gray-400">No se han registrado horas este día.</p>
+                <p className="tw:text-xs tw:text-gray-400">No se han registrado horas este día.</p>
               ) : (
-                <ul className="space-y-1">
+                <ul className="tw:space-y-1">
                   {dayTimeEntries.map((entry) => (
                     <li
                       key={entry.id}
-                      className="flex items-start justify-between gap-1 text-xs bg-purple-50 border border-purple-100 rounded px-2 py-1"
+                      className="tw:flex tw:items-start tw:justify-between tw:gap-1 tw:text-xs tw:bg-purple-50 tw:border tw:border-purple-100 tw:rounded tw:px-2 tw:py-1"
                     >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-semibold text-purple-800">{entry.hours}h</span>
-                          <span className="text-gray-700">{entry.user}</span>
+                      <div className="tw:flex-1 tw:min-w-0">
+                        <div className="tw:flex tw:items-center tw:gap-1.5">
+                          <span className="tw:font-semibold tw:text-purple-800">
+                            {entry.hours}h
+                          </span>
+                          <span className="tw:text-gray-700">{entry.user}</span>
                         </div>
-                        <div className="text-gray-500 truncate">{entry.taskLabel}</div>
+                        <div className="tw:text-gray-500 tw:truncate">{entry.taskLabel}</div>
                         {entry.note && (
-                          <div className="text-gray-400 italic truncate">{entry.note}</div>
+                          <div className="tw:text-gray-400 tw:italic tw:truncate">{entry.note}</div>
                         )}
                       </div>
                       <button
-                        className="text-red-400 hover:text-red-600 flex-shrink-0 mt-0.5 leading-none"
+                        className="tw:text-red-400 tw:hover:text-red-600 tw:flex-shrink-0 tw:mt-0.5 tw:leading-none"
                         title="Eliminar registro"
                         onClick={() => deleteTimeEntry(entry.taskId, entry.id)}
                       >
@@ -633,7 +687,10 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
   // --- Drive task sync state ---
   const driveAuthPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [driveStatus, setDriveStatus] = useState<DriveStatus>({
-    connected: false, hasCredentials: false, clientId: '', fileCount: 0,
+    connected: false,
+    hasCredentials: false,
+    clientId: '',
+    fileCount: 0,
   });
   const [showDriveSection, setShowDriveSection] = useState(false);
   const [showDriveSetup, setShowDriveSetup] = useState(false);
@@ -706,7 +763,8 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       setStageConfig(store.stageConfig ?? {});
       extrasRef.current = { activityLog: store.activityLog, deletedTaskIds: store.deletedTaskIds };
       if (membersResult) setTeamMembers(JSON.parse(membersResult as string) as string[]);
-      if (userResult && typeof userResult === 'string' && userResult.length > 0) setCurrentUser(userResult);
+      if (userResult && typeof userResult === 'string' && userResult.length > 0)
+        setCurrentUser(userResult);
     } catch (e) {
       // Auto-retry once after 3s — handles papi timeouts after long idle
       try {
@@ -719,9 +777,13 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         const store = JSON.parse(result) as TaskStore;
         setTasks(store.tasks ?? []);
         setStageConfig(store.stageConfig ?? {});
-        extrasRef.current = { activityLog: store.activityLog, deletedTaskIds: store.deletedTaskIds };
+        extrasRef.current = {
+          activityLog: store.activityLog,
+          deletedTaskIds: store.deletedTaskIds,
+        };
         if (membersResult) setTeamMembers(JSON.parse(membersResult as string) as string[]);
-        if (userResult && typeof userResult === 'string' && userResult.length > 0) setCurrentUser(userResult);
+        if (userResult && typeof userResult === 'string' && userResult.length > 0)
+          setCurrentUser(userResult);
       } catch (e2) {
         setError(`Error al cargar: ${errMsg(e2)}`);
       }
@@ -751,11 +813,13 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       const incomingDeleted = new Set(store.deletedTaskIds ?? []);
       extrasRef.current = {
         activityLog: store.activityLog ?? extrasRef.current.activityLog,
-        deletedTaskIds: Array.from(new Set([...(extrasRef.current.deletedTaskIds ?? []), ...incomingDeleted])),
+        deletedTaskIds: Array.from(
+          new Set([...(extrasRef.current.deletedTaskIds ?? []), ...incomingDeleted]),
+        ),
       };
       const incoming = store.tasks ?? [];
-      setTasks(prev => {
-        const merged = new Map(prev.map(t => [t.id, t]));
+      setTasks((prev) => {
+        const merged = new Map(prev.map((t) => [t.id, t]));
         for (const id of incomingDeleted) merged.delete(id);
         for (const t of incoming) {
           if (incomingDeleted.has(t.id)) continue;
@@ -764,8 +828,13 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         }
         return Array.from(merged.values());
       });
-      if (store.stageConfig && Object.keys(store.stageConfig).length > 0) setStageConfig(store.stageConfig);
-    } catch (_) { /* silent */ } finally { refreshInProgressRef.current = false; }
+      if (store.stageConfig && Object.keys(store.stageConfig).length > 0)
+        setStageConfig(store.stageConfig);
+    } catch (_) {
+      /* silent */
+    } finally {
+      refreshInProgressRef.current = false;
+    }
   }, [projectId]);
 
   // Periodic refresh every 60 s
@@ -787,14 +856,18 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
 
   // --- persistTasks helper ---
 
-  const persistTasks = useCallback(async (
-    updatedTasks: ProjectTask[],
-    newStageConfig?: Record<string, StageConfig>,
-  ) => {
-    const sc = newStageConfig ?? stageConfig;
-    const store = { schemaVersion: 1 as const, tasks: updatedTasks, stageConfig: sc };
-    await papi.commands.sendCommand('paratextProjectManager.saveTasks', projectId, JSON.stringify(store));
-  }, [stageConfig, projectId]);
+  const persistTasks = useCallback(
+    async (updatedTasks: ProjectTask[], newStageConfig?: Record<string, StageConfig>) => {
+      const sc = newStageConfig ?? stageConfig;
+      const store = { schemaVersion: 1 as const, tasks: updatedTasks, stageConfig: sc };
+      await papi.commands.sendCommand(
+        'paratextProjectManager.saveTasks',
+        projectId,
+        JSON.stringify(store),
+      );
+    },
+    [stageConfig, projectId],
+  );
 
   // --- Google Calendar callbacks ---
 
@@ -808,14 +881,22 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       // If already connected, load calendar list automatically
       if (status.connected) {
         try {
-          const calsResult = await papi.commands.sendCommand('paratextProjectManager.gcalListCalendars');
+          const calsResult = await papi.commands.sendCommand(
+            'paratextProjectManager.gcalListCalendars',
+          );
           setGcalCalendars(JSON.parse(calsResult as string));
-        } catch (_) { /* non-critical */ }
+        } catch (_) {
+          /* non-critical */
+        }
       }
-    } catch (_) { /* non-critical */ }
+    } catch (_) {
+      /* non-critical */
+    }
   }, []);
 
-  useEffect(() => { loadGcalStatus(); }, [loadGcalStatus]);
+  useEffect(() => {
+    loadGcalStatus();
+  }, [loadGcalStatus]);
 
   // --- Drive task sync callbacks ---
 
@@ -825,10 +906,14 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       const status = JSON.parse(result as string) as DriveStatus;
       setDriveStatus(status);
       if (status.clientId) setDriveClientId(status.clientId);
-    } catch (_) { /* non-critical */ }
+    } catch (_) {
+      /* non-critical */
+    }
   }, []);
 
-  useEffect(() => { loadDriveStatus(); }, [loadDriveStatus]);
+  useEffect(() => {
+    loadDriveStatus();
+  }, [loadDriveStatus]);
 
   const driveConnect = useCallback(async () => {
     if (!driveClientId.trim() || !driveClientSecret.trim()) {
@@ -871,13 +956,16 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         return;
       }
 
-      papi.commands.sendCommand('paratextProjectManager.tasksDrivePollAuth')
+      papi.commands
+        .sendCommand('paratextProjectManager.tasksDrivePollAuth')
         .then((res) => {
           const { status, error } = JSON.parse(res as string) as { status: string; error?: string };
           if (status === 'pending') {
             driveAuthPollRef.current = setTimeout(doPoll, 4000);
           } else if (status === 'success') {
-            setDriveMessage('✓ Drive conectado. Guarda una tarea para crear el archivo compartido.');
+            setDriveMessage(
+              '✓ Drive conectado. Guarda una tarea para crear el archivo compartido.',
+            );
             setShowDriveSetup(false);
             setDriveClientSecret('');
             setDriveConnecting(false);
@@ -900,8 +988,14 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
 
   const driveExportConfig = useCallback(async () => {
     try {
-      const result = await papi.commands.sendCommand('paratextProjectManager.tasksDriveExportConfig');
-      const data = JSON.parse(result as string) as { success: boolean; config?: string; error?: string };
+      const result = await papi.commands.sendCommand(
+        'paratextProjectManager.tasksDriveExportConfig',
+      );
+      const data = JSON.parse(result as string) as {
+        success: boolean;
+        config?: string;
+        error?: string;
+      };
       if (data.success && data.config) {
         setDriveExportedConfig(data.config);
       } else {
@@ -913,18 +1007,28 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
   }, []);
 
   const driveForceSync = useCallback(async () => {
-    if (!projectId) { setDriveSyncResult('✗ No hay proyecto seleccionado'); return; }
+    if (!projectId) {
+      setDriveSyncResult('✗ No hay proyecto seleccionado');
+      return;
+    }
     setDriveSyncing(true);
     setDriveSyncResult('Sincronizando…');
     try {
       const res = await papi.commands.sendCommand(
-        'paratextProjectManager.tasksDriveForceSyncProject', projectId,
+        'paratextProjectManager.tasksDriveForceSyncProject',
+        projectId,
       );
       const data = JSON.parse(res as string) as {
-        success: boolean; step?: string; error?: string; fileId?: string; wasNew?: boolean;
+        success: boolean;
+        step?: string;
+        error?: string;
+        fileId?: string;
+        wasNew?: boolean;
       };
       if (data.success) {
-        setDriveSyncResult(`✓ Sincronizado. fileId: ${data.fileId}${data.wasNew ? ' (archivo nuevo creado)' : ' (actualizado)'}`);
+        setDriveSyncResult(
+          `✓ Sincronizado. fileId: ${data.fileId}${data.wasNew ? ' (archivo nuevo creado)' : ' (actualizado)'}`,
+        );
         loadDriveStatus(); // refresh project count
       } else {
         setDriveSyncResult(`✗ Error en paso "${data.step}": ${data.error}`);
@@ -941,9 +1045,16 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
     setDriveTestResult('Probando…');
     try {
       const res = await papi.commands.sendCommand('paratextProjectManager.tasksDriveTest');
-      const data = JSON.parse(res as string) as { success: boolean; step?: string; error?: string; fileId?: string };
+      const data = JSON.parse(res as string) as {
+        success: boolean;
+        step?: string;
+        error?: string;
+        fileId?: string;
+      };
       if (data.success) {
-        setDriveTestResult(`✓ Escritura exitosa en Drive (fileId: ${data.fileId}). La API de Drive funciona correctamente.`);
+        setDriveTestResult(
+          `✓ Escritura exitosa en Drive (fileId: ${data.fileId}). La API de Drive funciona correctamente.`,
+        );
       } else {
         setDriveTestResult(`✗ Error en paso "${data.step}": ${data.error}`);
       }
@@ -955,10 +1066,14 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
   }, []);
 
   const driveImportConfig = useCallback(async () => {
-    if (!driveImportJson.trim()) { setDriveError('Pega la configuración JSON'); return; }
+    if (!driveImportJson.trim()) {
+      setDriveError('Pega la configuración JSON');
+      return;
+    }
     try {
       const result = await papi.commands.sendCommand(
-        'paratextProjectManager.tasksDriveImportConfig', driveImportJson.trim(),
+        'paratextProjectManager.tasksDriveImportConfig',
+        driveImportJson.trim(),
       );
       const data = JSON.parse(result as string) as { success: boolean; error?: string };
       if (data.success) {
@@ -976,51 +1091,69 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
 
   // Pre-fill logTimeUser from getCurrentUser
   useEffect(() => {
-    papi.commands.sendCommand('paratextProjectManager.getCurrentUser')
-      .then((u) => { if (u && typeof u === 'string' && u.length > 0) setLogTimeUser(u as string); })
+    papi.commands
+      .sendCommand('paratextProjectManager.getCurrentUser')
+      .then((u) => {
+        if (u && typeof u === 'string' && u.length > 0) setLogTimeUser(u as string);
+      })
       .catch(() => {});
   }, []);
 
   // Shared polling logic: call after gcalConnect or gcalReconnect returns { status: 'started' }
-  const pollGcalAuth = useCallback(async (onSuccess?: () => void) => {
-    const startMs = Date.now();
-    const maxMs = 6 * 60 * 1000;
-    const poll = async (): Promise<void> => {
-      if (Date.now() - startMs > maxMs) {
-        setGcalError('Tiempo de espera agotado. El navegador tardó demasiado. Intenta de nuevo.');
-        setGcalMessage('');
-        setGcalConnecting(false);
-        return;
-      }
-      try {
-        const raw = await papi.commands.sendCommand('paratextProjectManager.gcalPollAuth');
-        const state = JSON.parse(raw as string) as { status: string; email?: string; error?: string };
-        if (state.status === 'success') {
-          setGcalMessage(`Conectado como ${state.email ?? ''}`);
-          setGcalError('');
-          setShowGcalSetup(false);
-          setGcalClientSecret('');
-          await loadGcalStatus();
-          try {
-            const calsResult = await papi.commands.sendCommand('paratextProjectManager.gcalListCalendars');
-            setGcalCalendars(JSON.parse(calsResult as string));
-          } catch (_) { /* non-critical */ }
-          setGcalConnecting(false);
-          onSuccess?.();
-        } else if (state.status === 'error') {
-          setGcalError(state.error ?? 'Error desconocido');
+  const pollGcalAuth = useCallback(
+    async (onSuccess?: () => void) => {
+      const startMs = Date.now();
+      const maxMs = 6 * 60 * 1000;
+      const poll = async (): Promise<void> => {
+        if (Date.now() - startMs > maxMs) {
+          setGcalError('Tiempo de espera agotado. El navegador tardó demasiado. Intenta de nuevo.');
           setGcalMessage('');
           setGcalConnecting(false);
-        } else {
-          // still pending — check again in 2s
-          setTimeout(() => { poll().catch(() => {}); }, 2000);
+          return;
         }
-      } catch (_) {
-        setTimeout(() => { poll().catch(() => {}); }, 2000);
-      }
-    };
-    await poll();
-  }, [loadGcalStatus]);
+        try {
+          const raw = await papi.commands.sendCommand('paratextProjectManager.gcalPollAuth');
+          const state = JSON.parse(raw as string) as {
+            status: string;
+            email?: string;
+            error?: string;
+          };
+          if (state.status === 'success') {
+            setGcalMessage(`Conectado como ${state.email ?? ''}`);
+            setGcalError('');
+            setShowGcalSetup(false);
+            setGcalClientSecret('');
+            await loadGcalStatus();
+            try {
+              const calsResult = await papi.commands.sendCommand(
+                'paratextProjectManager.gcalListCalendars',
+              );
+              setGcalCalendars(JSON.parse(calsResult as string));
+            } catch (_) {
+              /* non-critical */
+            }
+            setGcalConnecting(false);
+            onSuccess?.();
+          } else if (state.status === 'error') {
+            setGcalError(state.error ?? 'Error desconocido');
+            setGcalMessage('');
+            setGcalConnecting(false);
+          } else {
+            // still pending — check again in 2s
+            setTimeout(() => {
+              poll().catch(() => {});
+            }, 2000);
+          }
+        } catch (_) {
+          setTimeout(() => {
+            poll().catch(() => {});
+          }, 2000);
+        }
+      };
+      await poll();
+    },
+    [loadGcalStatus],
+  );
 
   const gcalConnect = useCallback(async () => {
     if (!gcalClientId.trim() || !gcalClientSecret.trim()) {
@@ -1084,7 +1217,9 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       const result = await papi.commands.sendCommand('paratextProjectManager.gcalListCalendars');
       const cals = JSON.parse(result as string) as GcalCalendar[];
       setGcalCalendars(cals);
-    } catch (_) { /* non-critical */ }
+    } catch (_) {
+      /* non-critical */
+    }
   }, []);
 
   const gcalChangeCalendar = useCallback(async (calId: string) => {
@@ -1124,7 +1259,10 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
   const flushPendingTime = useCallback(async () => {
     try {
       const res = await papi.commands.sendCommand('paratextProjectManager.gcalFlushPendingTime');
-      const { synced, remaining } = JSON.parse(res as string) as { synced: number; remaining: number };
+      const { synced, remaining } = JSON.parse(res as string) as {
+        synced: number;
+        remaining: number;
+      };
       if (synced === 0 && remaining === 0) {
         // eslint-disable-next-line no-alert
         alert('No hay registros de tiempo pendientes.');
@@ -1138,7 +1276,9 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
           alert(`${remaining} registro(s) aún pendientes (sin conexión).`);
         }
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }, []);
 
   // --- Load GCal events when calendar tab is active or month changes ---
@@ -1281,11 +1421,26 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
   const saveTimeEntry = useCallback(async () => {
     const hours = parseFloat(logTimeHours);
     const isOtro = logTimeTask === '__otro__';
-    if (!isOtro && !logTimeTask) { setLogTimeError('Selecciona una tarea'); return; }
-    if (isOtro && !logTimeCustomLabel.trim()) { setLogTimeError('Ingresa una descripción'); return; }
-    if (!logTimeUser) { setLogTimeError('Selecciona un usuario'); return; }
-    if (!selectedDay) { setLogTimeError('No hay día seleccionado'); return; }
-    if (isNaN(hours) || hours <= 0) { setLogTimeError('Las horas deben ser un número positivo'); return; }
+    if (!isOtro && !logTimeTask) {
+      setLogTimeError('Selecciona una tarea');
+      return;
+    }
+    if (isOtro && !logTimeCustomLabel.trim()) {
+      setLogTimeError('Ingresa una descripción');
+      return;
+    }
+    if (!logTimeUser) {
+      setLogTimeError('Selecciona un usuario');
+      return;
+    }
+    if (!selectedDay) {
+      setLogTimeError('No hay día seleccionado');
+      return;
+    }
+    if (isNaN(hours) || hours <= 0) {
+      setLogTimeError('Las horas deben ser un número positivo');
+      return;
+    }
 
     setLogTimeSaving(true);
     setLogTimeError('');
@@ -1332,7 +1487,12 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         if (task.id !== logTimeTask) return task;
         const updatedEntries = [...(task.timeEntries ?? []), newEntry];
         const totalLogged = updatedEntries.reduce((sum, e) => sum + e.hours, 0);
-        return { ...task, timeEntries: updatedEntries, loggedHours: totalLogged, updatedAt: new Date().toISOString() };
+        return {
+          ...task,
+          timeEntries: updatedEntries,
+          loggedHours: totalLogged,
+          updatedAt: new Date().toISOString(),
+        };
       });
 
       const { activityLog: savedLog, deletedTaskIds: savedDeleted } = extrasRef.current;
@@ -1343,7 +1503,11 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         ...(savedLog ? { activityLog: savedLog } : {}),
         ...(savedDeleted?.length ? { deletedTaskIds: savedDeleted } : {}),
       };
-      await papi.commands.sendCommand('paratextProjectManager.saveTasks', projectId, JSON.stringify(store));
+      await papi.commands.sendCommand(
+        'paratextProjectManager.saveTasks',
+        projectId,
+        JSON.stringify(store),
+      );
 
       setTasks(updatedTasks);
       setLogTimeHours('1');
@@ -1379,63 +1543,102 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
     } finally {
       setLogTimeSaving(false);
     }
-  }, [logTimeTask, logTimeCustomLabel, logTimeUser, logTimeHours, logTimeNote, selectedDay, tasks, stageConfig, projectId, gcalStatus]);
+  }, [
+    logTimeTask,
+    logTimeCustomLabel,
+    logTimeUser,
+    logTimeHours,
+    logTimeNote,
+    selectedDay,
+    tasks,
+    stageConfig,
+    projectId,
+    gcalStatus,
+  ]);
 
-  const deleteTimeEntry = useCallback(async (taskId: string, entryId: string) => {
-    try {
-      const updatedTasks = tasks.map((task): ProjectTask => {
-        if (task.id !== taskId) return task;
-        const updatedEntries = (task.timeEntries ?? []).filter((e) => e.id !== entryId);
-        const totalLogged = updatedEntries.reduce((sum, e) => sum + e.hours, 0);
-        return { ...task, timeEntries: updatedEntries, loggedHours: totalLogged, updatedAt: new Date().toISOString() };
-      });
-      const { activityLog: savedLog2, deletedTaskIds: savedDeleted2 } = extrasRef.current;
-      const store = {
-        schemaVersion: 1 as const,
-        tasks: updatedTasks,
-        stageConfig,
-        ...(savedLog2 ? { activityLog: savedLog2 } : {}),
-        ...(savedDeleted2?.length ? { deletedTaskIds: savedDeleted2 } : {}),
-      };
-      await papi.commands.sendCommand('paratextProjectManager.saveTasks', projectId, JSON.stringify(store));
-      setTasks(updatedTasks);
-    } catch (e) {
-      setLogTimeError(`Error al eliminar: ${e}`);
-    }
-  }, [tasks, stageConfig, projectId]);
-
-  const deleteGcalEvent = useCallback(async (eventId: string) => {
-    if (!gcalStatus.calendarId) return;
-    // Optimistic: remove from local state immediately
-    setGcalEvents((prev) => prev.filter((ev) => ev.id !== eventId));
-    try {
-      const result = JSON.parse(
-        await papi.commands.sendCommand('paratextProjectManager.gcalDeleteEvent', gcalStatus.calendarId, eventId),
-      );
-      if (result.status !== 'ok') {
-        // Revert on failure — re-fetch events
-        setGcalEventsLoading(true);
-        try {
-          const evJson = await papi.commands.sendCommand(
-            'paratextProjectManager.gcalGetEvents',
-            gcalStatus.calendarId,
-            new Date(calMonth + '-01').toISOString(),
-            new Date(new Date(calMonth + '-01').getFullYear(), new Date(calMonth + '-01').getMonth() + 1, 1).toISOString(),
-          );
-          setGcalEvents(JSON.parse(evJson));
-        } finally {
-          setGcalEventsLoading(false);
-        }
+  const deleteTimeEntry = useCallback(
+    async (taskId: string, entryId: string) => {
+      try {
+        const updatedTasks = tasks.map((task): ProjectTask => {
+          if (task.id !== taskId) return task;
+          const updatedEntries = (task.timeEntries ?? []).filter((e) => e.id !== entryId);
+          const totalLogged = updatedEntries.reduce((sum, e) => sum + e.hours, 0);
+          return {
+            ...task,
+            timeEntries: updatedEntries,
+            loggedHours: totalLogged,
+            updatedAt: new Date().toISOString(),
+          };
+        });
+        const { activityLog: savedLog2, deletedTaskIds: savedDeleted2 } = extrasRef.current;
+        const store = {
+          schemaVersion: 1 as const,
+          tasks: updatedTasks,
+          stageConfig,
+          ...(savedLog2 ? { activityLog: savedLog2 } : {}),
+          ...(savedDeleted2?.length ? { deletedTaskIds: savedDeleted2 } : {}),
+        };
+        await papi.commands.sendCommand(
+          'paratextProjectManager.saveTasks',
+          projectId,
+          JSON.stringify(store),
+        );
+        setTasks(updatedTasks);
+      } catch (e) {
+        setLogTimeError(`Error al eliminar: ${e}`);
       }
-    } catch (_) {
-      // Silent — event already removed from UI; a manual refresh will restore if needed
-    }
-  }, [gcalStatus.calendarId, calMonth]);
+    },
+    [tasks, stageConfig, projectId],
+  );
+
+  const deleteGcalEvent = useCallback(
+    async (eventId: string) => {
+      if (!gcalStatus.calendarId) return;
+      // Optimistic: remove from local state immediately
+      setGcalEvents((prev) => prev.filter((ev) => ev.id !== eventId));
+      try {
+        const result = JSON.parse(
+          await papi.commands.sendCommand(
+            'paratextProjectManager.gcalDeleteEvent',
+            gcalStatus.calendarId,
+            eventId,
+          ),
+        );
+        if (result.status !== 'ok') {
+          // Revert on failure — re-fetch events
+          setGcalEventsLoading(true);
+          try {
+            const evJson = await papi.commands.sendCommand(
+              'paratextProjectManager.gcalGetEvents',
+              gcalStatus.calendarId,
+              new Date(calMonth + '-01').toISOString(),
+              new Date(
+                new Date(calMonth + '-01').getFullYear(),
+                new Date(calMonth + '-01').getMonth() + 1,
+                1,
+              ).toISOString(),
+            );
+            setGcalEvents(JSON.parse(evJson));
+          } finally {
+            setGcalEventsLoading(false);
+          }
+        }
+      } catch (_) {
+        // Silent — event already removed from UI; a manual refresh will restore if needed
+      }
+    },
+    [gcalStatus.calendarId, calMonth],
+  );
 
   // --- CSV / PDF export ---
   const buildCsvContent = useCallback((): string => {
     const header = ['Libro', ...orderedStages.map((s) => getStageLabel(s, stageConfig))];
-    const icons: Record<string, string> = { complete: '✓', 'in-progress': '⟳', pending: '•', flagged: '⚑' };
+    const icons: Record<string, string> = {
+      complete: '✓',
+      'in-progress': '⟳',
+      pending: '•',
+      flagged: '⚑',
+    };
     const rows = booksInUse.map((book) => [
       book,
       ...orderedStages.map((stage) => {
@@ -1445,7 +1648,9 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         return s ? `${icons[s] ?? ''}${cellTasks.length > 1 ? ` (${cellTasks.length})` : ''}` : '';
       }),
     ]);
-    return '\uFEFF' + [header, ...rows].map((row) => row.map((c) => `"${c}"`).join(',')).join('\r\n');
+    return (
+      '\uFEFF' + [header, ...rows].map((row) => row.map((c) => `"${c}"`).join(',')).join('\r\n')
+    );
   }, [orderedStages, stageConfig, booksInUse, grid]);
 
   const downloadCsv = useCallback(async () => {
@@ -1469,25 +1674,44 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       setExportError(`Error: ${e}`);
       setExportStatus('');
     }
-    setTimeout(() => { setExportStatus(''); setExportError(''); }, 5000);
+    setTimeout(() => {
+      setExportStatus('');
+      setExportError('');
+    }, 5000);
   }, [buildCsvContent]);
 
   const buildHtmlContent = useCallback((): string => {
-    const stageHeaders = orderedStages.map((s) => `<th>${getStageLabel(s, stageConfig)}</th>`).join('');
-    const icons: Record<string, string> = { complete: '✓', 'in-progress': '⟳', pending: '•', flagged: '⚑' };
-    const statusColors: Record<string, string> = {
-      complete: '#d1fae5', 'in-progress': '#fef3c7', pending: '#f3f4f6', flagged: '#fee2e2',
+    const stageHeaders = orderedStages
+      .map((s) => `<th>${getStageLabel(s, stageConfig)}</th>`)
+      .join('');
+    const icons: Record<string, string> = {
+      complete: '✓',
+      'in-progress': '⟳',
+      pending: '•',
+      flagged: '⚑',
     };
-    const rows = booksInUse.map((book) => {
-      const cells = orderedStages.map((stage) => {
-        const cellTasks = grid[book]?.[stage] ?? [];
-        const s = cellTasks.length > 0 ? aggregateStatus(cellTasks) : null;
-        const bg = s ? statusColors[s] ?? '#f3f4f6' : '#fff';
-        const text = s ? `${icons[s] ?? ''}${cellTasks.length > 1 ? ` (${cellTasks.length})` : ''}` : '';
-        return `<td style="background:${bg};text-align:center;padding:4px 8px;">${text}</td>`;
-      }).join('');
-      return `<tr><td style="font-weight:bold;padding:4px 8px;">${book}</td>${cells}</tr>`;
-    }).join('');
+    const statusColors: Record<string, string> = {
+      complete: '#d1fae5',
+      'in-progress': '#fef3c7',
+      pending: '#f3f4f6',
+      flagged: '#fee2e2',
+    };
+    const rows = booksInUse
+      .map((book) => {
+        const cells = orderedStages
+          .map((stage) => {
+            const cellTasks = grid[book]?.[stage] ?? [];
+            const s = cellTasks.length > 0 ? aggregateStatus(cellTasks) : null;
+            const bg = s ? (statusColors[s] ?? '#f3f4f6') : '#fff';
+            const text = s
+              ? `${icons[s] ?? ''}${cellTasks.length > 1 ? ` (${cellTasks.length})` : ''}`
+              : '';
+            return `<td style="background:${bg};text-align:center;padding:4px 8px;">${text}</td>`;
+          })
+          .join('');
+        return `<tr><td style="font-weight:bold;padding:4px 8px;">${book}</td>${cells}</tr>`;
+      })
+      .join('');
 
     const date = new Date().toLocaleDateString('es');
     const datetime = new Date().toLocaleString('es');
@@ -1505,8 +1729,12 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       '</style>' +
       `</head><body onload="window.print()">` +
       `<h1>Resumen del Proyecto \u2014 ${date}</h1>` +
-      '<table><thead><tr><th>Libro</th>' + stageHeaders + '</tr></thead>' +
-      '<tbody>' + rows + '</tbody></table>' +
+      '<table><thead><tr><th>Libro</th>' +
+      stageHeaders +
+      '</tr></thead>' +
+      '<tbody>' +
+      rows +
+      '</tbody></table>' +
       `<p style="margin-top:16px;color:#666;font-size:11px;">Generado por Paratext Project Manager \u00b7 ${datetime}</p>` +
       '</body></html>'
     );
@@ -1533,15 +1761,18 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       setExportError(`Error: ${e}`);
       setExportStatus('');
     }
-    setTimeout(() => { setExportStatus(''); setExportError(''); }, 7000);
+    setTimeout(() => {
+      setExportStatus('');
+      setExportError('');
+    }, 7000);
   }, [buildHtmlContent]);
 
   if (!projectId) {
     return (
-      <div className="flex flex-col items-center justify-center h-full p-8 text-center gap-4 text-sm">
-        <p className="text-gray-600">Ningún proyecto seleccionado.</p>
+      <div className="tw:flex tw:flex-col tw:items-center tw:justify-center tw:h-full tw:p-8 tw:text-center tw:gap-4 tw:text-sm">
+        <p className="tw:text-gray-600">Ningún proyecto seleccionado.</p>
         <button
-          className="px-4 py-2 bg-slate-600 text-white rounded hover:bg-slate-700"
+          className="tw:px-4 tw:py-2 tw:bg-slate-600 tw:text-white tw:rounded tw:hover:bg-slate-700"
           onClick={selectProject}
         >
           Seleccionar Proyecto
@@ -1551,7 +1782,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
   }
 
   return (
-    <div className="flex flex-col h-full bg-gray-50 text-xs">
+    <div className="tw:flex tw:flex-col tw:h-full tw:bg-gray-50 tw:text-xs">
       {/* Print-only styles */}
       <style>{`
         @media print {
@@ -1570,43 +1801,47 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       `}</style>
 
       {/* Header */}
-      <div className="px-3 py-2 bg-white border-b shadow-sm flex items-center justify-between no-print">
-        <span className="font-semibold text-sm text-gray-700">Resumen del Proyecto</span>
-        <div className="flex items-center gap-2 text-xs text-gray-600 flex-wrap">
-          <span className="text-green-600 font-medium">{pctComplete}% completo</span>
-          <span>{completedTasks}/{totalTasks} tareas</span>
+      <div className="tw:px-3 tw:py-2 tw:bg-white tw:border-b tw:shadow-sm tw:flex tw:items-center tw:justify-between tw:no-print">
+        <span className="tw:font-semibold tw:text-sm tw:text-gray-700">Resumen del Proyecto</span>
+        <div className="tw:flex tw:items-center tw:gap-2 tw:text-xs tw:text-gray-600 tw:flex-wrap">
+          <span className="tw:text-green-600 tw:font-medium">{pctComplete}% completo</span>
+          <span>
+            {completedTasks}/{totalTasks} tareas
+          </span>
           {inProgressTasks > 0 && (
-            <span className="text-yellow-700">⟳ {inProgressTasks} en progreso</span>
+            <span className="tw:text-yellow-700">⟳ {inProgressTasks} en progreso</span>
           )}
-          {flaggedTasks > 0 && <span className="text-red-600">⚑ {flaggedTasks} banderas</span>}
+          {flaggedTasks > 0 && <span className="tw:text-red-600">⚑ {flaggedTasks} banderas</span>}
           <button
-            className="px-2 py-0.5 bg-gray-100 rounded hover:bg-gray-200 disabled:opacity-50"
+            className="tw:px-2 tw:py-0.5 tw:bg-gray-100 tw:rounded tw:hover:bg-gray-200 tw:disabled:opacity-50"
             onClick={downloadCsv}
             title="Guardar CSV en Descargas"
           >
             ↓ CSV
           </button>
           <button
-            className="px-2 py-0.5 bg-slate-600 text-white rounded hover:bg-slate-700 disabled:opacity-50"
+            className="tw:px-2 tw:py-0.5 tw:bg-slate-600 tw:text-white tw:rounded tw:hover:bg-slate-700 tw:disabled:opacity-50"
             onClick={exportPdf}
             title="Abrir tabla en navegador para imprimir/PDF"
           >
             🖨 PDF
           </button>
           {(exportStatus || exportError) && (
-            <span className={`text-xs px-1.5 ${exportError ? 'text-red-600' : 'text-green-700'}`}>
+            <span
+              className={`tw:text-xs tw:px-1.5 ${exportError ? 'tw:text-red-600' : 'tw:text-green-700'}`}
+            >
               {exportStatus || exportError}
             </span>
           )}
           <button
-            className="px-2 py-0.5 bg-gray-100 rounded hover:bg-gray-200"
+            className="tw:px-2 tw:py-0.5 tw:bg-gray-100 tw:rounded tw:hover:bg-gray-200"
             onClick={selectProject}
             title="Cambiar proyecto"
           >
             ⇄
           </button>
           <button
-            className="px-2 py-0.5 bg-gray-100 rounded hover:bg-gray-200"
+            className="tw:px-2 tw:py-0.5 tw:bg-gray-100 tw:rounded tw:hover:bg-gray-200"
             onClick={loadTasks}
             title="Actualizar"
           >
@@ -1616,25 +1851,25 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       </div>
 
       {/* Print-only title */}
-      <div className="print-only px-3 py-2 text-sm font-bold">
+      <div className="tw:print-only tw:px-3 tw:py-2 tw:text-sm tw:font-bold">
         Resumen del Proyecto — {pctComplete}% completo ({completedTasks}/{totalTasks} tareas)
       </div>
 
       {error && (
-        <div className="bg-red-50 border-b border-red-200 px-3 py-1 text-red-700">
+        <div className="tw:bg-red-50 tw:border-b tw:border-red-200 tw:px-3 tw:py-1 tw:text-red-700">
           {error}
         </div>
       )}
 
       {/* Tab bar */}
-      <div className="flex border-b border-gray-200 bg-white no-print">
+      <div className="tw:flex tw:border-b tw:border-gray-200 tw:bg-white tw:no-print">
         {(['summary', 'calendar'] as const).map((tab) => (
           <button
             key={tab}
-            className={`px-4 py-1.5 text-xs font-medium border-b-2 transition-colors ${
+            className={`tw:px-4 tw:py-1.5 tw:text-xs tw:font-medium tw:border-b-2 tw:transition-colors ${
               currentTab === tab
-                ? 'border-slate-600 text-slate-700'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'tw:border-slate-600 tw:text-slate-700'
+                : 'tw:border-transparent tw:text-gray-500 tw:hover:text-gray-700 tw:hover:border-gray-300'
             }`}
             onClick={() => setCurrentTab(tab)}
           >
@@ -1644,30 +1879,30 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       </div>
 
       {/* Team Members — always visible, outside scrollable area */}
-      <div className="border-b border-gray-200 bg-white no-print">
+      <div className="tw:border-b tw:border-gray-200 tw:bg-white tw:no-print">
         <button
-          className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-gray-50 text-left"
+          className="tw:w-full tw:flex tw:items-center tw:justify-between tw:px-3 tw:py-1.5 tw:hover:bg-gray-50 tw:text-left"
           onClick={() => setShowTeamSection((s) => !s)}
         >
-          <span className="font-semibold text-xs text-gray-700">
+          <span className="tw:font-semibold tw:text-xs tw:text-gray-700">
             👥 Equipo ({teamMembers.length} miembros)
           </span>
-          <span className="text-gray-400 text-xs">{showTeamSection ? '▲' : '▼'}</span>
+          <span className="tw:text-gray-400 tw:text-xs">{showTeamSection ? '▲' : '▼'}</span>
         </button>
 
         {showTeamSection && (
-          <div className="px-3 pb-3 space-y-2">
+          <div className="tw:px-3 tw:pb-3 tw:space-y-2">
             {/* Current members */}
-            <div className="flex flex-wrap gap-1.5">
+            <div className="tw:flex tw:flex-wrap tw:gap-1.5">
               {teamMembers.map((m) => (
                 <span
                   key={m}
-                  className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 text-xs px-2 py-0.5 rounded-full"
+                  className="tw:inline-flex tw:items-center tw:gap-1 tw:bg-slate-100 tw:text-slate-700 tw:text-xs tw:px-2 tw:py-0.5 tw:rounded-full"
                 >
                   {m}
                   <button
                     type="button"
-                    className="text-slate-400 hover:text-red-500 leading-none font-bold"
+                    className="tw:text-slate-400 tw:hover:text-red-500 tw:leading-none tw:font-bold"
                     title={`Quitar a ${m}`}
                     onClick={async () => {
                       const updated = teamMembers.filter((x) => x !== m);
@@ -1695,7 +1930,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
             </div>
             {/* Add new member */}
             <form
-              className="flex gap-2"
+              className="tw:flex tw:gap-2"
               onSubmit={async (e) => {
                 e.preventDefault();
                 const name = teamInput.trim();
@@ -1720,7 +1955,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
               }}
             >
               <input
-                className="flex-1 border rounded px-2 py-1 text-xs"
+                className="tw:flex-1 tw:border tw:rounded tw:px-2 tw:py-1 tw:text-xs"
                 placeholder="Nombre del nuevo miembro…"
                 value={teamInput}
                 onChange={(e) => setTeamInput(e.target.value)}
@@ -1728,18 +1963,20 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
               />
               <button
                 type="submit"
-                className="px-3 py-1 bg-slate-600 text-white text-xs rounded hover:bg-slate-700 disabled:opacity-50"
+                className="tw:px-3 tw:py-1 tw:bg-slate-600 tw:text-white tw:text-xs tw:rounded tw:hover:bg-slate-700 tw:disabled:opacity-50"
                 disabled={teamSaving || !teamInput.trim()}
               >
                 + Agregar
               </button>
             </form>
             {teamMessage && (
-              <p className={`text-xs ${teamMessage.startsWith('Error') ? 'text-red-600' : 'text-green-600'}`}>
+              <p
+                className={`tw:text-xs ${teamMessage.startsWith('tw:Error') ? 'tw:text-red-600' : 'tw:text-green-600'}`}
+              >
                 {teamMessage}
               </p>
             )}
-            <p className="text-xs text-gray-400">
+            <p className="tw:text-xs tw:text-gray-400">
               Los cambios se reflejan en el Tablero y Mis Tareas al recargar esos paneles.
             </p>
           </div>
@@ -1747,132 +1984,144 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center flex-1 text-gray-400">Cargando…</div>
+        <div className="tw:flex tw:items-center tw:justify-center tw:flex-1 tw:text-gray-400">
+          Cargando…
+        </div>
       ) : currentTab === 'summary' ? (
-        <div className="flex-1 overflow-auto p-2">
+        <div className="tw:flex-1 tw:overflow-auto tw:p-2">
           {totalTasks === 0 ? (
-            <div className="flex items-center justify-center py-8 text-gray-400">
+            <div className="tw:flex tw:items-center tw:justify-center tw:py-8 tw:text-gray-400">
               No hay tareas creadas todavía. Abre el Tablero de Tareas para crear tareas.
             </div>
           ) : (
-          <>
-          <table className="border-collapse w-full">
-            <thead>
-              <tr>
-                <th className="border border-gray-200 bg-gray-100 px-2 py-1 text-left font-semibold sticky left-0 z-10">
-                  Libro
-                </th>
-                {orderedStages.map((stage) => (
-                  <th
-                    key={stage}
-                    className="border border-gray-200 bg-gray-100 px-1 py-1 font-medium whitespace-nowrap max-w-20"
-                    title={getStageLabel(stage, stageConfig)}
-                  >
-                    <div className="truncate max-w-16">{getStageLabel(stage, stageConfig)}</div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {booksInUse.map((book) => (
-                <tr key={book} className="hover:bg-gray-50">
-                  <td className="border border-gray-200 px-2 py-1 font-semibold bg-white sticky left-0">
-                    {book}
-                  </td>
-                  {orderedStages.map((stage) => {
-                    const cellTasks = grid[book]?.[stage] ?? [];
-                    const status = aggregateStatus(cellTasks);
-                    return (
-                      <td
+            <>
+              <table className="tw:border-collapse tw:w-full">
+                <thead>
+                  <tr>
+                    <th className="tw:border tw:border-gray-200 tw:bg-gray-100 tw:px-2 tw:py-1 tw:text-left tw:font-semibold tw:sticky tw:left-0 tw:z-10">
+                      Libro
+                    </th>
+                    {orderedStages.map((stage) => (
+                      <th
                         key={stage}
-                        className={`border border-gray-200 px-1 py-1 text-center ${
-                          status ? CELL_STYLES[status] : 'bg-white'
-                        }`}
-                        title={
-                          cellTasks.length > 0
-                            ? `${cellTasks.length} tarea${cellTasks.length !== 1 ? 's' : ''}`
-                            : ''
-                        }
+                        className="tw:border tw:border-gray-200 tw:bg-gray-100 tw:px-1 tw:py-1 tw:font-medium tw:whitespace-nowrap tw:max-w-20"
+                        title={getStageLabel(stage, stageConfig)}
                       >
-                        {status ? (
-                          <span className="font-medium">
-                            {CELL_ICONS[status]}
-                            {cellTasks.length > 1 && (
-                              <sup className="text-gray-500">{cellTasks.length}</sup>
-                            )}
-                          </span>
-                        ) : null}
+                        <div className="tw:truncate tw:max-w-16">
+                          {getStageLabel(stage, stageConfig)}
+                        </div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {booksInUse.map((book) => (
+                    <tr key={book} className="tw:hover:bg-gray-50">
+                      <td className="tw:border tw:border-gray-200 tw:px-2 tw:py-1 tw:font-semibold tw:bg-white tw:sticky tw:left-0">
+                        {book}
                       </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="bg-gray-100 font-medium">
-                <td className="border border-gray-200 px-2 py-1 sticky left-0 bg-gray-100">
-                  Total
-                </td>
-                {orderedStages.map((stage) => {
-                  const s = stageSummary[stage];
-                  return (
-                    <td key={stage} className="border border-gray-200 px-1 py-1 text-center">
-                      {s.total > 0 ? (
-                        <span
-                          className={s.complete === s.total ? 'text-green-600' : 'text-gray-600'}
-                          title={`${s.complete}/${s.total} completas${s.flagged > 0 ? `, ${s.flagged} banderas` : ''}`}
-                        >
-                          {s.complete}/{s.total}
-                        </span>
-                      ) : (
-                        <span className="text-gray-300">—</span>
-                      )}
+                      {orderedStages.map((stage) => {
+                        const cellTasks = grid[book]?.[stage] ?? [];
+                        const status = aggregateStatus(cellTasks);
+                        return (
+                          <td
+                            key={stage}
+                            className={`tw:border tw:border-gray-200 tw:px-1 tw:py-1 tw:text-center ${
+                              status ? CELL_STYLES[status] : 'tw:bg-white'
+                            }`}
+                            title={
+                              cellTasks.length > 0
+                                ? `${cellTasks.length} tarea${cellTasks.length !== 1 ? 's' : ''}`
+                                : ''
+                            }
+                          >
+                            {status ? (
+                              <span className="tw:font-medium">
+                                {CELL_ICONS[status]}
+                                {cellTasks.length > 1 && (
+                                  <sup className="tw:text-gray-500">{cellTasks.length}</sup>
+                                )}
+                              </span>
+                            ) : null}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="tw:bg-gray-100 tw:font-medium">
+                    <td className="tw:border tw:border-gray-200 tw:px-2 tw:py-1 tw:sticky tw:left-0 tw:bg-gray-100">
+                      Total
                     </td>
-                  );
-                })}
-              </tr>
-            </tfoot>
-          </table>
+                    {orderedStages.map((stage) => {
+                      const s = stageSummary[stage];
+                      return (
+                        <td
+                          key={stage}
+                          className="tw:border tw:border-gray-200 tw:px-1 tw:py-1 tw:text-center"
+                        >
+                          {s.total > 0 ? (
+                            <span
+                              className={
+                                s.complete === s.total ? 'tw:text-green-600' : 'tw:text-gray-600'
+                              }
+                              title={`${s.complete}/${s.total} completas${s.flagged > 0 ? `, ${s.flagged} banderas` : ''}`}
+                            >
+                              {s.complete}/{s.total}
+                            </span>
+                          ) : (
+                            <span className="tw:text-gray-300">—</span>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                </tfoot>
+              </table>
 
-          {/* Legend */}
-          <div className="flex gap-4 mt-3 px-1 text-xs text-gray-500 flex-wrap">
-            <span>✓ Completo</span>
-            <span>⟳ En Progreso</span>
-            <span>• Pendiente</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" />⚑ Bandera</span>
-          </div>
-          </>
+              {/* Legend */}
+              <div className="tw:flex tw:gap-4 tw:mt-3 tw:px-1 tw:text-xs tw:text-gray-500 tw:flex-wrap">
+                <span>✓ Completo</span>
+                <span>⟳ En Progreso</span>
+                <span>• Pendiente</span>
+                <span className="tw:flex tw:items-center tw:gap-1">
+                  <span className="tw:w-2 tw:h-2 tw:rounded-full tw:bg-red-500 tw:inline-block" />⚑
+                  Bandera
+                </span>
+              </div>
+            </>
           )}
 
           {/* Google Calendar Section */}
-          <div className="mt-4 border border-gray-200 rounded-lg overflow-hidden no-print">
+          <div className="tw:mt-4 tw:border tw:border-gray-200 tw:rounded-lg tw:overflow-hidden tw:no-print">
             <button
-              className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 text-left"
+              className="tw:w-full tw:flex tw:items-center tw:justify-between tw:px-3 tw:py-2 tw:bg-gray-50 tw:hover:bg-gray-100 tw:text-left"
               onClick={() => setShowGcalSection((s) => !s)}
             >
-              <span className="font-semibold text-xs text-gray-700">
+              <span className="tw:font-semibold tw:text-xs tw:text-gray-700">
                 📅 Google Calendar
                 {gcalStatus.connected && (
-                  <span className="ml-2 text-green-600 font-normal">● Conectado</span>
+                  <span className="tw:ml-2 tw:text-green-600 tw:font-normal">● Conectado</span>
                 )}
               </span>
-              <span className="text-gray-400 text-xs">{showGcalSection ? '▲' : '▼'}</span>
+              <span className="tw:text-gray-400 tw:text-xs">{showGcalSection ? '▲' : '▼'}</span>
             </button>
 
             {showGcalSection && (
-              <div className="p-3 space-y-3">
+              <div className="tw:p-3 tw:space-y-3">
                 {gcalStatus.connected ? (
                   <>
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <div className="text-xs text-gray-600 space-y-0.5">
+                    <div className="tw:flex tw:items-center tw:justify-between tw:flex-wrap tw:gap-2">
+                      <div className="tw:text-xs tw:text-gray-600 tw:space-y-0.5">
                         <div>
-                          <span className="text-green-600 font-medium">● Conectado</span>
+                          <span className="tw:text-green-600 tw:font-medium">● Conectado</span>
                           {gcalStatus.email && (
-                            <span className="ml-1 text-gray-500">({gcalStatus.email})</span>
+                            <span className="tw:ml-1 tw:text-gray-500">({gcalStatus.email})</span>
                           )}
                         </div>
                         {gcalStatus.lastSync && (
-                          <div className="text-gray-400">
+                          <div className="tw:text-gray-400">
                             Última sync:{' '}
                             {new Date(gcalStatus.lastSync).toLocaleString('es', {
                               dateStyle: 'short',
@@ -1881,22 +2130,22 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                           </div>
                         )}
                       </div>
-                      <div className="flex gap-2 flex-wrap">
+                      <div className="tw:flex tw:gap-2 tw:flex-wrap">
                         <button
-                          className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                          className="tw:text-xs tw:px-2 tw:py-1 tw:bg-blue-600 tw:text-white tw:rounded tw:hover:bg-blue-700 tw:disabled:opacity-50"
                           onClick={gcalSync}
                           disabled={gcalSyncing || !projectId}
                         >
                           {gcalSyncing ? '⟳ Sincronizando…' : '↑ Sincronizar Fechas'}
                         </button>
                         <button
-                          className="text-xs px-2 py-1 rounded bg-slate-100 text-slate-700 hover:bg-slate-200"
+                          className="tw:text-xs tw:px-2 tw:py-1 tw:rounded tw:bg-slate-100 tw:text-slate-700 tw:hover:bg-slate-200"
                           onClick={flushPendingTime}
                         >
                           ⟳ Sincronizar horas pendientes
                         </button>
                         <button
-                          className="text-xs px-2 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                          className="tw:text-xs tw:px-2 tw:py-1 tw:bg-gray-200 tw:text-gray-700 tw:rounded tw:hover:bg-gray-300"
                           onClick={gcalDisconnect}
                         >
                           Desconectar
@@ -1904,25 +2153,26 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="text-gray-500 flex-shrink-0">Calendario:</span>
+                    <div className="tw:flex tw:items-center tw:gap-2 tw:text-xs">
+                      <span className="tw:text-gray-500 tw:flex-shrink-0">Calendario:</span>
                       {gcalCalendars.length > 0 ? (
                         <select
-                          className="flex-1 border border-gray-300 rounded px-1.5 py-0.5 text-xs max-w-xs"
+                          className="tw:flex-1 tw:border tw:border-gray-300 tw:rounded tw:px-1.5 tw:py-0.5 tw:text-xs tw:max-w-xs"
                           value={gcalStatus.calendarId}
                           onChange={(e) => gcalChangeCalendar(e.target.value)}
                         >
                           {gcalCalendars.map((cal) => (
                             <option key={cal.id} value={cal.id}>
-                              {cal.summary}{cal.primary ? ' (principal)' : ''}
+                              {cal.summary}
+                              {cal.primary ? ' (principal)' : ''}
                             </option>
                           ))}
                         </select>
                       ) : (
-                        <span className="text-gray-400">
+                        <span className="tw:text-gray-400">
                           {gcalStatus.calendarId}
                           <button
-                            className="ml-2 text-blue-500 hover:text-blue-700 underline"
+                            className="tw:ml-2 tw:text-blue-500 tw:hover:text-blue-700 tw:underline"
                             onClick={gcalLoadCalendars}
                           >
                             Cargar calendarios
@@ -1933,41 +2183,48 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                   </>
                 ) : (
                   <>
-                    <p className="text-xs text-gray-500">
-                      Conecta Google Calendar para sincronizar fechas límite de tareas como eventos y ver el calendario del equipo.
+                    <p className="tw:text-xs tw:text-gray-500">
+                      Conecta Google Calendar para sincronizar fechas límite de tareas como eventos
+                      y ver el calendario del equipo.
                     </p>
 
                     {/* One-click reconnect — shown when credentials are already saved */}
                     {gcalStatus.hasCredentials && !showGcalSetup && (
-                      <div className="space-y-1.5">
+                      <div className="tw:space-y-1.5">
                         <button
-                          className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                          className="tw:text-xs tw:px-3 tw:py-1.5 tw:bg-blue-600 tw:text-white tw:rounded tw:hover:bg-blue-700 tw:disabled:opacity-50"
                           onClick={gcalReconnect}
                           disabled={gcalConnecting}
                         >
-                          {gcalConnecting ? '⟳ Esperando autorización…' : '🔑 Reconectar Google Calendar'}
+                          {gcalConnecting
+                            ? '⟳ Esperando autorización…'
+                            : '🔑 Reconectar Google Calendar'}
                         </button>
-                        <p className="text-xs text-gray-400">
-                          Se usarán las credenciales guardadas. El navegador se abrirá para aprobar el acceso.{' '}
+                        <p className="tw:text-xs tw:text-gray-400">
+                          Se usarán las credenciales guardadas. El navegador se abrirá para aprobar
+                          el acceso.{' '}
                           <button
-                            className="underline hover:text-gray-600"
+                            className="tw:underline tw:hover:text-gray-600"
                             onClick={() => setShowGcalSetup(true)}
                           >
                             Usar otras credenciales
                           </button>
                         </p>
-                        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
-                          💡 Si tienes que reconectar frecuentemente: en Google Cloud Console cambia la app de <strong>«En prueba»</strong> a <strong>«En producción»</strong> (no requiere verificación de Google). Esto evita que el token expire cada 7 días.
+                        <p className="tw:text-xs tw:text-amber-700 tw:bg-amber-50 tw:border tw:border-amber-200 tw:rounded tw:px-2 tw:py-1">
+                          💡 Si tienes que reconectar frecuentemente: en Google Cloud Console cambia
+                          la app de <strong>«En prueba»</strong> a <strong>«En producción»</strong>{' '}
+                          (no requiere verificación de Google). Esto evita que el token expire cada
+                          7 días.
                         </p>
                       </div>
                     )}
 
                     {/* First-time connect or "use other credentials" */}
                     {(!gcalStatus.hasCredentials || showGcalSetup) && (
-                      <div className="space-y-2">
+                      <div className="tw:space-y-2">
                         {!showGcalSetup && (
                           <button
-                            className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700"
+                            className="tw:text-xs tw:px-3 tw:py-1.5 tw:bg-blue-600 tw:text-white tw:rounded tw:hover:bg-blue-700"
                             onClick={() => setShowGcalSetup(true)}
                           >
                             Conectar Google Calendar
@@ -1975,51 +2232,84 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                         )}
                         {showGcalSetup && (
                           <>
-                            <div className="text-xs bg-blue-50 border border-blue-200 rounded p-2 space-y-1.5">
-                              <p className="font-semibold text-blue-700">Configuración en Google Cloud Console:</p>
-                              <ol className="list-decimal list-inside space-y-1 text-blue-800">
-                                <li>Ve a <span className="font-mono bg-blue-100 px-0.5 rounded">console.cloud.google.com</span></li>
+                            <div className="tw:text-xs tw:bg-blue-50 tw:border tw:border-blue-200 tw:rounded tw:p-2 tw:space-y-1.5">
+                              <p className="tw:font-semibold tw:text-blue-700">
+                                Configuración en Google Cloud Console:
+                              </p>
+                              <ol className="tw:list-decimal tw:list-inside tw:space-y-1 tw:text-blue-800">
+                                <li>
+                                  Ve a{' '}
+                                  <span className="tw:font-mono tw:bg-blue-100 tw:px-0.5 tw:rounded">
+                                    console.cloud.google.com
+                                  </span>
+                                </li>
                                 <li>Crea o selecciona un proyecto</li>
-                                <li><strong>APIs y servicios → Biblioteca</strong> → busca <em>Google Calendar API</em> → Habilitar</li>
-                                <li><strong>APIs y servicios → Pantalla de consentimiento OAuth</strong> → Tipo: <strong>Externo</strong> → crea, llena nombre y correo → agrega tu correo en &quot;Usuarios de prueba&quot;</li>
-                                <li><strong>APIs y servicios → Credenciales → Crear credenciales → ID de cliente de OAuth 2.0</strong></li>
-                                <li>Tipo de aplicación: <strong>Aplicación de escritorio</strong> (no &quot;Aplicación web&quot;)</li>
-                                <li>Copia el <strong>ID de cliente</strong> y <strong>Secreto de cliente</strong></li>
+                                <li>
+                                  <strong>APIs y servicios → Biblioteca</strong> → busca{' '}
+                                  <em>Google Calendar API</em> → Habilitar
+                                </li>
+                                <li>
+                                  <strong>
+                                    APIs y servicios → Pantalla de consentimiento OAuth
+                                  </strong>{' '}
+                                  → Tipo: <strong>Externo</strong> → crea, llena nombre y correo →
+                                  agrega tu correo en &quot;Usuarios de prueba&quot;
+                                </li>
+                                <li>
+                                  <strong>
+                                    APIs y servicios → Credenciales → Crear credenciales → ID de
+                                    cliente de OAuth 2.0
+                                  </strong>
+                                </li>
+                                <li>
+                                  Tipo de aplicación: <strong>Aplicación de escritorio</strong> (no
+                                  &quot;Aplicación web&quot;)
+                                </li>
+                                <li>
+                                  Copia el <strong>ID de cliente</strong> y{' '}
+                                  <strong>Secreto de cliente</strong>
+                                </li>
                               </ol>
-                              <p className="text-orange-700 font-medium mt-1">
-                                ⚠ Error 400 = elegiste &quot;Aplicación web&quot; en vez de &quot;Aplicación de escritorio&quot;, o falta configurar la pantalla de consentimiento.
+                              <p className="tw:text-orange-700 tw:font-medium tw:mt-1">
+                                ⚠ Error 400 = elegiste &quot;Aplicación web&quot; en vez de
+                                &quot;Aplicación de escritorio&quot;, o falta configurar la pantalla
+                                de consentimiento.
                               </p>
                             </div>
 
-                            <div className="flex flex-col gap-1.5">
+                            <div className="tw:flex tw:flex-col tw:gap-1.5">
                               <input
                                 type="text"
                                 placeholder="Client ID (termina en .apps.googleusercontent.com)"
                                 value={gcalClientId}
                                 onChange={(e) => setGcalClientId(e.target.value)}
-                                className="w-full border border-gray-300 rounded px-2 py-1 text-xs"
+                                className="tw:w-full tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:text-xs"
                               />
                               <input
                                 type="password"
                                 placeholder="Client Secret"
                                 value={gcalClientSecret}
                                 onChange={(e) => setGcalClientSecret(e.target.value)}
-                                className="w-full border border-gray-300 rounded px-2 py-1 text-xs"
+                                className="tw:w-full tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:text-xs"
                                 onKeyDown={(e) => e.key === 'Enter' && gcalConnect()}
                               />
                             </div>
 
-                            <div className="flex gap-2">
+                            <div className="tw:flex tw:gap-2">
                               <button
-                                className="text-xs px-3 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                                className="tw:text-xs tw:px-3 tw:py-1.5 tw:bg-green-600 tw:text-white tw:rounded tw:hover:bg-green-700 tw:disabled:opacity-50"
                                 onClick={gcalConnect}
                                 disabled={gcalConnecting}
                               >
                                 {gcalConnecting ? '⟳ Esperando…' : 'Autorizar con Google'}
                               </button>
                               <button
-                                className="text-xs px-3 py-1.5 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
-                                onClick={() => { setShowGcalSetup(false); setGcalError(''); setGcalMessage(''); }}
+                                className="tw:text-xs tw:px-3 tw:py-1.5 tw:bg-gray-200 tw:text-gray-700 tw:rounded tw:hover:bg-gray-300"
+                                onClick={() => {
+                                  setShowGcalSetup(false);
+                                  setGcalError('');
+                                  setGcalMessage('');
+                                }}
                               >
                                 Cancelar
                               </button>
@@ -2032,12 +2322,12 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                 )}
 
                 {gcalMessage && (
-                  <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1">
+                  <p className="tw:text-xs tw:text-green-700 tw:bg-green-50 tw:border tw:border-green-200 tw:rounded tw:px-2 tw:py-1">
                     {gcalMessage}
                   </p>
                 )}
                 {gcalError && (
-                  <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1">
+                  <p className="tw:text-xs tw:text-red-700 tw:bg-red-50 tw:border tw:border-red-200 tw:rounded tw:px-2 tw:py-1">
                     {gcalError}
                   </p>
                 )}
@@ -2046,31 +2336,32 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
           </div>
 
           {/* Drive Task Sync Section */}
-          <div className="mt-4 border border-gray-200 rounded-lg overflow-hidden no-print">
+          <div className="tw:mt-4 tw:border tw:border-gray-200 tw:rounded-lg tw:overflow-hidden tw:no-print">
             <button
-              className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 text-left"
+              className="tw:w-full tw:flex tw:items-center tw:justify-between tw:px-3 tw:py-2 tw:bg-gray-50 tw:hover:bg-gray-100 tw:text-left"
               onClick={() => setShowDriveSection((s) => !s)}
             >
-              <span className="font-semibold text-xs text-gray-700">
+              <span className="tw:font-semibold tw:text-xs tw:text-gray-700">
                 ☁ Sincronización de Tareas (Drive)
-                {driveStatus.connected
-                  ? <span className="ml-2 text-green-600 font-normal">● Conectado</span>
-                  : <span className="ml-2 text-gray-400 font-normal">○ No configurado</span>
-                }
+                {driveStatus.connected ? (
+                  <span className="tw:ml-2 tw:text-green-600 tw:font-normal">● Conectado</span>
+                ) : (
+                  <span className="tw:ml-2 tw:text-gray-400 tw:font-normal">○ No configurado</span>
+                )}
               </span>
-              <span className="text-gray-400 text-xs">{showDriveSection ? '▲' : '▼'}</span>
+              <span className="tw:text-gray-400 tw:text-xs">{showDriveSection ? '▲' : '▼'}</span>
             </button>
 
             {showDriveSection && (
-              <div className="p-3 space-y-3 text-xs">
+              <div className="tw:p-3 tw:space-y-3 tw:text-xs">
                 {driveStatus.connected ? (
                   <>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1 flex-1">
+                    <div className="tw:flex tw:items-center tw:gap-2 tw:flex-wrap">
+                      <p className="tw:text-green-700 tw:bg-green-50 tw:border tw:border-green-200 tw:rounded tw:px-2 tw:py-1 tw:flex-1">
                         ✓ Drive conectado · {driveStatus.fileCount} proyecto(s) sincronizado(s)
                       </p>
                       <button
-                        className="px-2 py-1 bg-gray-100 border border-gray-300 text-gray-700 rounded text-xs hover:bg-gray-200 disabled:opacity-50 whitespace-nowrap"
+                        className="tw:px-2 tw:py-1 tw:bg-gray-100 tw:border tw:border-gray-300 tw:text-gray-700 tw:rounded tw:text-xs tw:hover:bg-gray-200 tw:disabled:opacity-50 tw:whitespace-nowrap"
                         onClick={driveTest}
                         disabled={driveTesting}
                       >
@@ -2078,19 +2369,21 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                       </button>
                     </div>
                     {driveTestResult && (
-                      <p className={`text-xs rounded px-2 py-1 font-mono whitespace-pre-wrap break-all ${
-                        driveTestResult.startsWith('✓')
-                          ? 'text-green-700 bg-green-50 border border-green-200'
-                          : 'text-red-700 bg-red-50 border border-red-200'
-                      }`}>
+                      <p
+                        className={`tw:text-xs tw:rounded tw:px-2 tw:py-1 tw:font-mono tw:whitespace-pre-wrap tw:break-all ${
+                          driveTestResult.startsWith('tw:✓')
+                            ? 'tw:text-green-700 tw:bg-green-50 tw:border tw:border-green-200'
+                            : 'tw:text-red-700 tw:bg-red-50 tw:border tw:border-red-200'
+                        }`}
+                      >
                         {driveTestResult}
                       </p>
                     )}
 
                     {/* Force sync button */}
-                    <div className="flex items-center gap-2">
+                    <div className="tw:flex tw:items-center tw:gap-2">
                       <button
-                        className="px-3 py-1.5 bg-green-600 text-white rounded text-xs hover:bg-green-700 disabled:opacity-50"
+                        className="tw:px-3 tw:py-1.5 tw:bg-green-600 tw:text-white tw:rounded tw:text-xs tw:hover:bg-green-700 tw:disabled:opacity-50"
                         onClick={driveForceSync}
                         disabled={driveSyncing}
                       >
@@ -2098,37 +2391,45 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                       </button>
                     </div>
                     {driveSyncResult && (
-                      <p className={`text-xs rounded px-2 py-1 font-mono whitespace-pre-wrap break-all ${
-                        driveSyncResult.startsWith('✓')
-                          ? 'text-green-700 bg-green-50 border border-green-200'
-                          : driveSyncResult === 'Sincronizando…'
-                          ? 'text-blue-700 bg-blue-50 border border-blue-200'
-                          : 'text-red-700 bg-red-50 border border-red-200'
-                      }`}>
+                      <p
+                        className={`tw:text-xs tw:rounded tw:px-2 tw:py-1 tw:font-mono tw:whitespace-pre-wrap tw:break-all ${
+                          driveSyncResult.startsWith('tw:✓')
+                            ? 'tw:text-green-700 tw:bg-green-50 tw:border tw:border-green-200'
+                            : driveSyncResult === 'tw:Sincronizando…'
+                              ? 'tw:text-blue-700 tw:bg-blue-50 tw:border tw:border-blue-200'
+                              : 'tw:text-red-700 tw:bg-red-50 tw:border tw:border-red-200'
+                        }`}
+                      >
                         {driveSyncResult}
                       </p>
                     )}
 
                     {/* Re-import form (shown when user clicks "Actualizar config") */}
                     {showDriveImport ? (
-                      <div className="space-y-2 border border-blue-200 rounded p-2 bg-blue-50">
-                        <p className="font-medium text-blue-800">Pega la nueva configuración del admin:</p>
+                      <div className="tw:space-y-2 tw:border tw:border-blue-200 tw:rounded tw:p-2 tw:bg-blue-50">
+                        <p className="tw:font-medium tw:text-blue-800">
+                          Pega la nueva configuración del admin:
+                        </p>
                         <textarea
-                          className="w-full border border-gray-300 rounded px-2 py-1 text-xs font-mono h-20 resize-none"
+                          className="tw:w-full tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:text-xs tw:font-mono tw:h-20 tw:resize-none"
                           value={driveImportJson}
                           onChange={(e) => setDriveImportJson(e.target.value)}
-                          placeholder='Pega aquí el JSON actualizado…'
+                          placeholder="Pega aquí el JSON actualizado…"
                         />
-                        <div className="flex gap-2">
+                        <div className="tw:flex tw:gap-2">
                           <button
-                            className="px-3 py-1.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
+                            className="tw:px-3 tw:py-1.5 tw:bg-blue-600 tw:text-white tw:rounded tw:text-xs tw:hover:bg-blue-700"
                             onClick={driveImportConfig}
                           >
                             ✓ Actualizar
                           </button>
                           <button
-                            className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300"
-                            onClick={() => { setShowDriveImport(false); setDriveImportJson(''); setDriveError(''); }}
+                            className="tw:px-3 tw:py-1.5 tw:bg-gray-200 tw:text-gray-700 tw:rounded tw:text-xs tw:hover:bg-gray-300"
+                            onClick={() => {
+                              setShowDriveImport(false);
+                              setDriveImportJson('');
+                              setDriveError('');
+                            }}
                           >
                             Cancelar
                           </button>
@@ -2136,36 +2437,45 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                       </div>
                     ) : (
                       <>
-                        <div className="bg-blue-50 border border-blue-200 rounded p-2 space-y-1">
-                          <p className="font-medium text-blue-800">Comparte con el equipo:</p>
-                          <p className="text-blue-700">
-                            1. Haz clic en "Exportar config" para copiar la configuración.<br />
-                            2. Envía el texto a cada compañero.<br />
+                        <div className="tw:bg-blue-50 tw:border tw:border-blue-200 tw:rounded tw:p-2 tw:space-y-1">
+                          <p className="tw:font-medium tw:text-blue-800">Comparte con el equipo:</p>
+                          <p className="tw:text-blue-700">
+                            1. Haz clic en "Exportar config" para copiar la configuración.
+                            <br />
+                            2. Envía el texto a cada compañero.
+                            <br />
                             3. Ellos pegan el texto con el botón "Actualizar config".
                           </p>
                         </div>
                         {driveExportedConfig ? (
-                          <div className="space-y-1">
-                            <p className="font-medium text-gray-700">Configuración para compartir:</p>
+                          <div className="tw:space-y-1">
+                            <p className="tw:font-medium tw:text-gray-700">
+                              Configuración para compartir:
+                            </p>
                             <textarea
-                              className="w-full border border-gray-300 rounded px-2 py-1 text-xs font-mono h-20 resize-none"
+                              className="tw:w-full tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:text-xs tw:font-mono tw:h-20 tw:resize-none"
                               readOnly
                               value={driveExportedConfig}
                               onClick={(e) => (e.target as HTMLTextAreaElement).select()}
                             />
-                            <p className="text-gray-500">Haz clic en el texto para seleccionar todo, luego copia (Ctrl+C).</p>
+                            <p className="tw:text-gray-500">
+                              Haz clic en el texto para seleccionar todo, luego copia (Ctrl+C).
+                            </p>
                           </div>
                         ) : (
                           <button
-                            className="px-3 py-1.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
+                            className="tw:px-3 tw:py-1.5 tw:bg-blue-600 tw:text-white tw:rounded tw:text-xs tw:hover:bg-blue-700"
                             onClick={driveExportConfig}
                           >
                             📋 Exportar config para el equipo
                           </button>
                         )}
                         <button
-                          className="block text-blue-600 underline text-xs"
-                          onClick={() => { setShowDriveImport(true); setDriveError(''); }}
+                          className="tw:block tw:text-blue-600 tw:underline tw:text-xs"
+                          onClick={() => {
+                            setShowDriveImport(true);
+                            setDriveError('');
+                          }}
                         >
                           ↺ Actualizar config (pegar nueva versión del admin)
                         </button>
@@ -2174,39 +2484,46 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                   </>
                 ) : (
                   <>
-                    <p className="text-gray-600">
-                      Las tareas se guardarán en Google Drive y se sincronizarán automáticamente con todo el equipo.
+                    <p className="tw:text-gray-600">
+                      Las tareas se guardarán en Google Drive y se sincronizarán automáticamente con
+                      todo el equipo.
                     </p>
 
                     {/* Setup for admin */}
                     {!showDriveImport && (
                       <>
-                        {(!driveStatus.hasCredentials || showDriveSetup) ? (
-                          <div className="space-y-2 border border-gray-200 rounded p-2">
-                            <p className="font-medium text-gray-700">Conectar Drive (admin):</p>
+                        {!driveStatus.hasCredentials || showDriveSetup ? (
+                          <div className="tw:space-y-2 tw:border tw:border-gray-200 tw:rounded tw:p-2">
+                            <p className="tw:font-medium tw:text-gray-700">
+                              Conectar Drive (admin):
+                            </p>
                             <div>
-                              <label className="block text-gray-500 mb-0.5">Client ID</label>
+                              <label className="tw:block tw:text-gray-500 tw:mb-0.5">
+                                Client ID
+                              </label>
                               <input
                                 type="text"
-                                className="w-full border border-gray-300 rounded px-2 py-1 text-xs"
+                                className="tw:w-full tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:text-xs"
                                 value={driveClientId}
                                 onChange={(e) => setDriveClientId(e.target.value)}
                                 placeholder="xxxxxx.apps.googleusercontent.com"
                               />
                             </div>
                             <div>
-                              <label className="block text-gray-500 mb-0.5">Client Secret</label>
+                              <label className="tw:block tw:text-gray-500 tw:mb-0.5">
+                                Client Secret
+                              </label>
                               <input
                                 type="password"
-                                className="w-full border border-gray-300 rounded px-2 py-1 text-xs"
+                                className="tw:w-full tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:text-xs"
                                 value={driveClientSecret}
                                 onChange={(e) => setDriveClientSecret(e.target.value)}
                                 placeholder="GOCSPX-…"
                               />
                             </div>
-                            <div className="flex gap-2">
+                            <div className="tw:flex tw:gap-2">
                               <button
-                                className="px-3 py-1.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 disabled:opacity-50"
+                                className="tw:px-3 tw:py-1.5 tw:bg-blue-600 tw:text-white tw:rounded tw:text-xs tw:hover:bg-blue-700 tw:disabled:opacity-50"
                                 onClick={driveConnect}
                                 disabled={driveConnecting}
                               >
@@ -2214,7 +2531,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                               </button>
                               {showDriveSetup && (
                                 <button
-                                  className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300"
+                                  className="tw:px-3 tw:py-1.5 tw:bg-gray-200 tw:text-gray-700 tw:rounded tw:text-xs tw:hover:bg-gray-300"
                                   onClick={() => setShowDriveSetup(false)}
                                 >
                                   Cancelar
@@ -2224,15 +2541,18 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                           </div>
                         ) : (
                           <button
-                            className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300"
+                            className="tw:px-3 tw:py-1.5 tw:bg-gray-200 tw:text-gray-700 tw:rounded tw:text-xs tw:hover:bg-gray-300"
                             onClick={() => setShowDriveSetup(true)}
                           >
                             🔑 Conectar Drive (admin)
                           </button>
                         )}
                         <button
-                          className="block text-blue-600 underline text-xs"
-                          onClick={() => { setShowDriveImport(true); setDriveError(''); }}
+                          className="tw:block tw:text-blue-600 tw:underline tw:text-xs"
+                          onClick={() => {
+                            setShowDriveImport(true);
+                            setDriveError('');
+                          }}
                         >
                           ¿Eres compañero de equipo? Importar configuración del admin →
                         </button>
@@ -2241,24 +2561,30 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
 
                     {/* Import for team members */}
                     {showDriveImport && (
-                      <div className="space-y-2 border border-blue-200 rounded p-2 bg-blue-50">
-                        <p className="font-medium text-blue-800">Importar configuración del admin:</p>
+                      <div className="tw:space-y-2 tw:border tw:border-blue-200 tw:rounded tw:p-2 tw:bg-blue-50">
+                        <p className="tw:font-medium tw:text-blue-800">
+                          Importar configuración del admin:
+                        </p>
                         <textarea
-                          className="w-full border border-gray-300 rounded px-2 py-1 text-xs font-mono h-20 resize-none"
+                          className="tw:w-full tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:text-xs tw:font-mono tw:h-20 tw:resize-none"
                           value={driveImportJson}
                           onChange={(e) => setDriveImportJson(e.target.value)}
-                          placeholder='Pega aquí el JSON que te dio el administrador…'
+                          placeholder="Pega aquí el JSON que te dio el administrador…"
                         />
-                        <div className="flex gap-2">
+                        <div className="tw:flex tw:gap-2">
                           <button
-                            className="px-3 py-1.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
+                            className="tw:px-3 tw:py-1.5 tw:bg-blue-600 tw:text-white tw:rounded tw:text-xs tw:hover:bg-blue-700"
                             onClick={driveImportConfig}
                           >
                             ✓ Importar
                           </button>
                           <button
-                            className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300"
-                            onClick={() => { setShowDriveImport(false); setDriveImportJson(''); setDriveError(''); }}
+                            className="tw:px-3 tw:py-1.5 tw:bg-gray-200 tw:text-gray-700 tw:rounded tw:text-xs tw:hover:bg-gray-300"
+                            onClick={() => {
+                              setShowDriveImport(false);
+                              setDriveImportJson('');
+                              setDriveError('');
+                            }}
                           >
                             Cancelar
                           </button>
@@ -2269,19 +2595,18 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                 )}
 
                 {driveMessage && (
-                  <p className="text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1">
+                  <p className="tw:text-green-700 tw:bg-green-50 tw:border tw:border-green-200 tw:rounded tw:px-2 tw:py-1">
                     {driveMessage}
                   </p>
                 )}
                 {driveError && (
-                  <p className="text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1">
+                  <p className="tw:text-red-700 tw:bg-red-50 tw:border tw:border-red-200 tw:rounded tw:px-2 tw:py-1">
                     {driveError}
                   </p>
                 )}
               </div>
             )}
           </div>
-
         </div>
       ) : (
         /* Calendar tab */

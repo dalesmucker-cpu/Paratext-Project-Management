@@ -34,8 +34,7 @@ const PARATEXT_STUDIO_DIR = `${USER_HOME_DIR}${SEP}.paratext-10-studio`;
 
 // Default projects base path — overridable per-machine via the
 // paratextProjectManager.projectsBasePath setting in Paratext 10 Studio
-const DEFAULT_PROJECTS_BASE =
-  `${PARATEXT_STUDIO_DIR}${SEP}projects${SEP}Paratext 9 Projects`;
+const DEFAULT_PROJECTS_BASE = `${PARATEXT_STUDIO_DIR}${SEP}projects${SEP}Paratext 9 Projects`;
 
 // File-based Google Calendar config (avoids papi.settings schema requirement)
 const GCAL_CONFIG_PATH = `${PARATEXT_STUDIO_DIR}${SEP}pm-gcal-config.json`;
@@ -71,8 +70,13 @@ interface TasksDriveConfig {
 }
 
 const TASKS_DRIVE_DEFAULTS: TasksDriveConfig = {
-  clientId: '', clientSecret: '', accessToken: '', refreshToken: '',
-  expiryDate: 0, fileIds: {}, pendingSyncProjects: [],
+  clientId: '',
+  clientSecret: '',
+  accessToken: '',
+  refreshToken: '',
+  expiryDate: 0,
+  fileIds: {},
+  pendingSyncProjects: [],
 };
 
 // Module-level references set during activate()
@@ -84,9 +88,17 @@ let driveAuthPending = false;
 let driveAuthResult: { success: boolean; error?: string } | null = null;
 
 // GCal auth state — shared between gcalConnect/gcalReconnect and gcalPollAuth
-let gcalAuthState: { status: 'idle' | 'pending' | 'success' | 'error'; email?: string; error?: string } = { status: 'idle' };
+let gcalAuthState: {
+  status: 'idle' | 'pending' | 'success' | 'error';
+  email?: string;
+  error?: string;
+} = { status: 'idle' };
 
-function startGcalAuthInBackground(clientId: string, clientSecret: string, existingRefreshToken?: string): void {
+function startGcalAuthInBackground(
+  clientId: string,
+  clientSecret: string,
+  existingRefreshToken?: string,
+): void {
   gcalAuthState = { status: 'pending' };
   runGcalHelper('full-auth-flow', [clientId, clientSecret], undefined, 6 * 60 * 1000)
     .then(async (result) => {
@@ -101,7 +113,9 @@ function startGcalAuthInBackground(clientId: string, clientSecret: string, exist
         const userInfo = await runGcalHelper('get-userinfo', [tokens.access_token]);
         email = JSON.parse(userInfo).email || '';
         await writeGcalConfig({ userEmail: email, connected: true });
-      } catch (_) { /* non-critical */ }
+      } catch (_) {
+        /* non-critical */
+      }
       logger.info(`Google Calendar: auth completed as ${email}`);
       gcalAuthState = { status: 'success', email };
     })
@@ -156,7 +170,11 @@ function runScript(
 
     if (timeoutMs) {
       setTimeout(() => {
-        try { child.kill(); } catch (_) { /* ignore */ }
+        try {
+          child.kill();
+        } catch (_) {
+          /* ignore */
+        }
         reject(new Error(`Script timed out after ${Math.round(timeoutMs / 1000)}s`));
       }, timeoutMs);
     }
@@ -171,15 +189,26 @@ function runFileHelper(action: string, targetPath: string, stdinData?: string): 
 
 // --- Google Calendar helper via gcal-helper.js ---
 
-function runGcalHelper(action: string, args: string[], stdinData?: string, timeoutMs?: number): Promise<string> {
+function runGcalHelper(
+  action: string,
+  args: string[],
+  stdinData?: string,
+  timeoutMs?: number,
+): Promise<string> {
   return runScript('assets/gcal-helper.js', [action, ...args], stdinData, timeoutMs);
 }
 
 // --- File-based gcal config (avoids papi.settings schema caching issues) ---
 
 const GCAL_DEFAULTS: GcalConfig = {
-  clientId: '', clientSecret: '', accessToken: '', refreshToken: '',
-  expiryDate: 0, userEmail: '', calendarId: 'primary', lastSync: '',
+  clientId: '',
+  clientSecret: '',
+  accessToken: '',
+  refreshToken: '',
+  expiryDate: 0,
+  userEmail: '',
+  calendarId: 'primary',
+  lastSync: '',
 };
 
 async function readGcalConfig(): Promise<GcalConfig> {
@@ -238,10 +267,11 @@ async function writeTasksDriveConfig(updates: Partial<TasksDriveConfig>): Promis
 
 /**
  * Merges two TaskStore JSON strings so that no edits from either computer are lost.
- * - Tasks: per-task ID, keep whichever copy has the newer `updatedAt` timestamp.
- *   Tasks present on only one side are always kept.
- * - stageConfig: local (in-memory) copy wins — admin controls stage configuration.
- * - activityLog: union by entry id, sorted newest-first, capped at 200.
+ *
+ * - Tasks: per-task ID, keep whichever copy has the newer `updatedAt` timestamp. Tasks present on
+ *   only one side are always kept.
+ * - StageConfig: local (in-memory) copy wins — admin controls stage configuration.
+ * - ActivityLog: union by entry id, sorted newest-first, capped at 200.
  */
 function mergeTaskStores(localJson: string, driveJson: string): string {
   type MinimalTask = { id: string; updatedAt: string; [key: string]: unknown };
@@ -317,8 +347,13 @@ async function getValidDriveToken(): Promise<string> {
           15_000,
         );
         const data = JSON.parse(result);
-        await writeTasksDriveConfig({ accessToken: data.access_token, expiryDate: data.expiry_date });
-      })().finally(() => { driveTokenRefreshing = null; });
+        await writeTasksDriveConfig({
+          accessToken: data.access_token,
+          expiryDate: data.expiry_date,
+        });
+      })().finally(() => {
+        driveTokenRefreshing = null;
+      });
     }
     await driveTokenRefreshing;
     return (await readTasksDriveConfig()).accessToken;
@@ -360,7 +395,9 @@ async function getValidAccessToken(): Promise<string> {
         );
         const data = JSON.parse(result);
         await writeGcalConfig({ accessToken: data.access_token, expiryDate: data.expiry_date });
-      })().finally(() => { gcalTokenRefreshing = null; });
+      })().finally(() => {
+        gcalTokenRefreshing = null;
+      });
     }
     await gcalTokenRefreshing;
     return (await readGcalConfig()).accessToken;
@@ -387,7 +424,9 @@ async function resolveProjectDir(projectId: string): Promise<string> {
     if (settingVal && typeof settingVal === 'string' && settingVal.trim()) {
       candidates.push(settingVal.trim());
     }
-  } catch (_) { /* ignore */ }
+  } catch (_) {
+    /* ignore */
+  }
 
   // Classic Paratext 9 location — most common on team machines
   candidates.push(`C:${SEP}My Paratext 9 Projects`);
@@ -452,7 +491,7 @@ async function resolveProjectDir(projectId: string): Promise<string> {
   if (!foundDir) {
     throw new Error(
       `Could not find project directory for projectId: ${projectId}. ` +
-      `Searched: ${searchPaths.join(', ')}`,
+        `Searched: ${searchPaths.join(', ')}`,
     );
   }
 
@@ -464,9 +503,9 @@ async function resolveProjectDir(projectId: string): Promise<string> {
 // --- WebView Providers ---
 
 /**
- * OpenWebViewOptions does NOT include projectId (confirmed in papi.d.ts lines 612-640).
- * We use this registry to pass the selected projectId from open commands into getWebView,
- * which CAN set projectId on the returned WebViewDefinition.
+ * OpenWebViewOptions does NOT include projectId (confirmed in papi.d.ts lines 612-640). We use this
+ * registry to pass the selected projectId from open commands into getWebView, which CAN set
+ * projectId on the returned WebViewDefinition.
  */
 const pendingProjectId: Record<string, string | undefined> = {};
 
@@ -652,7 +691,12 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
           }
 
           if (fileId) {
-            const driveContent = await runGcalHelper('drive-read', [token, fileId], undefined, 15_000);
+            const driveContent = await runGcalHelper(
+              'drive-read',
+              [token, fileId],
+              undefined,
+              15_000,
+            );
             JSON.parse(driveContent); // validate
 
             if (localContent) {
@@ -660,7 +704,11 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
               const merged = mergeTaskStores(localContent, driveContent);
               // Write merged back to local so it stays current
               if (tasksPath) {
-                try { await runFileHelper('write', tasksPath, merged); } catch (_) { /* ignore */ }
+                try {
+                  await runFileHelper('write', tasksPath, merged);
+                } catch (_) {
+                  /* ignore */
+                }
               }
               logger.info(`Project Manager: getTasks merged local+Drive for "${projectId}"`);
               return merged;
@@ -708,7 +756,10 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
           if (existingFileId) {
             try {
               const driveContent = await runGcalHelper(
-                'drive-read', [token, existingFileId], undefined, 15_000,
+                'drive-read',
+                [token, existingFileId],
+                undefined,
+                15_000,
               );
               contentToWrite = mergeTaskStores(tasksJson, driveContent);
               logger.info(`Project Manager: merged local + Drive tasks for "${projectId}"`);
@@ -718,7 +769,10 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
           }
 
           const result = await runGcalHelper(
-            'drive-write', [token, existingFileId, fileName], contentToWrite, 30_000,
+            'drive-write',
+            [token, existingFileId, fileName],
+            contentToWrite,
+            30_000,
           );
           const { fileId: newFileId } = JSON.parse(result) as { fileId: string };
           if (newFileId && newFileId !== existingFileId) {
@@ -735,7 +789,9 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
           const pending = new Set(cfg.pendingSyncProjects ?? []);
           pending.add(projectId);
           await writeTasksDriveConfig({ pendingSyncProjects: Array.from(pending) });
-        } catch (_) { /* ignore — main save already succeeded */ }
+        } catch (_) {
+          /* ignore — main save already succeeded */
+        }
         return 'queued';
       }
 
@@ -770,7 +826,9 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
             const content = await runFileHelper('read', PM_USER_CONFIG_PATH);
             config = JSON.parse(content) as Record<string, unknown>;
           }
-        } catch (_) { /* use empty config */ }
+        } catch (_) {
+          /* use empty config */
+        }
         config.currentUser = userName;
         await runFileHelper('write', PM_USER_CONFIG_PATH, JSON.stringify(config, null, 2));
         logger.info(`Project Manager: currentUser set to "${userName}"`);
@@ -785,7 +843,15 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
   // --- Team member commands ---
 
   const DEFAULT_TEAM_MEMBERS = [
-    'Noel', 'Jhoan', 'Anysa', 'Benjamín', 'Patricio', 'Nilska', 'Dale', 'Betsy', 'Familia',
+    'Noel',
+    'Jhoan',
+    'Anysa',
+    'Benjamín',
+    'Patricio',
+    'Nilska',
+    'Dale',
+    'Betsy',
+    'Familia',
   ];
 
   const getTeamMembersPromise = papi.commands.registerCommand(
@@ -799,7 +865,9 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
           if (Array.isArray(config.teamMembers) && config.teamMembers.length > 0)
             return JSON.stringify(config.teamMembers);
         }
-      } catch (_) { /* fall through */ }
+      } catch (_) {
+        /* fall through */
+      }
       return JSON.stringify(DEFAULT_TEAM_MEMBERS);
     },
   );
@@ -817,10 +885,14 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
             const content = await runFileHelper('read', PM_USER_CONFIG_PATH);
             config = JSON.parse(content) as Record<string, unknown>;
           }
-        } catch (_) { /* start fresh */ }
+        } catch (_) {
+          /* start fresh */
+        }
         config.teamMembers = members;
         await runFileHelper('write', PM_USER_CONFIG_PATH, JSON.stringify(config, null, 2));
-        logger.info(`Project Manager: team members updated (${(members as string[]).length} members)`);
+        logger.info(
+          `Project Manager: team members updated (${(members as string[]).length} members)`,
+        );
         return 'ok';
       } catch (e) {
         logger.warn(`setTeamMembers failed: ${e}`);
@@ -847,15 +919,21 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
           hasCredentials: !!(config.clientId && config.clientSecret), // enables one-click reconnect
         });
       } catch (_) {
-        return JSON.stringify({ connected: false, email: '', calendarId: 'primary', lastSync: '', clientId: '', hasCredentials: false });
+        return JSON.stringify({
+          connected: false,
+          email: '',
+          calendarId: 'primary',
+          lastSync: '',
+          clientId: '',
+          hasCredentials: false,
+        });
       }
     },
   );
 
   /**
-   * Starts the OAuth flow: opens browser, waits for callback, exchanges code.
-   * Stores everything in pm-gcal-config.json (no papi.settings).
-   * Returns JSON { success, email?, error? }
+   * Starts the OAuth flow: opens browser, waits for callback, exchanges code. Stores everything in
+   * pm-gcal-config.json (no papi.settings). Returns JSON { success, email?, error? }
    */
   const gcalConnectPromise = papi.commands.registerCommand(
     'paratextProjectManager.gcalConnect',
@@ -870,16 +948,20 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
   );
 
   /**
-   * Re-runs the OAuth flow using credentials already stored in pm-gcal-config.json.
-   * No arguments needed — the user just clicks "Reconectar" without retyping credentials.
-   * Returns JSON { success, email?, error? }
+   * Re-runs the OAuth flow using credentials already stored in pm-gcal-config.json. No arguments
+   * needed — the user just clicks "Reconectar" without retyping credentials. Returns JSON {
+   * success, email?, error? }
    */
   const gcalReconnectPromise = papi.commands.registerCommand(
     'paratextProjectManager.gcalReconnect',
     async (): Promise<string> => {
       const config = await readGcalConfig();
       if (!config.clientId || !config.clientSecret)
-        return JSON.stringify({ success: false, error: 'No hay credenciales guardadas. Usa "Conectar" para ingresar el Client ID y Secret.' });
+        return JSON.stringify({
+          success: false,
+          error:
+            'No hay credenciales guardadas. Usa "Conectar" para ingresar el Client ID y Secret.',
+        });
       startGcalAuthInBackground(config.clientId, config.clientSecret, config.refreshToken);
       return JSON.stringify({ status: 'started' });
     },
@@ -897,8 +979,11 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     async (): Promise<string> => {
       try {
         await writeGcalConfig({
-          accessToken: '', refreshToken: '', expiryDate: 0,
-          userEmail: '', lastSync: '',
+          accessToken: '',
+          refreshToken: '',
+          expiryDate: 0,
+          userEmail: '',
+          lastSync: '',
         });
         logger.info('Google Calendar: disconnected');
         return 'ok';
@@ -936,23 +1021,27 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     },
   );
 
-  /**
-   * Syncs tasks with deadlines to Google Calendar.
-   * Returns JSON { synced, total, errors }
-   */
+  /** Syncs tasks with deadlines to Google Calendar. Returns JSON { synced, total, errors } */
   const gcalSyncDeadlinesPromise = papi.commands.registerCommand(
     'paratextProjectManager.gcalSyncDeadlines',
     async (projectId: string): Promise<string> => {
       try {
         const accessToken = await getValidAccessToken();
         if (!accessToken) {
-          return JSON.stringify({ synced: 0, total: 0, errors: ['No conectado a Google Calendar'] });
+          return JSON.stringify({
+            synced: 0,
+            total: 0,
+            errors: ['No conectado a Google Calendar'],
+          });
         }
 
         const config = await readGcalConfig();
 
         // Load tasks
-        const tasksRaw = await papi.commands.sendCommand('paratextProjectManager.getTasks', projectId) as string;
+        const tasksRaw = (await papi.commands.sendCommand(
+          'paratextProjectManager.getTasks',
+          projectId,
+        )) as string;
         const store = JSON.parse(tasksRaw);
         const tasks = store.tasks || [];
 
@@ -971,8 +1060,8 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
   );
 
   /**
-   * Fetches Google Calendar events for a date range.
-   * Returns JSON array of { id, summary, start, end, description, allDay }
+   * Fetches Google Calendar events for a date range. Returns JSON array of { id, summary, start,
+   * end, description, allDay }
    */
   const gcalGetEventsPromise = papi.commands.registerCommand(
     'paratextProjectManager.gcalGetEvents',
@@ -993,14 +1082,22 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     },
   );
 
-  /** Deletes a single event from Google Calendar by event ID. Returns JSON { status: 'ok' | 'error', error? } */
+  /**
+   * Deletes a single event from Google Calendar by event ID. Returns JSON { status: 'ok' | 'error',
+   * error? }
+   */
   const gcalDeleteEventPromise = papi.commands.registerCommand(
     'paratextProjectManager.gcalDeleteEvent',
     async (calendarId: string, eventId: string): Promise<string> => {
       try {
         const accessToken = await getValidAccessToken();
         if (!accessToken) return JSON.stringify({ status: 'error', error: 'No autenticado' });
-        await runGcalHelper('delete-event', [accessToken, calendarId || 'primary', eventId], undefined, 10_000);
+        await runGcalHelper(
+          'delete-event',
+          [accessToken, calendarId || 'primary', eventId],
+          undefined,
+          10_000,
+        );
         return JSON.stringify({ status: 'ok' });
       } catch (e) {
         logger.warn(`gcalDeleteEvent failed: ${e}`);
@@ -1010,8 +1107,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
   );
 
   /**
-   * Syncs a single time entry to Google Calendar.
-   * If offline / no token: queues in pendingTimeSync.
+   * Syncs a single time entry to Google Calendar. If offline / no token: queues in pendingTimeSync.
    * Returns JSON { status: 'ok' | 'queued' }
    */
   const gcalSyncTimeEntryPromise = papi.commands.registerCommand(
@@ -1053,8 +1149,8 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
   );
 
   /**
-   * Flushes all queued (offline) time entries to Google Calendar.
-   * Returns JSON { synced: number, remaining: number }
+   * Flushes all queued (offline) time entries to Google Calendar. Returns JSON { synced: number,
+   * remaining: number }
    */
   const gcalFlushPendingTimePromise = papi.commands.registerCommand(
     'paratextProjectManager.gcalFlushPendingTime',
@@ -1087,8 +1183,8 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
   );
 
   /**
-   * Writes content to the user's Downloads folder and opens it.
-   * Returns JSON { success, path?, error? }
+   * Writes content to the user's Downloads folder and opens it. Returns JSON { success, path?,
+   * error? }
    */
   const saveToDownloadsPromise = papi.commands.registerCommand(
     'paratextProjectManager.saveToDownloads',
@@ -1099,7 +1195,11 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         const filePath = `${USER_DOWNLOADS_DIR}${SEP}${filename}`;
         await runFileHelper('write', filePath, content);
         // Open with default application
-        try { await runFileHelper('open', filePath); } catch (_) { /* non-critical */ }
+        try {
+          await runFileHelper('open', filePath);
+        } catch (_) {
+          /* non-critical */
+        }
         logger.info(`Saved export to ${filePath}`);
         return JSON.stringify({ success: true, path: filePath });
       } catch (e) {
@@ -1112,9 +1212,9 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
   // --- Drive task sync commands ---
 
   /**
-   * Starts the Drive OAuth flow in the background and returns immediately.
-   * The frontend polls tasksDrivePollAuth to learn when it completes.
-   * This avoids papi's short JSON-RPC timeout killing the long-lived browser auth wait.
+   * Starts the Drive OAuth flow in the background and returns immediately. The frontend polls
+   * tasksDrivePollAuth to learn when it completes. This avoids papi's short JSON-RPC timeout
+   * killing the long-lived browser auth wait.
    */
   const tasksDriveStartAuthPromise = papi.commands.registerCommand(
     'paratextProjectManager.tasksDriveStartAuth',
@@ -1152,8 +1252,8 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
   );
 
   /**
-   * Returns the current Drive auth state for frontend polling.
-   * status: 'pending' | 'success' | 'error' | 'idle'
+   * Returns the current Drive auth state for frontend polling. status: 'pending' | 'success' |
+   * 'error' | 'idle'
    */
   const tasksDrivePollAuthPromise = papi.commands.registerCommand(
     'paratextProjectManager.tasksDrivePollAuth',
@@ -1185,7 +1285,12 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
           fileCount: Object.keys(config.fileIds).length,
         });
       } catch (_) {
-        return JSON.stringify({ connected: false, hasCredentials: false, clientId: '', fileCount: 0 });
+        return JSON.stringify({
+          connected: false,
+          hasCredentials: false,
+          clientId: '',
+          fileCount: 0,
+        });
       }
     },
   );
@@ -1196,7 +1301,8 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     async (): Promise<string> => {
       try {
         const exists = await runFileHelper('exists', PM_TASKS_CONFIG_PATH);
-        if (exists.trim() !== 'true') return JSON.stringify({ success: false, error: 'Drive no configurado' });
+        if (exists.trim() !== 'true')
+          return JSON.stringify({ success: false, error: 'Drive no configurado' });
         const content = await runFileHelper('read', PM_TASKS_CONFIG_PATH);
         return JSON.stringify({ success: true, config: content });
       } catch (e) {
@@ -1206,8 +1312,8 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
   );
 
   /**
-   * Lets a team member import the admin's pm-tasks-config.json by pasting the JSON.
-   * Writes the config file directly — no OAuth flow needed on team machines.
+   * Lets a team member import the admin's pm-tasks-config.json by pasting the JSON. Writes the
+   * config file directly — no OAuth flow needed on team machines.
    */
   const tasksDriveImportConfigPromise = papi.commands.registerCommand(
     'paratextProjectManager.tasksDriveImportConfig',
@@ -1215,7 +1321,10 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
       try {
         const config = JSON.parse(configJson) as Partial<TasksDriveConfig>;
         if (!config.clientId || !config.refreshToken) {
-          return JSON.stringify({ success: false, error: 'Configuración inválida: faltan clientId o refreshToken' });
+          return JSON.stringify({
+            success: false,
+            error: 'Configuración inválida: faltan clientId o refreshToken',
+          });
         }
         await runFileHelper('write', PM_TASKS_CONFIG_PATH, configJson);
         logger.info('Drive task config imported successfully');
@@ -1227,8 +1336,8 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
   );
 
   /**
-   * Force-syncs a specific project's local task file to Drive and returns detailed result.
-   * Reads local tasks, writes to Drive, saves the fileId. Exposes the full error if it fails.
+   * Force-syncs a specific project's local task file to Drive and returns detailed result. Reads
+   * local tasks, writes to Drive, saves the fileId. Exposes the full error if it fails.
    */
   const tasksDriveForceSyncProjectPromise = papi.commands.registerCommand(
     'paratextProjectManager.tasksDriveForceSyncProject',
@@ -1237,7 +1346,11 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         // Step 1 — get token
         const token = await getValidDriveToken();
         if (!token) {
-          return JSON.stringify({ success: false, step: 'token', error: 'No se pudo obtener un token de Drive válido' });
+          return JSON.stringify({
+            success: false,
+            step: 'token',
+            error: 'No se pudo obtener un token de Drive válido',
+          });
         }
 
         // Step 2 — read local task file (or use empty store if missing)
@@ -1259,7 +1372,10 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         const safeName = projectId.replace(/[^a-zA-Z0-9-]/g, '_');
         const fileName = `paratext-tasks-${safeName}.json`;
         const result = await runGcalHelper(
-          'drive-write', [token, existingFileId, fileName], tasksJson, 30_000,
+          'drive-write',
+          [token, existingFileId, fileName],
+          tasksJson,
+          30_000,
         );
         const { fileId: newFileId } = JSON.parse(result) as { fileId: string };
 
@@ -1278,8 +1394,8 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
   );
 
   /**
-   * Tries a real Drive write with a tiny test payload and returns the full result or error.
-   * Used by the UI "Probar Drive" button so the user can see exactly what's failing.
+   * Tries a real Drive write with a tiny test payload and returns the full result or error. Used by
+   * the UI "Probar Drive" button so the user can see exactly what's failing.
    */
   const tasksDriveTestPromise = papi.commands.registerCommand(
     'paratextProjectManager.tasksDriveTest',
@@ -1298,7 +1414,10 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         }
         const testContent = JSON.stringify({ paratextPmTest: true, ts: Date.now() });
         const result = await runGcalHelper(
-          'drive-write', [token, '', 'paratext-pm-connection-test.json'], testContent, 20_000,
+          'drive-write',
+          [token, '', 'paratext-pm-connection-test.json'],
+          testContent,
+          20_000,
         );
         const { fileId } = JSON.parse(result) as { fileId: string };
         return JSON.stringify({ success: true, fileId });
@@ -1340,12 +1459,24 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         let contentToWrite = localJson;
         if (existingFileId) {
           try {
-            const driveContent = await runGcalHelper('drive-read', [token, existingFileId], undefined, 15_000);
+            const driveContent = await runGcalHelper(
+              'drive-read',
+              [token, existingFileId],
+              undefined,
+              15_000,
+            );
             contentToWrite = mergeTaskStores(localJson, driveContent);
-          } catch (_) { /* use local-only if Drive read fails */ }
+          } catch (_) {
+            /* use local-only if Drive read fails */
+          }
         }
 
-        const result = await runGcalHelper('drive-write', [token, existingFileId, fileName], contentToWrite, 30_000);
+        const result = await runGcalHelper(
+          'drive-write',
+          [token, existingFileId, fileName],
+          contentToWrite,
+          30_000,
+        );
         const { fileId: newFileId } = JSON.parse(result) as { fileId: string };
         if (newFileId && newFileId !== existingFileId) {
           await writeTasksDriveConfig({ fileIds: { ...freshCfg.fileIds, [pid]: newFileId } });
@@ -1362,7 +1493,11 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
 
   // Background retry loop: attempts to flush queued changes to Drive every 3 minutes
   const driveSyncRetryInterval = setInterval(
-    () => { flushPendingSyncToDrive().catch(() => { /* ignore */ }); },
+    () => {
+      flushPendingSyncToDrive().catch(() => {
+        /* ignore */
+      });
+    },
     3 * 60 * 1000,
   );
   context.registrations.add({ dispose: () => clearInterval(driveSyncRetryInterval) });

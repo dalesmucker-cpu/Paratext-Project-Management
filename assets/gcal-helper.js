@@ -1,30 +1,23 @@
 /**
- * gcal-helper.js — Google Calendar OAuth 2.0 + API helper (pure Node.js, no external deps)
+ * Gcal-helper.js — Google Calendar OAuth 2.0 + API helper (pure Node.js, no external deps)
  *
  * Invoked via createProcess.fork() from the extension backend.
  *
- * Actions:
- *   full-auth-flow <clientId> <clientSecret> [port]
- *     Opens browser for OAuth (PKCE), waits for callback on localhost:{port},
- *     exchanges code for tokens.
- *     stdout: JSON { access_token, refresh_token, expiry_date }
+ * Actions: full-auth-flow <clientId> <clientSecret> [port] Opens browser for OAuth (PKCE), waits
+ * for callback on localhost:{port}, exchanges code for tokens. stdout: JSON { access_token,
+ * refresh_token, expiry_date }
  *
- *   refresh <clientId> <clientSecret> <refreshToken>
- *     Refreshes an expired access token.
- *     stdout: JSON { access_token, expiry_date }
+ * Refresh <clientId> <clientSecret> <refreshToken> Refreshes an expired access token. stdout: JSON
+ * { access_token, expiry_date }
  *
- *   list-calendars <accessToken>
- *     Lists all calendars accessible to the user.
- *     stdout: JSON array of { id, summary, primary }
+ * List-calendars <accessToken> Lists all calendars accessible to the user. stdout: JSON array of {
+ * id, summary, primary }
  *
- *   sync-deadlines
- *     stdin: JSON { accessToken, calendarId, tasks: ProjectTask[] }
- *     Creates or updates events for tasks that have a deadline and aren't complete.
- *     stdout: JSON { synced, total, errors: string[] }
+ * Sync-deadlines stdin: JSON { accessToken, calendarId, tasks: ProjectTask[] } Creates or updates
+ * events for tasks that have a deadline and aren't complete. stdout: JSON { synced, total, errors:
+ * string[] }
  *
- *   get-userinfo <accessToken>
- *     Returns the user's email address.
- *     stdout: JSON { email }
+ * Get-userinfo <accessToken> Returns the user's email address. stdout: JSON { email }
  */
 
 'use strict';
@@ -54,7 +47,9 @@ function httpsRequest(options, body) {
   return new Promise((resolve, reject) => {
     const req = https.request(options, (res) => {
       let data = '';
-      res.on('data', (chunk) => { data += chunk; });
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
       res.on('end', () => resolve({ status: res.statusCode, body: data }));
     });
     req.on('error', reject);
@@ -65,15 +60,18 @@ function httpsRequest(options, body) {
 
 function httpsPost(hostname, path, params) {
   const body = new URLSearchParams(params).toString();
-  return httpsRequest({
-    hostname,
-    path,
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Content-Length': Buffer.byteLength(body),
+  return httpsRequest(
+    {
+      hostname,
+      path,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Length': Buffer.byteLength(body),
+      },
     },
-  }, body);
+    body,
+  );
 }
 
 function httpsGetJson(url, accessToken) {
@@ -83,7 +81,7 @@ function httpsGetJson(url, accessToken) {
     path: parsed.path,
     method: 'GET',
     headers: {
-      'Authorization': `Bearer ${accessToken}`,
+      Authorization: `Bearer ${accessToken}`,
     },
   });
 }
@@ -91,44 +89,53 @@ function httpsGetJson(url, accessToken) {
 function httpsPutJson(url, accessToken, bodyObj) {
   const body = JSON.stringify(bodyObj);
   const parsed = urlModule.parse(url);
-  return httpsRequest({
-    hostname: parsed.hostname,
-    path: parsed.path,
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      'Content-Length': Buffer.byteLength(body),
-      'Authorization': `Bearer ${accessToken}`,
+  return httpsRequest(
+    {
+      hostname: parsed.hostname,
+      path: parsed.path,
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+        Authorization: `Bearer ${accessToken}`,
+      },
     },
-  }, body);
+    body,
+  );
 }
 
 function httpsPostJson(url, accessToken, bodyObj) {
   const body = JSON.stringify(bodyObj);
   const parsed = urlModule.parse(url);
-  return httpsRequest({
-    hostname: parsed.hostname,
-    path: parsed.path,
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Content-Length': Buffer.byteLength(body),
-      'Authorization': `Bearer ${accessToken}`,
+  return httpsRequest(
+    {
+      hostname: parsed.hostname,
+      path: parsed.path,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+        Authorization: `Bearer ${accessToken}`,
+      },
     },
-  }, body);
+    body,
+  );
 }
 
 function httpsDeleteJson(url, accessToken) {
   const parsed = urlModule.parse(url);
-  return httpsRequest({
-    hostname: parsed.hostname,
-    path: parsed.path,
-    method: 'DELETE',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Length': 0,
+  return httpsRequest(
+    {
+      hostname: parsed.hostname,
+      path: parsed.path,
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Length': 0,
+      },
     },
-  }, '');
+    '',
+  );
 }
 
 // ---- Open browser (Windows) ----
@@ -159,14 +166,19 @@ async function driveAuthFlow(clientId, clientSecret, port) {
   const codeChallenge = generateCodeChallenge(codeVerifier);
   const scopes = 'https://www.googleapis.com/auth/drive.file';
 
-  const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth' +
-    '?client_id=' + encodeURIComponent(clientId) +
-    '&redirect_uri=' + encodeURIComponent(redirectUri) +
+  const authUrl =
+    'https://accounts.google.com/o/oauth2/v2/auth' +
+    '?client_id=' +
+    encodeURIComponent(clientId) +
+    '&redirect_uri=' +
+    encodeURIComponent(redirectUri) +
     '&response_type=code' +
-    '&scope=' + encodeURIComponent(scopes) +
+    '&scope=' +
+    encodeURIComponent(scopes) +
     '&access_type=offline' +
     '&prompt=consent' +
-    '&code_challenge=' + encodeURIComponent(codeChallenge) +
+    '&code_challenge=' +
+    encodeURIComponent(codeChallenge) +
     '&code_challenge_method=S256';
 
   process.stderr.write(`Drive auth URL: ${authUrl}\n`);
@@ -189,13 +201,15 @@ async function driveAuthFlow(clientId, clientSecret, port) {
 
         if (authCode) {
           res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-          res.end('<!DOCTYPE html><html><head><meta charset="utf-8">'
-            + '<style>body{font-family:sans-serif;padding:40px;text-align:center;color:#333}</style>'
-            + '</head><body>'
-            + '<h2 style="color:#1a73e8">\u2713 Autorizaci\u00f3n completada</h2>'
-            + '<p>Puedes cerrar esta pesta\u00f1a y regresar a Paratext 10.</p>'
-            + '<script>setTimeout(function(){window.close()},3000)<\/script>'
-            + '</body></html>');
+          res.end(
+            '<!DOCTYPE html><html><head><meta charset="utf-8">' +
+              '<style>body{font-family:sans-serif;padding:40px;text-align:center;color:#333}</style>' +
+              '</head><body>' +
+              '<h2 style="color:#1a73e8">\u2713 Autorizaci\u00f3n completada</h2>' +
+              '<p>Puedes cerrar esta pesta\u00f1a y regresar a Paratext 10.</p>' +
+              '<script>setTimeout(function(){window.close()},3000)<\/script>' +
+              '</body></html>',
+          );
           server.close();
           resolve(authCode);
         } else {
@@ -222,10 +236,13 @@ async function driveAuthFlow(clientId, clientSecret, port) {
         openBrowser(finalUrl);
       });
 
-      setTimeout(() => {
-        server.close();
-        reject(new Error('Tiempo de espera agotado (5 min). Reintenta la conexi\u00f3n.'));
-      }, 5 * 60 * 1000);
+      setTimeout(
+        () => {
+          server.close();
+          reject(new Error('Tiempo de espera agotado (5 min). Reintenta la conexi\u00f3n.'));
+        },
+        5 * 60 * 1000,
+      );
     }
 
     tryListen(port);
@@ -245,16 +262,21 @@ async function driveAuthFlow(clientId, clientSecret, port) {
     throw new Error(`Token exchange failed: ${tokens.error_description || tokens.error}`);
   }
 
-  process.stdout.write(JSON.stringify({
-    access_token: tokens.access_token,
-    refresh_token: tokens.refresh_token || '',
-    expiry_date: Date.now() + ((tokens.expires_in || 3600) * 1000),
-  }));
+  process.stdout.write(
+    JSON.stringify({
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token || '',
+      expiry_date: Date.now() + (tokens.expires_in || 3600) * 1000,
+    }),
+  );
 }
 
 async function driveSearch(accessToken, fileName) {
   const q = "name='" + fileName.replace(/'/g, "\\'") + "' and trashed=false";
-  const url = 'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) + '&fields=files(id,name)&pageSize=1';
+  const url =
+    'https://www.googleapis.com/drive/v3/files?q=' +
+    encodeURIComponent(q) +
+    '&fields=files(id,name)&pageSize=1';
   const res = await httpsGetJson(url, accessToken);
   const data = JSON.parse(res.body);
   if (data.error) throw new Error('Drive search: ' + data.error.message);
@@ -269,7 +291,9 @@ async function driveRead(accessToken, fileId) {
   );
   if (res.status < 200 || res.status >= 300) {
     let errMsg = res.body;
-    try { errMsg = JSON.parse(res.body).error.message || res.body; } catch (_) {}
+    try {
+      errMsg = JSON.parse(res.body).error.message || res.body;
+    } catch (_) {}
     throw new Error(`Drive read failed (${res.status}): ${errMsg}`);
   }
   process.stdout.write(res.body);
@@ -278,16 +302,19 @@ async function driveRead(accessToken, fileId) {
 async function driveWrite(accessToken, fileId, fileName, content) {
   if (fileId && fileId.trim() !== '') {
     // Update existing file — media-only upload
-    const res = await httpsRequest({
-      hostname: 'www.googleapis.com',
-      path: `/upload/drive/v3/files/${encodeURIComponent(fileId.trim())}?uploadType=media`,
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json; charset=UTF-8',
-        'Content-Length': Buffer.byteLength(content, 'utf8'),
-        'Authorization': `Bearer ${accessToken}`,
+    const res = await httpsRequest(
+      {
+        hostname: 'www.googleapis.com',
+        path: `/upload/drive/v3/files/${encodeURIComponent(fileId.trim())}?uploadType=media`,
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json; charset=UTF-8',
+          'Content-Length': Buffer.byteLength(content, 'utf8'),
+          Authorization: `Bearer ${accessToken}`,
+        },
       },
-    }, content);
+      content,
+    );
     const data = JSON.parse(res.body);
     if (data.error) throw new Error(`Drive update: ${data.error.message}`);
     process.stdout.write(JSON.stringify({ fileId: data.id }));
@@ -300,16 +327,19 @@ async function driveWrite(accessToken, fileId, fileName, content) {
       `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${content}\r\n`,
       `--${boundary}--`,
     ].join('');
-    const res = await httpsRequest({
-      hostname: 'www.googleapis.com',
-      path: '/upload/drive/v3/files?uploadType=multipart',
-      method: 'POST',
-      headers: {
-        'Content-Type': `multipart/related; boundary=${boundary}`,
-        'Content-Length': Buffer.byteLength(parts, 'utf8'),
-        'Authorization': `Bearer ${accessToken}`,
+    const res = await httpsRequest(
+      {
+        hostname: 'www.googleapis.com',
+        path: '/upload/drive/v3/files?uploadType=multipart',
+        method: 'POST',
+        headers: {
+          'Content-Type': `multipart/related; boundary=${boundary}`,
+          'Content-Length': Buffer.byteLength(parts, 'utf8'),
+          Authorization: `Bearer ${accessToken}`,
+        },
       },
-    }, parts);
+      parts,
+    );
     const data = JSON.parse(res.body);
     if (data.error) throw new Error(`Drive create: ${data.error.message}`);
     process.stdout.write(JSON.stringify({ fileId: data.id }));
@@ -332,14 +362,19 @@ async function fullAuthFlow(clientId, clientSecret, port) {
 
   // Build URL manually with encodeURIComponent (produces %20 for spaces).
   // URLSearchParams uses + for spaces (form encoding) which Google rejects.
-  const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth' +
-    '?client_id=' + encodeURIComponent(clientId) +
-    '&redirect_uri=' + encodeURIComponent(redirectUri) +
+  const authUrl =
+    'https://accounts.google.com/o/oauth2/v2/auth' +
+    '?client_id=' +
+    encodeURIComponent(clientId) +
+    '&redirect_uri=' +
+    encodeURIComponent(redirectUri) +
     '&response_type=code' +
-    '&scope=' + encodeURIComponent(scopes) +
+    '&scope=' +
+    encodeURIComponent(scopes) +
     '&access_type=offline' +
     '&prompt=consent' +
-    '&code_challenge=' + encodeURIComponent(codeChallenge) +
+    '&code_challenge=' +
+    encodeURIComponent(codeChallenge) +
     '&code_challenge_method=S256';
 
   // Log the URL to stderr so it can be seen in extension logs for debugging
@@ -366,19 +401,23 @@ async function fullAuthFlow(clientId, clientSecret, port) {
 
         if (authCode) {
           res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-          res.end('<!DOCTYPE html><html><head><meta charset="utf-8">'
-            + '<style>body{font-family:sans-serif;padding:40px;text-align:center;color:#333}</style>'
-            + '</head><body>'
-            + '<h2 style="color:#1a73e8">\u2713 Autorizaci\u00f3n completada</h2>'
-            + '<p>Puedes cerrar esta pesta\u00f1a y regresar a Paratext 10.</p>'
-            + '<script>setTimeout(function(){window.close()},3000)<\/script>'
-            + '</body></html>');
+          res.end(
+            '<!DOCTYPE html><html><head><meta charset="utf-8">' +
+              '<style>body{font-family:sans-serif;padding:40px;text-align:center;color:#333}</style>' +
+              '</head><body>' +
+              '<h2 style="color:#1a73e8">\u2713 Autorizaci\u00f3n completada</h2>' +
+              '<p>Puedes cerrar esta pesta\u00f1a y regresar a Paratext 10.</p>' +
+              '<script>setTimeout(function(){window.close()},3000)<\/script>' +
+              '</body></html>',
+          );
           server.close();
           resolve(authCode);
         } else {
           const errStr = typeof authError === 'string' ? authError : JSON.stringify(authError);
           res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
-          res.end(`<!DOCTYPE html><html><body><h2>Error: ${errStr || 'sin c\u00f3digo de autorizaci\u00f3n'}</h2></body></html>`);
+          res.end(
+            `<!DOCTYPE html><html><body><h2>Error: ${errStr || 'sin c\u00f3digo de autorizaci\u00f3n'}</h2></body></html>`,
+          );
           server.close();
           reject(new Error(`OAuth denied: ${errStr || 'unknown'}`));
         }
@@ -402,10 +441,13 @@ async function fullAuthFlow(clientId, clientSecret, port) {
       });
 
       // Timeout: 5 minutes
-      setTimeout(() => {
-        server.close();
-        reject(new Error('Tiempo de espera agotado (5 min). Reintenta la conexión.'));
-      }, 5 * 60 * 1000);
+      setTimeout(
+        () => {
+          server.close();
+          reject(new Error('Tiempo de espera agotado (5 min). Reintenta la conexión.'));
+        },
+        5 * 60 * 1000,
+      );
     }
 
     tryListen(port);
@@ -426,11 +468,13 @@ async function fullAuthFlow(clientId, clientSecret, port) {
     throw new Error(`Token exchange failed: ${tokens.error_description || tokens.error}`);
   }
 
-  process.stdout.write(JSON.stringify({
-    access_token: tokens.access_token,
-    refresh_token: tokens.refresh_token || '',
-    expiry_date: Date.now() + ((tokens.expires_in || 3600) * 1000),
-  }));
+  process.stdout.write(
+    JSON.stringify({
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token || '',
+      expiry_date: Date.now() + (tokens.expires_in || 3600) * 1000,
+    }),
+  );
 }
 
 async function refreshAccessToken(clientId, clientSecret, refreshToken) {
@@ -446,10 +490,12 @@ async function refreshAccessToken(clientId, clientSecret, refreshToken) {
     throw new Error(`Refresh failed: ${tokens.error_description || tokens.error}`);
   }
 
-  process.stdout.write(JSON.stringify({
-    access_token: tokens.access_token,
-    expiry_date: Date.now() + ((tokens.expires_in || 3600) * 1000),
-  }));
+  process.stdout.write(
+    JSON.stringify({
+      access_token: tokens.access_token,
+      expiry_date: Date.now() + (tokens.expires_in || 3600) * 1000,
+    }),
+  );
 }
 
 async function listCalendars(accessToken) {
@@ -472,9 +518,12 @@ async function listCalendars(accessToken) {
 
 async function listEvents(accessToken, calendarId, timeMin, timeMax) {
   const calId = encodeURIComponent(calendarId || 'primary');
-  const params = 'timeMin=' + encodeURIComponent(timeMin)
-    + '&timeMax=' + encodeURIComponent(timeMax)
-    + '&singleEvents=true&orderBy=startTime&maxResults=250';
+  const params =
+    'timeMin=' +
+    encodeURIComponent(timeMin) +
+    '&timeMax=' +
+    encodeURIComponent(timeMax) +
+    '&singleEvents=true&orderBy=startTime&maxResults=250';
   const url = 'https://www.googleapis.com/calendar/v3/calendars/' + calId + '/events?' + params;
   const res = await httpsGetJson(url, accessToken);
   const data = JSON.parse(res.body);
@@ -483,7 +532,7 @@ async function listEvents(accessToken, calendarId, timeMin, timeMax) {
     id: ev.id,
     summary: ev.summary || '(Sin título)',
     start: ev.start.dateTime || ev.start.date || '',
-    end:   ev.end.dateTime   || ev.end.date   || '',
+    end: ev.end.dateTime || ev.end.date || '',
     description: ev.description || '',
     allDay: Boolean(ev.start.date && !ev.start.dateTime),
   }));
@@ -495,8 +544,12 @@ async function logTimeEvent(accessToken, calendarId, timeEntryJson, taskLabel) {
   const calId = encodeURIComponent(calendarId || 'primary');
 
   // Search for existing event with this time entry ID
-  const searchParams = 'privateExtendedProperty=' + encodeURIComponent('pmTimeEntryId=' + entry.id) + '&singleEvents=true';
-  const searchUrl = 'https://www.googleapis.com/calendar/v3/calendars/' + calId + '/events?' + searchParams;
+  const searchParams =
+    'privateExtendedProperty=' +
+    encodeURIComponent('pmTimeEntryId=' + entry.id) +
+    '&singleEvents=true';
+  const searchUrl =
+    'https://www.googleapis.com/calendar/v3/calendars/' + calId + '/events?' + searchParams;
   const searchRes = await httpsGetJson(searchUrl, accessToken);
   const searchData = JSON.parse(searchRes.body);
   if (searchData.error) throw new Error('Search time events: ' + searchData.error.message);
@@ -511,7 +564,8 @@ async function logTimeEvent(accessToken, calendarId, timeEntryJson, taskLabel) {
   };
 
   if (existing) {
-    const updateUrl = 'https://www.googleapis.com/calendar/v3/calendars/' + calId + '/events/' + existing.id;
+    const updateUrl =
+      'https://www.googleapis.com/calendar/v3/calendars/' + calId + '/events/' + existing.id;
     const res = await httpsPutJson(updateUrl, accessToken, eventBody);
     const data = JSON.parse(res.body);
     if (data.error) throw new Error('Update time event: ' + data.error.message);
@@ -526,22 +580,27 @@ async function logTimeEvent(accessToken, calendarId, timeEntryJson, taskLabel) {
 
 async function deleteEvent(accessToken, calendarId, eventId) {
   const calId = encodeURIComponent(calendarId || 'primary');
-  const url = 'https://www.googleapis.com/calendar/v3/calendars/' + calId + '/events/' + encodeURIComponent(eventId);
+  const url =
+    'https://www.googleapis.com/calendar/v3/calendars/' +
+    calId +
+    '/events/' +
+    encodeURIComponent(eventId);
   const res = await httpsDeleteJson(url, accessToken);
   // 204 No Content = success; anything else is an error
   if (res.statusCode && res.statusCode !== 204 && res.body) {
     let msg = res.body;
-    try { msg = JSON.parse(res.body).error?.message || res.body; } catch (_) { /* keep raw */ }
+    try {
+      msg = JSON.parse(res.body).error?.message || res.body;
+    } catch (_) {
+      /* keep raw */
+    }
     throw new Error('Delete event: ' + msg);
   }
   process.stdout.write(JSON.stringify({ status: 'ok' }));
 }
 
 async function getUserInfo(accessToken) {
-  const res = await httpsGetJson(
-    'https://www.googleapis.com/oauth2/v2/userinfo',
-    accessToken,
-  );
+  const res = await httpsGetJson('https://www.googleapis.com/oauth2/v2/userinfo', accessToken);
 
   const data = JSON.parse(res.body);
   if (data.error) throw new Error(`Get userinfo: ${data.error.message}`);
@@ -554,9 +613,7 @@ async function syncDeadlines(input) {
   const calId = encodeURIComponent(calendarId || 'primary');
 
   // Only sync tasks that have a deadline and aren't complete
-  const tasksWithDeadlines = (tasks || []).filter(
-    (t) => t.deadline && t.status !== 'complete',
-  );
+  const tasksWithDeadlines = (tasks || []).filter((t) => t.deadline && t.status !== 'complete');
 
   let synced = 0;
   const errors = [];
@@ -629,11 +686,13 @@ async function syncDeadlines(input) {
     }
   }
 
-  process.stdout.write(JSON.stringify({
-    synced,
-    total: tasksWithDeadlines.length,
-    errors,
-  }));
+  process.stdout.write(
+    JSON.stringify({
+      synced,
+      total: tasksWithDeadlines.length,
+      errors,
+    }),
+  );
 }
 
 // ---- Main ----
@@ -655,7 +714,9 @@ async function syncDeadlines(input) {
     } else if (action === 'sync-deadlines') {
       let stdinData = '';
       process.stdin.setEncoding('utf8');
-      process.stdin.on('data', (chunk) => { stdinData += chunk; });
+      process.stdin.on('data', (chunk) => {
+        stdinData += chunk;
+      });
       await new Promise((resolve) => process.stdin.on('end', resolve));
       process.stdin.resume();
       await syncDeadlines(JSON.parse(stdinData));
@@ -670,7 +731,9 @@ async function syncDeadlines(input) {
     } else if (action === 'drive-write') {
       let stdinData = '';
       process.stdin.setEncoding('utf8');
-      process.stdin.on('data', (chunk) => { stdinData += chunk; });
+      process.stdin.on('data', (chunk) => {
+        stdinData += chunk;
+      });
       await new Promise((resolve) => process.stdin.on('end', resolve));
       await driveWrite(args[0], args[1], args[2], stdinData);
     } else {

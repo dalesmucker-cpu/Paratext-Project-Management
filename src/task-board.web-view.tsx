@@ -2,7 +2,15 @@ import { WebViewProps } from '@papi/core';
 import papi from '@papi/frontend';
 import { useDialogCallback } from '@papi/frontend/react';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import type { ProjectTask, TranslationStage, TaskStatus, StageConfig, TaskStore, StageAssignee, ActivityLogEntry } from './types/task.types';
+import type {
+  ProjectTask,
+  TranslationStage,
+  TaskStatus,
+  StageConfig,
+  TaskStore,
+  StageAssignee,
+  ActivityLogEntry,
+} from './types/task.types';
 import {
   STAGES,
   TEAM_MEMBERS,
@@ -72,54 +80,58 @@ function EditTaskModal({
 
   return (
     <div
-      className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50"
+      className="tw:fixed tw:inset-0 tw:bg-black tw:bg-opacity-40 tw:flex tw:items-center tw:justify-center tw:z-50"
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-lg shadow-xl p-5 w-96 max-h-[90vh] overflow-y-auto"
+        className="tw:bg-white tw:rounded-lg tw:shadow-xl tw:p-5 tw:w-96 tw:max-h-[90vh] tw:overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="text-base font-semibold mb-3">Editar Tarea</h3>
-        <div className="space-y-3 text-sm">
+        <h3 className="tw:text-base tw:font-semibold tw:mb-3">Editar Tarea</h3>
+        <div className="tw:space-y-3 tw:text-sm">
           <div>
-            <label className="block font-medium mb-1">Libro</label>
+            <label className="tw:block tw:font-medium tw:mb-1">Libro</label>
             <select
-              className="w-full border rounded px-2 py-1"
+              className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1"
               value={book}
               onChange={(e) => setBook(e.target.value)}
             >
               {BIBLE_BOOKS.map((b) => (
-                <option key={b} value={b}>{b}</option>
+                <option key={b} value={b}>
+                  {b}
+                </option>
               ))}
             </select>
           </div>
           <div>
-            <label className="block font-medium mb-1">Capítulo</label>
+            <label className="tw:block tw:font-medium tw:mb-1">Capítulo</label>
             <input
               type="number"
               min={1}
-              className="w-full border rounded px-2 py-1"
+              className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1"
               value={chapter}
               onChange={(e) => setChapter(Math.max(1, parseInt(e.target.value) || 1))}
             />
           </div>
           <div>
-            <label className="block font-medium mb-1">Etapa</label>
+            <label className="tw:block tw:font-medium tw:mb-1">Etapa</label>
             <select
-              className="w-full border rounded px-2 py-1"
+              className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1"
               value={stage}
               onChange={(e) => setStage(e.target.value)}
             >
               {orderedStages.map((s) => (
-                <option key={s} value={s}>{getStageLabel(s, stageConfig)}</option>
+                <option key={s} value={s}>
+                  {getStageLabel(s, stageConfig)}
+                </option>
               ))}
             </select>
           </div>
           <div>
-            <label className="block font-medium mb-1">Asignar a</label>
-            <div className="flex flex-wrap gap-x-3 gap-y-1">
+            <label className="tw:block tw:font-medium tw:mb-1">Asignar a</label>
+            <div className="tw:flex tw:flex-wrap tw:gap-x-3 tw:gap-y-1">
               {teamMembers.map((m) => (
-                <label key={m} className="flex items-center gap-1 cursor-pointer">
+                <label key={m} className="tw:flex tw:items-center tw:gap-1 tw:cursor-pointer">
                   <input
                     type="checkbox"
                     checked={assignees.includes(m)}
@@ -131,43 +143,43 @@ function EditTaskModal({
             </div>
           </div>
           <div>
-            <label className="block font-medium mb-1">Notas</label>
+            <label className="tw:block tw:font-medium tw:mb-1">Notas</label>
             <textarea
-              className="w-full border rounded px-2 py-1"
+              className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1"
               rows={3}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
             />
           </div>
           <div>
-            <label className="block font-medium mb-1">Fecha Límite</label>
+            <label className="tw:block tw:font-medium tw:mb-1">Fecha Límite</label>
             <input
               type="date"
-              className="w-full border rounded px-2 py-1"
+              className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1"
               value={deadline}
               onChange={(e) => setDeadline(e.target.value)}
             />
           </div>
-          <div className="flex gap-3">
-            <div className="flex-1">
-              <label className="block font-medium mb-1">Horas Estimadas</label>
+          <div className="tw:flex tw:gap-3">
+            <div className="tw:flex-1">
+              <label className="tw:block tw:font-medium tw:mb-1">Horas Estimadas</label>
               <input
                 type="number"
                 min={0}
                 step={0.5}
-                className="w-full border rounded px-2 py-1"
+                className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1"
                 value={estimatedHours}
                 placeholder="0"
                 onChange={(e) => setEstimatedHours(e.target.value)}
               />
             </div>
-            <div className="flex-1">
-              <label className="block font-medium mb-1">Horas Registradas</label>
+            <div className="tw:flex-1">
+              <label className="tw:block tw:font-medium tw:mb-1">Horas Registradas</label>
               <input
                 type="number"
                 min={0}
                 step={0.5}
-                className="w-full border rounded px-2 py-1"
+                className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1"
                 value={loggedHours}
                 placeholder="0"
                 onChange={(e) => setLoggedHours(e.target.value)}
@@ -175,15 +187,15 @@ function EditTaskModal({
             </div>
           </div>
         </div>
-        <div className="flex gap-2 mt-4 justify-end">
+        <div className="tw:flex tw:gap-2 tw:mt-4 tw:justify-end">
           <button
-            className="px-3 py-1.5 border rounded text-sm hover:bg-gray-50"
+            className="tw:px-3 tw:py-1.5 tw:border tw:rounded tw:text-sm tw:hover:bg-gray-50"
             onClick={onClose}
           >
             Cancelar
           </button>
           <button
-            className="px-3 py-1.5 bg-slate-600 text-white rounded text-sm hover:bg-slate-700"
+            className="tw:px-3 tw:py-1.5 tw:bg-slate-600 tw:text-white tw:rounded tw:text-sm tw:hover:bg-slate-700"
             onClick={handleSave}
           >
             Guardar
@@ -209,19 +221,17 @@ function StageConfigPanel({
   onUpdateConfig: (updated: Record<string, StageConfig>) => void;
   onClose: () => void;
 }) {
-  const [localConfig, setLocalConfig] = useState<Record<string, StageConfig>>(
-    () => {
-      const init: Record<string, StageConfig> = {};
-      orderedStages.forEach((stage, idx) => {
-        init[stage] = {
-          ...stageConfig[stage],                     // preserve all existing fields
-          label: getStageLabel(stage, stageConfig),  // display label
-          order: stageConfig[stage]?.order ?? idx,   // stored order or fallback
-        };
-      });
-      return init;
-    },
-  );
+  const [localConfig, setLocalConfig] = useState<Record<string, StageConfig>>(() => {
+    const init: Record<string, StageConfig> = {};
+    orderedStages.forEach((stage, idx) => {
+      init[stage] = {
+        ...stageConfig[stage], // preserve all existing fields
+        label: getStageLabel(stage, stageConfig), // display label
+        order: stageConfig[stage]?.order ?? idx, // stored order or fallback
+      };
+    });
+    return init;
+  });
   const [newStageLabel, setNewStageLabel] = useState('');
 
   // All stages sorted by their explicit order value
@@ -278,7 +288,10 @@ function StageConfigPanel({
     setLocalConfig((prev) => {
       const existing = prev[stage]?.assignees ?? [];
       if (existing.some((sa) => sa.person === person)) return prev;
-      return { ...prev, [stage]: { ...prev[stage], assignees: [...existing, { person, books: [] }] } };
+      return {
+        ...prev,
+        [stage]: { ...prev[stage], assignees: [...existing, { person, books: [] }] },
+      };
     });
   };
 
@@ -318,27 +331,27 @@ function StageConfigPanel({
   };
 
   return (
-    <div className="bg-slate-50 border-b border-slate-200 px-3 py-2 text-sm">
-      <div className="flex justify-between items-center mb-2">
-        <span className="font-semibold text-slate-700 text-xs">Configurar Etapas</span>
-        <button className="text-xs text-gray-500 hover:text-gray-700" onClick={onClose}>
+    <div className="tw:bg-slate-50 tw:border-b tw:border-slate-200 tw:px-3 tw:py-2 tw:text-sm">
+      <div className="tw:flex tw:justify-between tw:items-center tw:mb-2">
+        <span className="tw:font-semibold tw:text-slate-700 tw:text-xs">Configurar Etapas</span>
+        <button className="tw:text-xs tw:text-gray-500 tw:hover:text-gray-700" onClick={onClose}>
           ✕
         </button>
       </div>
-      <div className="space-y-2 max-h-96 overflow-y-auto">
+      <div className="tw:space-y-2 tw:max-h-96 tw:overflow-y-auto">
         {localOrdered.map((stage, idx) => (
-          <div key={stage} className="space-y-0.5">
-            <div className="flex items-center gap-2">
-              <div className="flex flex-col gap-0.5">
+          <div key={stage} className="tw:space-y-0.5">
+            <div className="tw:flex tw:items-center tw:gap-2">
+              <div className="tw:flex tw:flex-col tw:gap-0.5">
                 <button
-                  className="text-xs leading-none px-1 py-0.5 bg-white border rounded hover:bg-gray-50 disabled:opacity-30"
+                  className="tw:text-xs tw:leading-none tw:px-1 tw:py-0.5 tw:bg-white tw:border tw:rounded tw:hover:bg-gray-50 tw:disabled:opacity-30"
                   disabled={idx === 0}
                   onClick={() => moveStage(stage, 'up')}
                 >
                   ▲
                 </button>
                 <button
-                  className="text-xs leading-none px-1 py-0.5 bg-white border rounded hover:bg-gray-50 disabled:opacity-30"
+                  className="tw:text-xs tw:leading-none tw:px-1 tw:py-0.5 tw:bg-white tw:border tw:rounded tw:hover:bg-gray-50 tw:disabled:opacity-30"
                   disabled={idx === localOrdered.length - 1}
                   onClick={() => moveStage(stage, 'down')}
                 >
@@ -346,17 +359,17 @@ function StageConfigPanel({
                 </button>
               </div>
               <input
-                className="flex-1 border rounded px-2 py-0.5 text-xs"
+                className="tw:flex-1 tw:border tw:rounded tw:px-2 tw:py-0.5 tw:text-xs"
                 value={localConfig[stage]?.label ?? getStageLabel(stage)}
                 onChange={(e) => updateLabel(stage, e.target.value)}
               />
               {STAGES.includes(stage as TranslationStage) ? (
-                <span className="text-xs text-gray-400 w-28 truncate" title={stage}>
+                <span className="tw:text-xs tw:text-gray-400 tw:w-28 tw:truncate" title={stage}>
                   {stage}
                 </span>
               ) : (
                 <button
-                  className="text-red-400 hover:text-red-600 px-1 text-sm flex-shrink-0"
+                  className="tw:text-red-400 tw:hover:text-red-600 tw:px-1 tw:text-sm tw:flex-shrink-0"
                   title="Eliminar etapa"
                   onClick={() => deleteStage(stage)}
                 >
@@ -365,30 +378,40 @@ function StageConfigPanel({
               )}
             </div>
             {/* Person-centric assignees */}
-            <div className="pl-7 mt-1 space-y-1">
+            <div className="tw:pl-7 tw:mt-1 tw:space-y-1">
               {(localConfig[stage]?.assignees ?? []).map((sa: StageAssignee) => (
-                <div key={sa.person} className="border border-gray-200 rounded p-1.5 bg-white space-y-0.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-gray-700">{sa.person}</span>
+                <div
+                  key={sa.person}
+                  className="tw:border tw:border-gray-200 tw:rounded tw:p-1.5 tw:bg-white tw:space-y-0.5"
+                >
+                  <div className="tw:flex tw:items-center tw:justify-between">
+                    <span className="tw:text-xs tw:font-semibold tw:text-gray-700">
+                      {sa.person}
+                    </span>
                     <button
                       type="button"
                       onClick={() => removeAssignee(stage, sa.person)}
-                      className="text-xs text-red-400 hover:text-red-600 leading-none"
+                      className="tw:text-xs tw:text-red-400 tw:hover:text-red-600 tw:leading-none"
                     >
                       × quitar
                     </button>
                   </div>
-                  <div className="flex flex-wrap gap-1 items-center">
+                  <div className="tw:flex tw:flex-wrap tw:gap-1 tw:items-center">
                     {sa.books.length === 0 && (
-                      <span className="text-xs text-gray-400 italic">todos los libros</span>
+                      <span className="tw:text-xs tw:text-gray-400 tw:italic">
+                        todos los libros
+                      </span>
                     )}
                     {sa.books.map((b) => (
-                      <span key={b} className="text-xs bg-slate-100 text-slate-700 px-1 rounded flex items-center gap-0.5">
+                      <span
+                        key={b}
+                        className="tw:text-xs tw:bg-slate-100 tw:text-slate-700 tw:px-1 tw:rounded tw:flex tw:items-center tw:gap-0.5"
+                      >
                         {b}
                         <button
                           type="button"
                           onClick={() => removeAssigneeBook(stage, sa.person, b)}
-                          className="text-slate-500 hover:text-red-500 leading-none ml-0.5"
+                          className="tw:text-slate-500 tw:hover:text-red-500 tw:leading-none tw:ml-0.5"
                         >
                           ×
                         </button>
@@ -397,11 +420,13 @@ function StageConfigPanel({
                     <select
                       value=""
                       onChange={(e) => addAssigneeBook(stage, sa.person, e.target.value)}
-                      className="text-xs border rounded px-1 py-0 leading-tight"
+                      className="tw:text-xs tw:border tw:rounded tw:px-1 tw:py-0 tw:leading-tight"
                     >
                       <option value="">+ libro</option>
                       {BIBLE_BOOKS.filter((b) => !sa.books.includes(b)).map((b) => (
-                        <option key={b} value={b}>{b}</option>
+                        <option key={b} value={b}>
+                          {b}
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -411,45 +436,49 @@ function StageConfigPanel({
               <select
                 value=""
                 onChange={(e) => addAssignee(stage, e.target.value)}
-                className="text-xs border rounded px-1 py-0.5 leading-tight"
+                className="tw:text-xs tw:border tw:rounded tw:px-1 tw:py-0.5 tw:leading-tight"
               >
                 <option value="">+ Agregar persona</option>
-                {teamMembers.filter(
-                  (m) => !(localConfig[stage]?.assignees ?? []).some((sa) => sa.person === m),
-                ).map((m) => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
+                {teamMembers
+                  .filter(
+                    (m) => !(localConfig[stage]?.assignees ?? []).some((sa) => sa.person === m),
+                  )
+                  .map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
               </select>
             </div>
           </div>
         ))}
       </div>
       {/* Add new custom stage */}
-      <div className="flex gap-2 mt-3 pt-3 border-t border-blue-200">
+      <div className="tw:flex tw:gap-2 tw:mt-3 tw:pt-3 tw:border-t tw:border-blue-200">
         <input
           type="text"
           placeholder="Nombre de nueva etapa..."
           value={newStageLabel}
           onChange={(e) => setNewStageLabel(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && addStage()}
-          className="flex-1 px-2 py-1 text-xs border border-gray-300 rounded"
+          className="tw:flex-1 tw:px-2 tw:py-1 tw:text-xs tw:border tw:border-gray-300 tw:rounded"
         />
         <button
           onClick={addStage}
-          className="px-3 py-1 text-xs bg-slate-500 text-white rounded hover:bg-slate-600 flex-shrink-0"
+          className="tw:px-3 tw:py-1 tw:text-xs tw:bg-slate-500 tw:text-white tw:rounded tw:hover:bg-slate-600 tw:flex-shrink-0"
         >
           + Agregar
         </button>
       </div>
-      <div className="flex gap-2 mt-2 justify-end">
+      <div className="tw:flex tw:gap-2 tw:mt-2 tw:justify-end">
         <button
-          className="px-2 py-1 text-xs border rounded hover:bg-gray-50"
+          className="tw:px-2 tw:py-1 tw:text-xs tw:border tw:rounded tw:hover:bg-gray-50"
           onClick={onClose}
         >
           Cancelar
         </button>
         <button
-          className="px-2 py-1 text-xs bg-slate-600 text-white rounded hover:bg-slate-700"
+          className="tw:px-2 tw:py-1 tw:text-xs tw:bg-slate-600 tw:text-white tw:rounded tw:hover:bg-slate-700"
           onClick={() => {
             onUpdateConfig(localConfig);
             onClose();
@@ -472,40 +501,34 @@ const ACTION_ICONS: Record<ActivityLogEntry['action'], string> = {
   edited: '✎',
 };
 
-function ActivityLogPanel({
-  log,
-  onClose,
-}: {
-  log: ActivityLogEntry[];
-  onClose: () => void;
-}) {
+function ActivityLogPanel({ log, onClose }: { log: ActivityLogEntry[]; onClose: () => void }) {
   return (
-    <div className="bg-slate-50 border-b border-slate-200 px-3 py-2 text-xs">
-      <div className="flex justify-between items-center mb-2">
-        <span className="font-semibold text-slate-700">Registro de Actividad</span>
-        <button className="text-gray-500 hover:text-gray-700" onClick={onClose}>
+    <div className="tw:bg-slate-50 tw:border-b tw:border-slate-200 tw:px-3 tw:py-2 tw:text-xs">
+      <div className="tw:flex tw:justify-between tw:items-center tw:mb-2">
+        <span className="tw:font-semibold tw:text-slate-700">Registro de Actividad</span>
+        <button className="tw:text-gray-500 tw:hover:text-gray-700" onClick={onClose}>
           ✕
         </button>
       </div>
-      <div className="max-h-52 overflow-y-auto space-y-1">
+      <div className="tw:max-h-52 tw:overflow-y-auto tw:space-y-1">
         {log.length === 0 ? (
-          <p className="text-gray-400 italic">Sin actividad registrada todavía.</p>
+          <p className="tw:text-gray-400 tw:italic">Sin actividad registrada todavía.</p>
         ) : (
           [...log].reverse().map((entry) => {
             const d = new Date(entry.timestamp);
             const dateStr = d.toLocaleDateString('es', { month: 'short', day: 'numeric' });
             const timeStr = d.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
             return (
-              <div key={entry.id} className="flex gap-2 text-gray-600 leading-relaxed">
-                <span className="text-gray-400 flex-shrink-0 w-24 text-right tabular-nums">
+              <div key={entry.id} className="tw:flex tw:gap-2 tw:text-gray-600 tw:leading-relaxed">
+                <span className="tw:text-gray-400 tw:flex-shrink-0 tw:w-24 tw:text-right tw:tabular-nums">
                   {dateStr} {timeStr}
                 </span>
-                <span className="text-gray-400 flex-shrink-0">{ACTION_ICONS[entry.action]}</span>
+                <span className="tw:text-gray-400 tw:flex-shrink-0">
+                  {ACTION_ICONS[entry.action]}
+                </span>
                 <span>
-                  <span className="font-medium text-gray-700">{entry.taskLabel}</span>
-                  {entry.detail && (
-                    <span className="text-gray-500"> — {entry.detail}</span>
-                  )}
+                  <span className="tw:font-medium tw:text-gray-700">{entry.taskLabel}</span>
+                  {entry.detail && <span className="tw:text-gray-500"> — {entry.detail}</span>}
                 </span>
               </div>
             );
@@ -544,15 +567,13 @@ function TaskCard({
   const statuses: TaskStatus[] = ['pending', 'in-progress', 'complete', 'flagged'];
   const dlClass = deadlineColorClass(task.deadline);
   const isOverdue =
-    !!task.deadline &&
-    task.status !== 'complete' &&
-    new Date(task.deadline).getTime() < Date.now();
+    !!task.deadline && task.status !== 'complete' && new Date(task.deadline).getTime() < Date.now();
 
   return (
     <div
-      className={`rounded shadow-sm p-2 text-xs hover:shadow transition-all ${
-        isDragging ? 'opacity-40 cursor-grabbing' : 'cursor-grab'
-      } ${isOverdue ? 'bg-red-50 border-l-2 border-red-400' : 'bg-white'}`}
+      className={`tw:rounded tw:shadow-sm tw:p-2 tw:text-xs tw:hover:shadow tw:transition-all ${
+        isDragging ? 'tw:opacity-40 tw:cursor-grabbing' : 'tw:cursor-grab'
+      } ${isOverdue ? 'tw:bg-red-50 tw:border-l-2 tw:border-red-400' : 'tw:bg-white'}`}
       draggable
       onDragStart={(e) => {
         e.dataTransfer.setData('taskId', task.id);
@@ -562,40 +583,47 @@ function TaskCard({
       onDragEnd={onDragEnd}
       onClick={() => setExpanded(!expanded)}
     >
-      <div className="flex justify-between items-start gap-1">
-        <span className="font-semibold">
+      <div className="tw:flex tw:justify-between tw:items-start tw:gap-1">
+        <span className="tw:font-semibold">
           {task.book} {task.chapter}
         </span>
-        <span className={`px-1.5 py-0.5 rounded-full whitespace-nowrap ${STATUS_COLORS[task.status]}`}>
+        <span
+          className={`tw:px-1.5 tw:py-0.5 tw:rounded-full tw:whitespace-nowrap ${STATUS_COLORS[task.status]}`}
+        >
           {STATUS_LABELS[task.status]}
         </span>
       </div>
       {(task.assignedTo ?? []).length > 0 && (
-        <div className="text-gray-500 mt-0.5 truncate">{(task.assignedTo ?? []).join(', ')}</div>
+        <div className="tw:text-gray-500 tw:mt-0.5 tw:truncate">
+          {(task.assignedTo ?? []).join(', ')}
+        </div>
       )}
       {task.deadline && (
-        <div className={`mt-0.5 ${dlClass}`}>
+        <div className={`tw:mt-0.5 ${dlClass}`}>
           ⏰ {new Date(task.deadline).toLocaleDateString('es')}
         </div>
       )}
       {(task.estimatedHours !== undefined || task.loggedHours !== undefined) && (
-        <div className="text-gray-400 mt-0.5">
+        <div className="tw:text-gray-400 tw:mt-0.5">
           {task.loggedHours ?? 0}h / {task.estimatedHours ?? '?'}h
         </div>
       )}
       {expanded && (
-        <div className="mt-2 pt-2 border-t border-gray-100" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="tw:mt-2 tw:pt-2 tw:border-t tw:border-gray-100"
+          onClick={(e) => e.stopPropagation()}
+        >
           {task.notes && (
-            <p className="text-gray-600 mb-2 whitespace-pre-wrap">{task.notes}</p>
+            <p className="tw:text-gray-600 tw:mb-2 tw:whitespace-pre-wrap">{task.notes}</p>
           )}
-          <div className="flex flex-wrap gap-1 mb-2">
+          <div className="tw:flex tw:flex-wrap tw:gap-1 tw:mb-2">
             {statuses.map((s) => (
               <button
                 key={s}
-                className={`px-1.5 py-0.5 rounded border text-xs ${
+                className={`tw:px-1.5 tw:py-0.5 tw:rounded tw:border tw:text-xs ${
                   task.status === s
-                    ? `${STATUS_COLORS[s]} border-transparent font-semibold`
-                    : 'bg-white border-gray-200 hover:bg-gray-50'
+                    ? `${STATUS_COLORS[s]} tw:border-transparent tw:font-semibold`
+                    : 'tw:bg-white tw:border-gray-200 tw:hover:bg-gray-50'
                 }`}
                 onClick={() => onStatusChange(task.id, s)}
               >
@@ -603,24 +631,24 @@ function TaskCard({
               </button>
             ))}
           </div>
-          <div className="flex gap-1">
+          <div className="tw:flex tw:gap-1">
             <button
-              className="px-1.5 py-0.5 rounded bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100 text-xs"
+              className="tw:px-1.5 tw:py-0.5 tw:rounded tw:bg-slate-50 tw:text-slate-600 tw:border tw:border-slate-200 tw:hover:bg-slate-100 tw:text-xs"
               onClick={() => onEdit(task)}
             >
               Editar
             </button>
             {confirmDelete ? (
-              <div className="flex items-center gap-1 ml-auto">
-                <span className="text-xs text-red-600">¿Borrar?</span>
+              <div className="tw:flex tw:items-center tw:gap-1 tw:ml-auto">
+                <span className="tw:text-xs tw:text-red-600">¿Borrar?</span>
                 <button
-                  className="px-1.5 py-0.5 rounded bg-red-600 text-white text-xs hover:bg-red-700"
+                  className="tw:px-1.5 tw:py-0.5 tw:rounded tw:bg-red-600 tw:text-white tw:text-xs tw:hover:bg-red-700"
                   onClick={() => onDelete(task.id)}
                 >
                   Sí
                 </button>
                 <button
-                  className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200 text-xs hover:bg-gray-200"
+                  className="tw:px-1.5 tw:py-0.5 tw:rounded tw:bg-gray-100 tw:text-gray-600 tw:border tw:border-gray-200 tw:text-xs tw:hover:bg-gray-200"
                   onClick={() => setConfirmDelete(false)}
                 >
                   No
@@ -628,7 +656,7 @@ function TaskCard({
               </div>
             ) : (
               <button
-                className="px-1.5 py-0.5 rounded bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 ml-auto text-xs"
+                className="tw:px-1.5 tw:py-0.5 tw:rounded tw:bg-red-50 tw:text-red-600 tw:border tw:border-red-200 tw:hover:bg-red-100 tw:ml-auto tw:text-xs"
                 onClick={() => setConfirmDelete(true)}
               >
                 Borrar
@@ -654,7 +682,10 @@ function NewTaskModal({
   stageConfig: Record<string, StageConfig>;
   teamMembers: string[];
   onClose: () => void;
-  onAdd: (tasks: Omit<ProjectTask, 'id' | 'createdAt' | 'updatedAt' | 'status'>[], status: TaskStatus) => void;
+  onAdd: (
+    tasks: Omit<ProjectTask, 'id' | 'createdAt' | 'updatedAt' | 'status'>[],
+    status: TaskStatus,
+  ) => void;
 }) {
   const [book, setBook] = useState<string>('GEN');
   const [chapterFrom, setChapterFrom] = useState(1);
@@ -706,19 +737,19 @@ function NewTaskModal({
 
   return (
     <div
-      className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50"
+      className="tw:fixed tw:inset-0 tw:bg-black tw:bg-opacity-40 tw:flex tw:items-center tw:justify-center tw:z-50"
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-lg shadow-xl p-5 w-80 max-h-[90vh] overflow-y-auto"
+        className="tw:bg-white tw:rounded-lg tw:shadow-xl tw:p-5 tw:w-80 tw:max-h-[90vh] tw:overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="text-base font-semibold mb-3">Nueva Tarea</h3>
-        <div className="space-y-3 text-sm">
+        <h3 className="tw:text-base tw:font-semibold tw:mb-3">Nueva Tarea</h3>
+        <div className="tw:space-y-3 tw:text-sm">
           <div>
-            <label className="block font-medium mb-1">Libro</label>
+            <label className="tw:block tw:font-medium tw:mb-1">Libro</label>
             <select
-              className="w-full border rounded px-2 py-1"
+              className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1"
               value={book}
               onChange={(e) => setBook(e.target.value)}
             >
@@ -730,12 +761,12 @@ function NewTaskModal({
             </select>
           </div>
           <div>
-            <label className="block font-medium mb-1">Capítulo(s)</label>
-            <div className="flex items-center gap-2">
+            <label className="tw:block tw:font-medium tw:mb-1">Capítulo(s)</label>
+            <div className="tw:flex tw:items-center tw:gap-2">
               <input
                 type="number"
                 min={1}
-                className="w-full border rounded px-2 py-1"
+                className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1"
                 value={chapterFrom}
                 onChange={(e) => {
                   const v = Math.max(1, parseInt(e.target.value) || 1);
@@ -743,11 +774,11 @@ function NewTaskModal({
                   if (chapterTo < v) setChapterTo(v);
                 }}
               />
-              <span className="text-gray-500 flex-shrink-0 text-xs">al</span>
+              <span className="tw:text-gray-500 tw:flex-shrink-0 tw:text-xs">al</span>
               <input
                 type="number"
                 min={chapterFrom}
-                className="w-full border rounded px-2 py-1"
+                className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1"
                 value={chapterTo}
                 onChange={(e) =>
                   setChapterTo(Math.max(chapterFrom, parseInt(e.target.value) || chapterFrom))
@@ -755,15 +786,15 @@ function NewTaskModal({
               />
             </div>
             {count > 1 && (
-              <p className="text-xs text-slate-500 mt-1">
+              <p className="tw:text-xs tw:text-slate-500 tw:mt-1">
                 Se crearán {count} tareas (caps. {chapterFrom}–{chapterTo})
               </p>
             )}
           </div>
           <div>
-            <label className="block font-medium mb-1">Etapa</label>
+            <label className="tw:block tw:font-medium tw:mb-1">Etapa</label>
             <select
-              className="w-full border rounded px-2 py-1"
+              className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1"
               value={stage}
               onChange={(e) => setStage(e.target.value)}
             >
@@ -775,10 +806,10 @@ function NewTaskModal({
             </select>
           </div>
           <div>
-            <label className="block font-medium mb-1">Asignar a</label>
-            <div className="flex flex-wrap gap-x-3 gap-y-1">
+            <label className="tw:block tw:font-medium tw:mb-1">Asignar a</label>
+            <div className="tw:flex tw:flex-wrap tw:gap-x-3 tw:gap-y-1">
               {teamMembers.map((m) => (
-                <label key={m} className="flex items-center gap-1 cursor-pointer">
+                <label key={m} className="tw:flex tw:items-center tw:gap-1 tw:cursor-pointer">
                   <input
                     type="checkbox"
                     checked={assignees.includes(m)}
@@ -790,32 +821,32 @@ function NewTaskModal({
             </div>
           </div>
           <div>
-            <label className="block font-medium mb-1">Notas</label>
+            <label className="tw:block tw:font-medium tw:mb-1">Notas</label>
             <textarea
-              className="w-full border rounded px-2 py-1"
+              className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1"
               rows={2}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Instrucciones o contexto opcional..."
             />
           </div>
-          <div className="flex gap-3">
-            <div className="flex-1">
-              <label className="block font-medium mb-1">Fecha Límite</label>
+          <div className="tw:flex tw:gap-3">
+            <div className="tw:flex-1">
+              <label className="tw:block tw:font-medium tw:mb-1">Fecha Límite</label>
               <input
                 type="date"
-                className="w-full border rounded px-2 py-1"
+                className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1"
                 value={deadline}
                 onChange={(e) => setDeadline(e.target.value)}
               />
             </div>
-            <div className="flex-1">
-              <label className="block font-medium mb-1">Horas Estimadas</label>
+            <div className="tw:flex-1">
+              <label className="tw:block tw:font-medium tw:mb-1">Horas Estimadas</label>
               <input
                 type="number"
                 min={0}
                 step={0.5}
-                className="w-full border rounded px-2 py-1"
+                className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1"
                 value={estimatedHours}
                 placeholder="0"
                 onChange={(e) => setEstimatedHours(e.target.value)}
@@ -823,17 +854,20 @@ function NewTaskModal({
             </div>
           </div>
           <div>
-            <label className="block font-medium mb-1">Estado inicial</label>
-            <div className="flex gap-2 flex-wrap">
+            <label className="tw:block tw:font-medium tw:mb-1">Estado inicial</label>
+            <div className="tw:flex tw:gap-2 tw:flex-wrap">
               {(['pending', 'in-progress', 'flagged'] as TaskStatus[]).map((s) => (
-                <label key={s} className="flex items-center gap-1 cursor-pointer text-xs">
+                <label
+                  key={s}
+                  className="tw:flex tw:items-center tw:gap-1 tw:cursor-pointer tw:text-xs"
+                >
                   <input
                     type="radio"
                     name="initialStatus"
                     checked={initialStatus === s}
                     onChange={() => setInitialStatus(s)}
                   />
-                  <span className={`px-1.5 py-0.5 rounded-full ${STATUS_COLORS[s]}`}>
+                  <span className={`tw:px-1.5 tw:py-0.5 tw:rounded-full ${STATUS_COLORS[s]}`}>
                     {STATUS_LABELS[s]}
                   </span>
                 </label>
@@ -841,15 +875,15 @@ function NewTaskModal({
             </div>
           </div>
         </div>
-        <div className="flex gap-2 mt-4 justify-end">
+        <div className="tw:flex tw:gap-2 tw:mt-4 tw:justify-end">
           <button
-            className="px-3 py-1.5 border rounded text-sm hover:bg-gray-50"
+            className="tw:px-3 tw:py-1.5 tw:border tw:rounded tw:text-sm tw:hover:bg-gray-50"
             onClick={onClose}
           >
             Cancelar
           </button>
           <button
-            className="px-3 py-1.5 bg-slate-600 text-white rounded text-sm hover:bg-slate-700"
+            className="tw:px-3 tw:py-1.5 tw:bg-slate-600 tw:text-white tw:rounded tw:text-sm tw:hover:bg-slate-700"
             onClick={handleCreate}
           >
             {count > 1 ? `Crear ${count} Tareas` : 'Crear Tarea'}
@@ -916,7 +950,7 @@ globalThis.webViewComponent = function TaskBoardWebView({
       const store = JSON.parse(result) as TaskStore;
       const knownDeleted = store.deletedTaskIds ?? [];
       setDeletedTaskIds(knownDeleted);
-      setTasks((store.tasks ?? []).filter(t => !knownDeleted.includes(t.id)));
+      setTasks((store.tasks ?? []).filter((t) => !knownDeleted.includes(t.id)));
       setStageConfig(store.stageConfig ?? {});
       setActivityLog(store.activityLog ?? []);
       if (membersResult) setTeamMembers(JSON.parse(membersResult as string) as string[]);
@@ -933,7 +967,9 @@ globalThis.webViewComponent = function TaskBoardWebView({
 
   // Background auto-refresh — silently picks up changes saved by other computers
   const savingRef = useRef(false);
-  useEffect(() => { savingRef.current = saving; }, [saving]);
+  useEffect(() => {
+    savingRef.current = saving;
+  }, [saving]);
 
   /** Silently merges Drive data into local state without showing a loading spinner. */
   const lastRefreshRef = useRef(0);
@@ -948,14 +984,17 @@ globalThis.webViewComponent = function TaskBoardWebView({
       lastRefreshRef.current = Date.now();
       const incomingDeleted = new Set(store.deletedTaskIds ?? []);
       // Merge tombstones: add any newly deleted IDs from Drive
-      setDeletedTaskIds(prev => {
+      setDeletedTaskIds((prev) => {
         const merged = new Set([...prev, ...incomingDeleted]);
         return merged.size !== prev.length ? Array.from(merged) : prev;
       });
-      setTasks(prev => {
-        const merged = new Map(prev.map(t => [t.id, t]));
+      setTasks((prev) => {
+        const merged = new Map(prev.map((t) => [t.id, t]));
         for (const t of store.tasks ?? []) {
-          if (incomingDeleted.has(t.id)) { merged.delete(t.id); continue; }
+          if (incomingDeleted.has(t.id)) {
+            merged.delete(t.id);
+            continue;
+          }
           const existing = merged.get(t.id);
           if (!existing || t.updatedAt >= existing.updatedAt) merged.set(t.id, t);
         }
@@ -963,15 +1002,24 @@ globalThis.webViewComponent = function TaskBoardWebView({
         for (const id of incomingDeleted) merged.delete(id);
         return Array.from(merged.values());
       });
-      if (store.stageConfig && Object.keys(store.stageConfig).length > 0) setStageConfig(store.stageConfig);
+      if (store.stageConfig && Object.keys(store.stageConfig).length > 0)
+        setStageConfig(store.stageConfig);
       if (store.activityLog) setActivityLog(store.activityLog);
       // Check whether any pending syncs have been resolved by the background loop
       try {
-        const pendingRaw = await papi.commands.sendCommand('paratextProjectManager.tasksDriveGetPendingSync');
+        const pendingRaw = await papi.commands.sendCommand(
+          'paratextProjectManager.tasksDriveGetPendingSync',
+        );
         const pending = JSON.parse(pendingRaw as string) as string[];
         if (!pending.includes(projectId)) setSyncPending(false);
-      } catch (_) { /* ignore */ }
-    } catch (_) { /* silent */ } finally { refreshInProgressRef.current = false; }
+      } catch (_) {
+        /* ignore */
+      }
+    } catch (_) {
+      /* silent */
+    } finally {
+      refreshInProgressRef.current = false;
+    }
   }, [projectId]);
 
   // Periodic refresh every 60 s
@@ -992,30 +1040,37 @@ globalThis.webViewComponent = function TaskBoardWebView({
   }, [silentRefresh]);
 
   /**
-   * Opens the edit modal — but first fetches the latest version of the task from Drive
-   * so the modal never starts from a stale copy that could overwrite a team member's changes.
+   * Opens the edit modal — but first fetches the latest version of the task from Drive so the modal
+   * never starts from a stale copy that could overwrite a team member's changes.
    */
-  const openEditModal = useCallback(async (task: ProjectTask) => {
-    if (!projectId) return;
-    try {
-      const result = await papi.commands.sendCommand('paratextProjectManager.getTasks', projectId);
-      const store = JSON.parse(result as string) as TaskStore;
-      const fresh = store.tasks?.find(t => t.id === task.id);
-      setEditingTask(fresh ?? task);
-      // Also update the board with the fresh data while we're here
-      setTasks(prev => {
-        const merged = new Map(prev.map(t => [t.id, t]));
-        for (const t of store.tasks ?? []) {
-          const existing = merged.get(t.id);
-          if (!existing || t.updatedAt >= existing.updatedAt) merged.set(t.id, t);
-        }
-        return Array.from(merged.values());
-      });
-      if (store.stageConfig && Object.keys(store.stageConfig).length > 0) setStageConfig(store.stageConfig);
-    } catch (_) {
-      setEditingTask(task); // fall back to local copy on error
-    }
-  }, [projectId]);
+  const openEditModal = useCallback(
+    async (task: ProjectTask) => {
+      if (!projectId) return;
+      try {
+        const result = await papi.commands.sendCommand(
+          'paratextProjectManager.getTasks',
+          projectId,
+        );
+        const store = JSON.parse(result as string) as TaskStore;
+        const fresh = store.tasks?.find((t) => t.id === task.id);
+        setEditingTask(fresh ?? task);
+        // Also update the board with the fresh data while we're here
+        setTasks((prev) => {
+          const merged = new Map(prev.map((t) => [t.id, t]));
+          for (const t of store.tasks ?? []) {
+            const existing = merged.get(t.id);
+            if (!existing || t.updatedAt >= existing.updatedAt) merged.set(t.id, t);
+          }
+          return Array.from(merged.values());
+        });
+        if (store.stageConfig && Object.keys(store.stageConfig).length > 0)
+          setStageConfig(store.stageConfig);
+      } catch (_) {
+        setEditingTask(task); // fall back to local copy on error
+      }
+    },
+    [projectId],
+  );
 
   const persistTasks = useCallback(
     async (
@@ -1068,7 +1123,10 @@ globalThis.webViewComponent = function TaskBoardWebView({
   );
 
   const addTask = useCallback(
-    async (partials: Omit<ProjectTask, 'id' | 'createdAt' | 'updatedAt' | 'status'>[], status: TaskStatus = 'pending') => {
+    async (
+      partials: Omit<ProjectTask, 'id' | 'createdAt' | 'updatedAt' | 'status'>[],
+      status: TaskStatus = 'pending',
+    ) => {
       const now = new Date().toISOString();
       const newTasks: ProjectTask[] = partials.map((partial) => ({
         ...partial,
@@ -1158,7 +1216,13 @@ globalThis.webViewComponent = function TaskBoardWebView({
       await persistTasks(
         tasks.map((t) =>
           t.id === taskId
-            ? { ...t, stage: targetStage, assignedTo, status: 'pending' as const, updatedAt: new Date().toISOString() }
+            ? {
+                ...t,
+                stage: targetStage,
+                assignedTo,
+                status: 'pending' as const,
+                updatedAt: new Date().toISOString(),
+              }
             : t,
         ),
         undefined,
@@ -1215,10 +1279,10 @@ globalThis.webViewComponent = function TaskBoardWebView({
 
   if (!projectId) {
     return (
-      <div className="flex flex-col items-center justify-center h-full p-8 text-center gap-4 text-sm">
-        <p className="text-gray-600">Ningún proyecto seleccionado.</p>
+      <div className="tw:flex tw:flex-col tw:items-center tw:justify-center tw:h-full tw:p-8 tw:text-center tw:gap-4 tw:text-sm">
+        <p className="tw:text-gray-600">Ningún proyecto seleccionado.</p>
         <button
-          className="px-4 py-2 bg-slate-600 text-white rounded hover:bg-slate-700"
+          className="tw:px-4 tw:py-2 tw:bg-slate-600 tw:text-white tw:rounded tw:hover:bg-slate-700"
           onClick={selectProject}
         >
           Seleccionar Proyecto
@@ -1228,26 +1292,29 @@ globalThis.webViewComponent = function TaskBoardWebView({
   }
 
   return (
-    <div className="flex flex-col h-full bg-gray-50 text-sm select-none">
+    <div className="tw:flex tw:flex-col tw:h-full tw:bg-gray-50 tw:text-sm tw:select-none">
       {/* Header */}
-      <div className="flex items-center flex-wrap gap-2 px-3 py-2 bg-white border-b shadow-sm">
-        <span className="font-semibold text-gray-700">Tablero de Tareas</span>
-        <div className="flex gap-1 items-center ml-auto flex-wrap">
+      <div className="tw:flex tw:items-center tw:flex-wrap tw:gap-2 tw:px-3 tw:py-2 tw:bg-white tw:border-b tw:shadow-sm">
+        <span className="tw:font-semibold tw:text-gray-700">Tablero de Tareas</span>
+        <div className="tw:flex tw:gap-1 tw:items-center tw:ml-auto tw:flex-wrap">
           <button
-            className="px-2 py-0.5 bg-gray-100 rounded text-xs hover:bg-gray-200"
+            className="tw:px-2 tw:py-0.5 tw:bg-gray-100 tw:rounded tw:text-xs tw:hover:bg-gray-200"
             onClick={selectProject}
             title="Cambiar proyecto"
           >
             ⇄
           </button>
-          {saving && <span className="text-gray-400 text-xs">Guardando…</span>}
+          {saving && <span className="tw:text-gray-400 tw:text-xs">Guardando…</span>}
           {!saving && syncPending && (
-            <span className="text-amber-600 text-xs" title="Sin conexión a Drive — se sincronizará automáticamente cuando haya internet">
+            <span
+              className="tw:text-amber-600 tw:text-xs"
+              title="Sin conexión a Drive — se sincronizará automáticamente cuando haya internet"
+            >
               ☁ Pendiente
             </span>
           )}
           <select
-            className="border rounded px-2 py-0.5 text-xs"
+            className="tw:border tw:rounded tw:px-2 tw:py-0.5 tw:text-xs"
             value={filterAssignee}
             onChange={(e) => setFilterAssignee(e.target.value)}
           >
@@ -1259,7 +1326,7 @@ globalThis.webViewComponent = function TaskBoardWebView({
             ))}
           </select>
           <select
-            className="border rounded px-2 py-0.5 text-xs"
+            className="tw:border tw:rounded tw:px-2 tw:py-0.5 tw:text-xs"
             value={filterBook}
             onChange={(e) => setFilterBook(e.target.value)}
           >
@@ -1271,10 +1338,10 @@ globalThis.webViewComponent = function TaskBoardWebView({
             ))}
           </select>
           <button
-            className={`px-2 py-0.5 rounded text-xs border ${
+            className={`tw:px-2 tw:py-0.5 tw:rounded tw:text-xs tw:border ${
               hideCompleted
-                ? 'bg-slate-100 text-slate-700 border-slate-300'
-                : 'bg-gray-100 text-gray-500 hover:bg-gray-200 border-transparent'
+                ? 'tw:bg-slate-100 tw:text-slate-700 tw:border-slate-300'
+                : 'tw:bg-gray-100 tw:text-gray-500 tw:hover:bg-gray-200 tw:border-transparent'
             }`}
             onClick={() => setHideCompleted(!hideCompleted)}
             title={hideCompleted ? 'Mostrar completas' : 'Esconder completas'}
@@ -1282,16 +1349,16 @@ globalThis.webViewComponent = function TaskBoardWebView({
             {hideCompleted ? '🙈 Completas' : '👁 Completas'}
           </button>
           <button
-            className="px-2 py-0.5 bg-slate-600 text-white rounded text-xs hover:bg-slate-700"
+            className="tw:px-2 tw:py-0.5 tw:bg-slate-600 tw:text-white tw:rounded tw:text-xs tw:hover:bg-slate-700"
             onClick={() => setShowNewTask(true)}
           >
             + Nueva
           </button>
           <button
-            className={`px-2 py-0.5 rounded text-xs border ${
+            className={`tw:px-2 tw:py-0.5 tw:rounded tw:text-xs tw:border ${
               showStageConfig
-                ? 'bg-slate-100 text-slate-700 border-slate-300'
-                : 'bg-gray-100 hover:bg-gray-200 border-transparent'
+                ? 'tw:bg-slate-100 tw:text-slate-700 tw:border-slate-300'
+                : 'tw:bg-gray-100 tw:hover:bg-gray-200 tw:border-transparent'
             }`}
             onClick={() => setShowStageConfig((v) => !v)}
             title="Configurar etapas"
@@ -1299,23 +1366,23 @@ globalThis.webViewComponent = function TaskBoardWebView({
             ⚙ Etapas
           </button>
           <button
-            className={`px-2 py-0.5 rounded text-xs border relative ${
+            className={`tw:px-2 tw:py-0.5 tw:rounded tw:text-xs tw:border tw:relative ${
               showActivityLog
-                ? 'bg-slate-100 text-slate-700 border-slate-300'
-                : 'bg-gray-100 hover:bg-gray-200 border-transparent'
+                ? 'tw:bg-slate-100 tw:text-slate-700 tw:border-slate-300'
+                : 'tw:bg-gray-100 tw:hover:bg-gray-200 tw:border-transparent'
             }`}
             onClick={() => setShowActivityLog((v) => !v)}
             title="Registro de actividad"
           >
             📋 Registro
             {activityLog.length > 0 && !showActivityLog && (
-              <span className="absolute -top-1 -right-1 bg-slate-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center leading-none text-[10px]">
+              <span className="tw:absolute tw:-top-1 tw:-right-1 tw:bg-slate-500 tw:text-white tw:text-xs tw:rounded-full tw:w-4 tw:h-4 tw:flex tw:items-center tw:justify-center tw:leading-none tw:text-[10px]">
                 {activityLog.length > 99 ? '99+' : activityLog.length}
               </span>
             )}
           </button>
           <button
-            className="px-2 py-0.5 bg-gray-100 rounded text-xs hover:bg-gray-200"
+            className="tw:px-2 tw:py-0.5 tw:bg-gray-100 tw:rounded tw:text-xs tw:hover:bg-gray-200"
             onClick={loadTasks}
             title="Actualizar"
           >
@@ -1341,37 +1408,47 @@ globalThis.webViewComponent = function TaskBoardWebView({
       )}
 
       {error && (
-        <div className="bg-red-50 border-b border-red-200 px-3 py-1.5 text-red-700 text-xs">
+        <div className="tw:bg-red-50 tw:border-b tw:border-red-200 tw:px-3 tw:py-1.5 tw:text-red-700 tw:text-xs">
           {error}
         </div>
       )}
 
       {/* Board */}
       {loading ? (
-        <div className="flex items-center justify-center flex-1 text-gray-400">Cargando…</div>
+        <div className="tw:flex tw:items-center tw:justify-center tw:flex-1 tw:text-gray-400">
+          Cargando…
+        </div>
       ) : (
-        <div className="flex gap-2 p-2 overflow-x-auto flex-1 items-start">
+        <div className="tw:flex tw:gap-2 tw:p-2 tw:overflow-x-auto tw:flex-1 tw:items-start">
           {orderedStages.map((stage) => {
             const stageTasks = filteredTasks
               .filter((t) => t.stage === stage)
               .sort((a, b) => {
                 const statusDiff = STATUS_SORT_ORDER[a.status] - STATUS_SORT_ORDER[b.status];
                 if (statusDiff !== 0) return statusDiff;
-                const bookDiff = BIBLE_BOOKS.indexOf(a.book as typeof BIBLE_BOOKS[number]) -
-                                 BIBLE_BOOKS.indexOf(b.book as typeof BIBLE_BOOKS[number]);
+                const bookDiff =
+                  BIBLE_BOOKS.indexOf(a.book as (typeof BIBLE_BOOKS)[number]) -
+                  BIBLE_BOOKS.indexOf(b.book as (typeof BIBLE_BOOKS)[number]);
                 if (bookDiff !== 0) return bookDiff;
                 return (a.chapter ?? 0) - (b.chapter ?? 0);
               });
             const isOver = dragOverStage === stage && draggingTaskId !== null;
-            const noAssignees = !stageConfig[stage]?.assignees || stageConfig[stage].assignees!.length === 0;
+            const noAssignees =
+              !stageConfig[stage]?.assignees || stageConfig[stage].assignees!.length === 0;
             return (
               <div
                 key={stage}
-                className={`flex-shrink-0 w-48 flex flex-col rounded transition-colors ${
-                  isOver ? 'ring-2 ring-slate-400 ring-inset' : ''
+                className={`tw:flex-shrink-0 tw:w-48 tw:flex tw:flex-col tw:rounded tw:transition-colors ${
+                  isOver ? 'tw:ring-2 tw:ring-slate-400 tw:ring-inset' : ''
                 }`}
-                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverStage(stage); }}
-                onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverStage(null); }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                  setDragOverStage(stage);
+                }}
+                onDragLeave={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverStage(null);
+                }}
                 onDrop={(e) => {
                   e.preventDefault();
                   const taskId = e.dataTransfer.getData('taskId');
@@ -1380,22 +1457,28 @@ globalThis.webViewComponent = function TaskBoardWebView({
                   setDraggingTaskId(null);
                 }}
               >
-                <div className={`rounded-t px-2 py-1.5 font-medium text-xs flex items-center justify-between transition-colors ${
-                  isOver ? 'bg-slate-300 text-slate-700' : 'bg-gray-200 text-gray-700'
-                }`}>
-                  <span className="truncate">{getStageLabel(stage, stageConfig)}</span>
-                  <div className="flex items-center gap-0.5 flex-shrink-0 ml-1">
+                <div
+                  className={`tw:rounded-t tw:px-2 tw:py-1.5 tw:font-medium tw:text-xs tw:flex tw:items-center tw:justify-between tw:transition-colors ${
+                    isOver ? 'tw:bg-slate-300 tw:text-slate-700' : 'tw:bg-gray-200 tw:text-gray-700'
+                  }`}
+                >
+                  <span className="tw:truncate">{getStageLabel(stage, stageConfig)}</span>
+                  <div className="tw:flex tw:items-center tw:gap-0.5 tw:flex-shrink-0 tw:ml-1">
                     {noAssignees && (
-                      <span className="text-yellow-600" title="Sin responsables configurados">⚠</span>
+                      <span className="tw:text-yellow-600" title="Sin responsables configurados">
+                        ⚠
+                      </span>
                     )}
-                    <span className="bg-white rounded-full px-1.5 text-gray-500">
+                    <span className="tw:bg-white tw:rounded-full tw:px-1.5 tw:text-gray-500">
                       {stageTasks.length}
                     </span>
                   </div>
                 </div>
-                <div className={`flex-1 rounded-b p-1.5 space-y-1.5 min-h-16 overflow-y-auto max-h-[calc(100vh-120px)] transition-colors ${
-                  isOver ? 'bg-slate-200' : 'bg-gray-100'
-                }`}>
+                <div
+                  className={`tw:flex-1 tw:rounded-b tw:p-1.5 tw:space-y-1.5 tw:min-h-16 tw:overflow-y-auto tw:max-h-[calc(100vh-120px)] tw:transition-colors ${
+                    isOver ? 'tw:bg-slate-200' : 'tw:bg-gray-100'
+                  }`}
+                >
                   {stageTasks.map((task) => (
                     <TaskCard
                       key={task.id}

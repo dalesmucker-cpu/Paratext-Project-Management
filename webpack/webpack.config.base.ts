@@ -2,6 +2,8 @@ import path from 'path';
 import TsconfigPathsPlugin from 'tsconfig-paths-webpack-plugin';
 import webpack from 'webpack';
 import { LIBRARY_TYPE } from './webpack.util';
+import TailwindPrebuildWebpackCodePathsPlugin from './tailwind-prebuild-webpack-code-paths-plugin';
+import { tailwindPrebuildWebpackCompilerPluginSingleton } from './tailwind-prebuild-webpack-compiler-plugin';
 
 // #region shared with https://github.com/paranext/paranext-multi-extension-template/blob/main/webpack/webpack.config.base.ts
 
@@ -21,8 +23,29 @@ const configBase: webpack.Configuration = {
   mode: isDev ? 'development' : 'production',
   // Bundle the sourcemap into the file since WebViews are injected as strings into the main file
   devtool: shouldGenerateSourceMaps ? 'inline-source-map' : false,
+  // Run Tailwind CSS prebuild at the start of each build cycle (including watch rebuilds)
+  // Use the singleton so it only runs once when building multiple configs (WebViews and main)
+  plugins: [tailwindPrebuildWebpackCompilerPluginSingleton],
   watchOptions: {
-    ignored: ['**/node_modules'],
+    // Ignore node_modules and temp-build (where tailwind.prebuild.css and WebViews are generated).
+    // We must ignore temp-build to prevent an infinite loop: prebuild writes tailwind.prebuild.css,
+    // which would trigger webpack watch, which would run prebuild again, etc.
+    // The source files should already be watched, so the tailwind and WebView rebuild should happen
+    ignored: ['**/node_modules', '**/temp-build'],
+  },
+  // Enable persistent caching for faster rebuilds
+  cache: {
+    type: 'filesystem',
+    cacheDirectory: path.resolve(rootDir, '..', 'node_modules', '.cache', 'webpack-extensions'),
+    buildDependencies: {
+      config: [__filename],
+      postcss: [path.resolve(rootDir, 'postcss.config.ts')],
+      tailwind: [path.resolve(rootDir, 'tailwind.config.ts')],
+      tsconfig: [path.resolve(rootDir, 'tsconfig.json')],
+      webpack: [path.resolve(rootDir, 'webpack.config.ts')],
+    },
+    compression: 'gzip',
+    maxMemoryGenerations: 5,
   },
   // Use require for externals as it is the only type of importing that Platform.Bible supports
   // https://webpack.js.org/configuration/externals/#externalstypecommonjs
@@ -87,10 +110,17 @@ const configBase: webpack.Configuration = {
         },
         exclude: /node_modules/,
       },
+      // Load the pre-built Tailwind CSS file with no transformations because it was already built
+      // by `npm run prebuild:tailwind` before webpack runs
+      {
+        test: /tailwind\.prebuild\.css$/,
+        // No loaders needed - the CSS is already fully processed by the prebuild script
+        type: 'asset/source',
+      },
       /** Import scss, sass, and css files as strings */
       // https://webpack.js.org/loaders/sass-loader/#getting-started
       {
-        test: /\.(sa|sc|c)ss$/,
+        test: { and: [/\.(sa|sc|c)ss$/], not: /tailwind\.prebuild\.css$/ },
         resourceQuery: { not: [/raw/] },
         use: [
           // We are not using style-loader since we are passing styles to papi, not inserting them
@@ -101,6 +131,10 @@ const configBase: webpack.Configuration = {
           'postcss-loader',
           // Compiles Sass to CSS
           'sass-loader',
+          // Redirect tailwind.css imports to the pre-built version (only works in CSS, not in code)
+          // by recursively inlining local @use/@import and replacing tailwind.css with prebuilt
+          // tailwind styles. This runs BEFORE sass-loader (loaders execute bottom-to-top)
+          path.resolve(__dirname, 'tailwind-prebuild-webpack-style-loader.ts'),
         ],
       },
       /**
@@ -141,6 +175,8 @@ const configBase: webpack.Configuration = {
     plugins: [
       // use tsconfig.json paths https://www.npmjs.com/package/tsconfig-paths-webpack-plugin
       new TsconfigPathsPlugin(),
+      // Redirect tailwind.css imports to the pre-built version (only works in code, not in CSS)
+      new TailwindPrebuildWebpackCodePathsPlugin(),
     ],
   },
 };

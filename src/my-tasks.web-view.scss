@@ -1,5 +1,4 @@
-@tailwind base;
-@tailwind utilities;
+@use './tailwind.css';
 
 #root {
   height: 100%;

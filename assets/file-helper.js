@@ -1,28 +1,24 @@
 /**
- * Helper child process for file I/O operations.
- * Invoked via createProcess.fork() from the extension backend.
+ * Helper child process for file I/O operations. Invoked via createProcess.fork() from the extension
+ * backend.
  *
- * Usage:
- *   fork('assets/file-helper.js', ['read', filePath])
- *     => stdout: file contents
+ * Usage: fork('assets/file-helper.js', ['read', filePath]) => stdout: file contents
  *
- *   fork('assets/file-helper.js', ['write', filePath])
- *     => reads content from stdin, writes to filePath
+ * Fork('assets/file-helper.js', ['write', filePath]) => reads content from stdin, writes to
+ * filePath
  *
- *   fork('assets/file-helper.js', ['readdir', dirPath])
- *     => stdout: JSON array of directory entries
+ * Fork('assets/file-helper.js', ['readdir', dirPath]) => stdout: JSON array of directory entries
  *
- *   fork('assets/file-helper.js', ['readfile', filePath])
- *     => stdout: file contents (same as read, kept for clarity)
+ * Fork('assets/file-helper.js', ['readfile', filePath]) => stdout: file contents (same as read,
+ * kept for clarity)
  *
- *   fork('assets/file-helper.js', ['exists', filePath])
- *     => stdout: 'true' or 'false'
+ * Fork('assets/file-helper.js', ['exists', filePath]) => stdout: 'true' or 'false'
  */
 
 const fs = require('fs');
 const path = require('path');
 
-const [,, action, targetPath] = process.argv;
+const [, , action, targetPath] = process.argv;
 
 if (action === 'read' || action === 'readfile') {
   try {
@@ -76,11 +72,13 @@ if (action === 'read' || action === 'readfile') {
     const guidMatch = /<Guid>([^<]+)<\/Guid>/i.exec(xml);
     const nameMatch = /<Name>([^<]+)<\/Name>/i.exec(xml);
     const fileNamePostPartMatch = /<FileNamePostPart>([^<]+)<\/FileNamePostPart>/i.exec(xml);
-    process.stdout.write(JSON.stringify({
-      guid: guidMatch ? guidMatch[1].trim() : '',
-      name: nameMatch ? nameMatch[1].trim() : '',
-      fileNamePostPart: fileNamePostPartMatch ? fileNamePostPartMatch[1].trim() : '',
-    }));
+    process.stdout.write(
+      JSON.stringify({
+        guid: guidMatch ? guidMatch[1].trim() : '',
+        name: nameMatch ? nameMatch[1].trim() : '',
+        fileNamePostPart: fileNamePostPartMatch ? fileNamePostPartMatch[1].trim() : '',
+      }),
+    );
     process.exit(0);
   } catch (e) {
     process.stderr.write(e.message);

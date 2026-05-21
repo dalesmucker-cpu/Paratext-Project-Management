@@ -15,10 +15,7 @@ declare module 'papi-shared-types' {
     /** Gets all tasks for a project as a JSON string (TaskStore) */
     'paratextProjectManager.getTasks': (projectId: string) => Promise<string>;
     /** Saves all tasks for a project from a JSON string (TaskStore) */
-    'paratextProjectManager.saveTasks': (
-      projectId: string,
-      tasksJson: string,
-    ) => Promise<string>;
+    'paratextProjectManager.saveTasks': (projectId: string, tasksJson: string) => Promise<string>;
     /** Gets the current user name from extension settings */
     'paratextProjectManager.getCurrentUser': () => Promise<string>;
     /** Writes the current user name to extension settings */

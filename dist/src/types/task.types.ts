@@ -138,10 +138,10 @@ export const STATUS_LABELS: Record<TaskStatus, string> = {
 
 /** Tailwind CSS color classes per status */
 export const STATUS_COLORS: Record<TaskStatus, string> = {
-  pending: 'bg-gray-200 text-gray-700',
-  'in-progress': 'bg-yellow-200 text-yellow-800',
-  complete: 'bg-green-200 text-green-800',
-  flagged: 'bg-red-200 text-red-800',
+  pending: 'tw:bg-gray-200 tw:text-gray-700',
+  'in-progress': 'tw:bg-yellow-200 tw:text-yellow-800',
+  complete: 'tw:bg-green-200 tw:text-green-800',
+  flagged: 'tw:bg-red-200 tw:text-red-800',
 };
 
 /** Generate a simple unique ID */
@@ -218,7 +218,7 @@ export function deadlineColorClass(deadline?: string): string {
   const due = new Date(deadline);
   const now = new Date();
   const diffDays = (due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
-  if (diffDays < 0) return 'text-red-600 font-semibold';
-  if (diffDays <= 7) return 'text-yellow-700 font-semibold';
-  return 'text-gray-500';
+  if (diffDays < 0) return 'tw:text-red-600 tw:font-semibold';
+  if (diffDays <= 7) return 'tw:text-yellow-700 tw:font-semibold';
+  return 'tw:text-gray-500';
 }
