@@ -664,6 +664,20 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
   const [error, setError] = useState('');
   const [currentUser, setCurrentUser] = useState('');
 
+  // --- Collaboration state ---
+  const [collabRole, setCollabRole] = useState<'host' | 'client' | 'none'>('none');
+  const [collabUsername, setCollabUsername] = useState('');
+  const [collabPort, setCollabPort] = useState(49885);
+  const [collabHostIp, setCollabHostIp] = useState('127.0.0.1');
+  const [collabActiveUsers, setCollabActiveUsers] = useState<string[]>([]);
+  const [collabIps, setCollabIps] = useState<string[]>([]);
+  const [collabChatMessages, setCollabChatMessages] = useState<{ user: string; message: string; timestamp: number }[]>([]);
+  const [collabStatusMsg, setCollabStatusMsg] = useState('');
+  const [collabErrorMsg, setCollabErrorMsg] = useState('');
+  const [collabConnecting, setCollabConnecting] = useState(false);
+  const [showCollabSection, setShowCollabSection] = useState(false);
+  const [chatInput, setChatInput] = useState('');
+
   // --- Tab state ---
   const [currentTab, setCurrentTab] = useState<'summary' | 'calendar'>('summary');
 
@@ -893,6 +907,146 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       /* non-critical */
     }
   }, []);
+
+  // --- LAN Collaboration callbacks & subscription ---
+
+  const loadCollabStatus = useCallback(async () => {
+    try {
+      const status: any = await papi.commands.sendCommand('paratextProjectManager.getCollabStatus');
+      if (status) {
+        setCollabRole(status.role);
+        setCollabPort(status.port || 49885);
+        setCollabHostIp(status.hostIp || '127.0.0.1');
+        setCollabActiveUsers(status.activeUsers || []);
+        setCollabIps(status.ips || []);
+        if (status.username) setCollabUsername(status.username);
+      }
+    } catch (_) {}
+  }, []);
+
+  const handleStartCollabHost = async () => {
+    if (!collabUsername.trim()) {
+      setCollabErrorMsg('Por favor, ingresa un nombre de usuario.');
+      return;
+    }
+    setCollabConnecting(true);
+    setCollabErrorMsg('');
+    setCollabStatusMsg('');
+    try {
+      const res: any = await papi.commands.sendCommand(
+        'paratextProjectManager.startCollabHost',
+        collabPort,
+        collabUsername.trim(),
+        projectId,
+      );
+      if (res && res.status === 'ok') {
+        setCollabStatusMsg('Servidor de colaboración iniciado.');
+        await loadCollabStatus();
+      } else {
+        setCollabErrorMsg(res?.error || 'Error desconocido al iniciar servidor.');
+      }
+    } catch (e: any) {
+      setCollabErrorMsg(e?.message || String(e));
+    } finally {
+      setCollabConnecting(false);
+    }
+  };
+
+  const handleConnectCollabClient = async () => {
+    if (!collabUsername.trim()) {
+      setCollabErrorMsg('Por favor, ingresa un nombre de usuario.');
+      return;
+    }
+    if (!collabHostIp.trim()) {
+      setCollabErrorMsg('Por favor, ingresa la IP del anfitrión.');
+      return;
+    }
+    setCollabConnecting(true);
+    setCollabErrorMsg('');
+    setCollabStatusMsg('');
+    try {
+      const res: any = await papi.commands.sendCommand(
+        'paratextProjectManager.connectCollabClient',
+        collabHostIp.trim(),
+        collabPort,
+        collabUsername.trim(),
+        projectId,
+      );
+      if (res && res.status === 'ok') {
+        setCollabStatusMsg('Conectado al servidor de colaboración.');
+        await loadCollabStatus();
+      } else {
+        setCollabErrorMsg(res?.error || 'No se pudo conectar al servidor.');
+      }
+    } catch (e: any) {
+      setCollabErrorMsg(e?.message || String(e));
+    } finally {
+      setCollabConnecting(false);
+    }
+  };
+
+  const handleStopCollab = async () => {
+    try {
+      await papi.commands.sendCommand('paratextProjectManager.stopCollab');
+      setCollabRole('none');
+      setCollabActiveUsers([]);
+      setCollabChatMessages([]);
+      setCollabStatusMsg('');
+      setCollabErrorMsg('');
+    } catch (_) {}
+  };
+
+  const handleSendChat = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim()) return;
+    try {
+      const sender = collabUsername || currentUser || 'Usuario';
+      await papi.commands.sendCommand('paratextProjectManager.sendCollabChat', sender, chatInput.trim());
+      setChatInput('');
+    } catch (_) {}
+  };
+
+  useEffect(() => {
+    loadCollabStatus();
+  }, [loadCollabStatus]);
+
+  useEffect(() => {
+    if (currentUser && !collabUsername) {
+      setCollabUsername(currentUser);
+    }
+  }, [currentUser, collabUsername]);
+
+  useEffect(() => {
+    let unsub: any;
+    const listen = async () => {
+      try {
+        unsub = await papi.network.subscribeNetworkEvent(
+          'paratextProjectManager.onCollabEvent',
+          (event: any) => {
+            if (!event) return;
+            const { type, payload } = event;
+            if (type === 'user_list') {
+              setCollabActiveUsers(payload.users || []);
+            } else if (type === 'chat_message') {
+              setCollabChatMessages((prev) => [...prev, payload]);
+            } else if (type === 'tasks_update') {
+              silentRefresh();
+            } else if (type === 'status_update') {
+              setCollabRole(payload.role);
+              if (payload.error) {
+                setCollabErrorMsg(payload.error);
+                setCollabStatusMsg('');
+              }
+            }
+          }
+        );
+      } catch (_) {}
+    };
+    listen();
+    return () => {
+      if (unsub) unsub();
+    };
+  }, [silentRefresh]);
 
   useEffect(() => {
     loadGcalStatus();
@@ -1982,6 +2136,204 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
           </div>
         )}
       </div>
+
+      {/* Collaboration — always visible, outside scrollable area */}
+      <div className="tw:border-b tw:border-gray-200 tw:bg-white tw:no-print">
+        <button
+          className="tw:w-full tw:flex tw:items-center tw:justify-between tw:px-3 tw:py-1.5 tw:hover:bg-gray-50 tw:text-left"
+          onClick={() => setShowCollabSection((s) => !s)}
+        >
+          <span className="tw:font-semibold tw:text-xs tw:text-gray-700 tw:flex tw:items-center tw:gap-1.5">
+            🌐 Colaboración en Red Local (LAN)
+            {collabRole !== 'none' && (
+              <span className="tw:w-2 tw:h-2 tw:rounded-full tw:bg-green-500 tw:animate-pulse" />
+            )}
+          </span>
+          <span className="tw:text-gray-400 tw:text-xs">{showCollabSection ? '▲' : '▼'}</span>
+        </button>
+
+        {showCollabSection && (
+          <div className="tw:px-3 tw:pb-3 tw:space-y-3 tw:text-xs">
+            {collabStatusMsg && (
+              <div className="tw:bg-green-50 tw:border tw:border-green-200 tw:text-green-700 tw:p-2 tw:rounded">
+                {collabStatusMsg}
+              </div>
+            )}
+            {collabErrorMsg && (
+              <div className="tw:bg-red-50 tw:border tw:border-red-200 tw:text-red-700 tw:p-2 tw:rounded">
+                {collabErrorMsg}
+              </div>
+            )}
+
+            {collabRole === 'none' ? (
+              <div className="tw:grid tw:grid-cols-1 md:tw:grid-cols-2 tw:gap-4 tw:border tw:p-3 tw:rounded tw:bg-gray-50">
+                {/* Host Mode */}
+                <div className="tw:space-y-2">
+                  <h4 className="tw:font-semibold tw:text-slate-800">Modo Anfitrión (Host)</h4>
+                  <p className="tw:text-[10px] tw:text-gray-500">
+                    Inicia un servidor local para que otros se conecten a tu proyecto a través de la red local.
+                  </p>
+                  <div>
+                    <label className="tw:block tw:text-[10px] tw:text-gray-400">Nombre de Usuario</label>
+                    <input
+                      className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
+                      value={collabUsername}
+                      onChange={(e) => setCollabUsername(e.target.value)}
+                      placeholder="Tu nombre…"
+                    />
+                  </div>
+                  <div>
+                    <label className="tw:block tw:text-[10px] tw:text-gray-400">Puerto (Opcional)</label>
+                    <input
+                      type="number"
+                      className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
+                      value={collabPort}
+                      onChange={(e) => setCollabPort(parseInt(e.target.value, 10) || 49885)}
+                    />
+                  </div>
+                  <button
+                    onClick={handleStartCollabHost}
+                    disabled={collabConnecting}
+                    className="tw:w-full tw:py-1.5 tw:bg-slate-600 hover:tw:bg-slate-700 tw:text-white tw:rounded tw:font-semibold disabled:tw:opacity-50"
+                  >
+                    {collabConnecting ? 'Iniciando...' : 'Iniciar Servidor'}
+                  </button>
+                </div>
+
+                {/* Client Mode */}
+                <div className="tw:space-y-2 tw:border-t md:tw:border-t-0 md:tw:border-l tw:pt-3 md:tw:pt-0 md:tw:pl-4">
+                  <h4 className="tw:font-semibold tw:text-slate-800">Modo Invitado (Cliente)</h4>
+                  <p className="tw:text-[10px] tw:text-gray-500">
+                    Conéctate al servidor de un anfitrión para sincronizar y ver cambios en tiempo real.
+                  </p>
+                  <div>
+                    <label className="tw:block tw:text-[10px] tw:text-gray-400">Nombre de Usuario</label>
+                    <input
+                      className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
+                      value={collabUsername}
+                      onChange={(e) => setCollabUsername(e.target.value)}
+                      placeholder="Tu nombre…"
+                    />
+                  </div>
+                  <div>
+                    <label className="tw:block tw:text-[10px] tw:text-gray-400">IP del Anfitrión</label>
+                    <input
+                      className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
+                      value={collabHostIp}
+                      onChange={(e) => setCollabHostIp(e.target.value)}
+                      placeholder="e.g. 192.168.1.15"
+                    />
+                  </div>
+                  <div>
+                    <label className="tw:block tw:text-[10px] tw:text-gray-400">Puerto</label>
+                    <input
+                      type="number"
+                      className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
+                      value={collabPort}
+                      onChange={(e) => setCollabPort(parseInt(e.target.value, 10) || 49885)}
+                    />
+                  </div>
+                  <button
+                    onClick={handleConnectCollabClient}
+                    disabled={collabConnecting}
+                    className="tw:w-full tw:py-1.5 tw:bg-indigo-600 hover:tw:bg-indigo-700 tw:text-white tw:rounded tw:font-semibold disabled:tw:opacity-50"
+                  >
+                    {collabConnecting ? 'Conectando...' : 'Conectarse'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="tw:space-y-3">
+                {/* Active Session Info */}
+                <div className="tw:flex tw:justify-between tw:items-start tw:bg-slate-50 tw:border tw:p-3 tw:rounded">
+                  <div className="tw:space-y-1">
+                    <p className="tw:font-semibold tw:text-slate-800">
+                      Sesión Activa: {collabRole === 'host' ? 'Anfitrión' : 'Invitado'}
+                    </p>
+                    {collabRole === 'host' ? (
+                      <div>
+                        <p className="tw:text-[10px] tw:text-gray-500">
+                          Comparte tu IP con el equipo para que se conecten:
+                        </p>
+                        <div className="tw:flex tw:flex-wrap tw:gap-1 tw:mt-1">
+                          {collabIps.map((ip) => (
+                            <span key={ip} className="tw:bg-slate-200 tw:text-slate-700 tw:px-1.5 tw:py-0.5 tw:rounded tw:text-[10px] tw:font-mono">
+                              {ip}:{collabPort}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="tw:text-[10px] tw:text-gray-500">
+                        Conectado a: <span className="tw:font-mono">{collabHostIp}:{collabPort}</span>
+                      </p>
+                    )}
+                    <div className="tw:pt-1">
+                      <span className="tw:text-[10px] tw:text-gray-400">Usuarios en línea:</span>
+                      <div className="tw:flex tw:flex-wrap tw:gap-1.5 tw:mt-1">
+                        {collabActiveUsers.map((user) => (
+                          <span key={user} className="tw:inline-flex tw:items-center tw:gap-1 tw:bg-green-50 tw:border tw:border-green-100 tw:text-green-800 tw:text-[10px] tw:px-2 tw:py-0.5 tw:rounded-full">
+                            <span className="tw:w-1.5 tw:h-1.5 tw:rounded-full tw:bg-green-500" />
+                            {user}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleStopCollab}
+                    className="tw:px-3 tw:py-1 tw:bg-red-600 hover:tw:bg-red-700 tw:text-white tw:rounded tw:font-semibold"
+                  >
+                    Salir
+                  </button>
+                </div>
+
+                {/* Group Chat */}
+                <div className="tw:border tw:rounded tw:bg-white">
+                  <div className="tw:bg-slate-50 tw:border-b tw:px-2 tw:py-1.5 tw:font-semibold tw:text-slate-700">
+                    💬 Chat de Coordinación
+                  </div>
+                  <div className="tw:h-32 tw:overflow-y-auto tw:p-2 tw:space-y-1.5 tw:bg-slate-50/50">
+                    {collabChatMessages.length === 0 ? (
+                      <p className="tw:text-gray-400 tw:italic tw:text-center tw:pt-8 tw:text-[10px]">
+                        No hay mensajes. Envía un mensaje para coordinar con el equipo.
+                      </p>
+                    ) : (
+                      collabChatMessages.map((msg, idx) => (
+                        <div key={idx} className="tw:text-[11px] tw:bg-white tw:p-1.5 tw:rounded tw:border tw:shadow-sm">
+                          <div className="tw:flex tw:justify-between tw:mb-0.5">
+                            <span className="tw:font-bold tw:text-slate-700">{msg.user}</span>
+                            <span className="tw:text-[9px] tw:text-gray-400">
+                              {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          <p className="tw:text-gray-600">{msg.message}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  <form onSubmit={handleSendChat} className="tw:flex tw:border-t">
+                    <input
+                      className="tw:flex-1 tw:px-2 tw:py-1.5 tw:text-xs tw:outline-none"
+                      placeholder="Escribe un mensaje para el equipo…"
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                    />
+                    <button
+                      type="submit"
+                      disabled={!chatInput.trim()}
+                      className="tw:px-3 tw:py-1.5 tw:bg-indigo-600 hover:tw:bg-indigo-700 tw:text-white tw:font-semibold disabled:tw:opacity-50"
+                    >
+                      Enviar
+                    </button>
+                  </form>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
 
       {loading ? (
         <div className="tw:flex tw:items-center tw:justify-center tw:flex-1 tw:text-gray-400">

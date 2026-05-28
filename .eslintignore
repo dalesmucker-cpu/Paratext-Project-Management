@@ -32,4 +32,7 @@ temp-build
 # generated files
 package-lock.json
 
+# assets JS helpers
+assets/*.js
+
 # #endregion

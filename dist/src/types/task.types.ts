@@ -25,40 +25,40 @@ export interface ProjectTask {
   createdAt: string; // ISO 8601
   updatedAt: string; // ISO 8601
   // Optional deadline & hours tracking
-  deadline?: string;       // ISO date string e.g. "2026-03-15"
+  deadline?: string; // ISO date string e.g. "2026-03-15"
   estimatedHours?: number;
-  loggedHours?: number;    // recomputed as sum of timeEntries[].hours
+  loggedHours?: number; // recomputed as sum of timeEntries[].hours
   timeEntries?: TimeEntry[];
-  path?: TaskPathStep[];       // ordered workflow route defined at task creation
-  currentPathIndex?: number;   // 0-based index of the current step in path[]
+  path?: TaskPathStep[]; // ordered workflow route defined at task creation
+  currentPathIndex?: number; // 0-based index of the current step in path[]
 }
 
 /** A single time log entry on a task */
 export interface TimeEntry {
-  id: string;      // generateId()
-  user: string;    // team member name
-  hours: number;   // positive, fractions allowed (0.5, 1.5…)
-  date: string;    // YYYY-MM-DD local date
+  id: string; // generateId()
+  user: string; // team member name
+  hours: number; // positive, fractions allowed (0.5, 1.5…)
+  date: string; // YYYY-MM-DD local date
   note?: string;
 }
 
 /** One step in a task's workflow path */
 export interface TaskPathStep {
-  stage: string;       // stage key
+  stage: string; // stage key
   assignees: string[]; // team members who handle this step
 }
 
 /** A person assigned to a stage, optionally limited to specific Bible books */
 export interface StageAssignee {
-  person: string;    // team member name
-  books: string[];   // specific books they handle; empty = all books
+  person: string; // team member name
+  books: string[]; // specific books they handle; empty = all books
 }
 
 /** An entry queued for GCal sync when offline */
 export interface PendingTimeSyncEntry {
   timeEntryJson: string; // JSON-serialized TimeEntry
-  taskLabel: string;     // e.g. "GEN 1 — Primer Borrador"
-  calendarId: string;    // GCal calendar ID
+  taskLabel: string; // e.g. "GEN 1 — Primer Borrador"
+  calendarId: string; // GCal calendar ID
 }
 
 /** An entry in the project activity log */
@@ -68,7 +68,7 @@ export interface ActivityLogEntry {
   action: 'created' | 'status-changed' | 'stage-moved' | 'deleted' | 'edited';
   taskId: string;
   taskLabel: string; // e.g. "GEN 1" or "28 tareas en GEN"
-  detail?: string;   // e.g. "Pendiente → En Progreso" or "Primer Borrador → Revisión 1"
+  detail?: string; // e.g. "Pendiente → En Progreso" or "Primer Borrador → Revisión 1"
 }
 
 /** Per-stage configuration stored per project in project-tasks.json */
@@ -151,15 +151,72 @@ export function generateId(): string {
 
 /** Bible books in canonical order */
 export const BIBLE_BOOKS = [
-  'GEN', 'EXO', 'LEV', 'NUM', 'DEU', 'JOS', 'JDG', 'RUT',
-  '1SA', '2SA', '1KI', '2KI', '1CH', '2CH', 'EZR', 'NEH',
-  'EST', 'JOB', 'PSA', 'PRO', 'ECC', 'SNG', 'ISA', 'JER',
-  'LAM', 'EZK', 'DAN', 'HOS', 'JOL', 'AMO', 'OBA', 'JON',
-  'MIC', 'NAM', 'HAB', 'ZEP', 'HAG', 'ZEC', 'MAL',
-  'MAT', 'MRK', 'LUK', 'JHN', 'ACT', 'ROM', '1CO', '2CO',
-  'GAL', 'EPH', 'PHP', 'COL', '1TH', '2TH', '1TI', '2TI',
-  'TIT', 'PHM', 'HEB', 'JAS', '1PE', '2PE', '1JN', '2JN',
-  '3JN', 'JUD', 'REV',
+  'GEN',
+  'EXO',
+  'LEV',
+  'NUM',
+  'DEU',
+  'JOS',
+  'JDG',
+  'RUT',
+  '1SA',
+  '2SA',
+  '1KI',
+  '2KI',
+  '1CH',
+  '2CH',
+  'EZR',
+  'NEH',
+  'EST',
+  'JOB',
+  'PSA',
+  'PRO',
+  'ECC',
+  'SNG',
+  'ISA',
+  'JER',
+  'LAM',
+  'EZK',
+  'DAN',
+  'HOS',
+  'JOL',
+  'AMO',
+  'OBA',
+  'JON',
+  'MIC',
+  'NAM',
+  'HAB',
+  'ZEP',
+  'HAG',
+  'ZEC',
+  'MAL',
+  'MAT',
+  'MRK',
+  'LUK',
+  'JHN',
+  'ACT',
+  'ROM',
+  '1CO',
+  '2CO',
+  'GAL',
+  'EPH',
+  'PHP',
+  'COL',
+  '1TH',
+  '2TH',
+  '1TI',
+  '2TI',
+  'TIT',
+  'PHM',
+  'HEB',
+  'JAS',
+  '1PE',
+  '2PE',
+  '1JN',
+  '2JN',
+  '3JN',
+  'JUD',
+  'REV',
 ] as const;
 
 export type BibleBook = (typeof BIBLE_BOOKS)[number];
@@ -175,28 +232,23 @@ export const STATUS_SORT_ORDER: Record<TaskStatus, number> = {
 // --- Helper functions used by both web views ---
 
 /**
- * Returns the display label for a stage.
- * Prefers custom label from stageConfig; falls back to the built-in STAGE_LABELS constant.
- * For unknown custom stages, falls back to the raw key string.
+ * Returns the display label for a stage. Prefers custom label from stageConfig; falls back to the
+ * built-in STAGE_LABELS constant. For unknown custom stages, falls back to the raw key string.
  */
-export function getStageLabel(
-  stage: string,
-  stageConfig?: Record<string, StageConfig>,
-): string {
+export function getStageLabel(stage: string, stageConfig?: Record<string, StageConfig>): string {
   if (stageConfig?.[stage]?.label) return stageConfig[stage].label;
   return STAGE_LABELS[stage as TranslationStage] ?? stage;
 }
 
 /**
- * Returns all stages sorted by their custom order in stageConfig.
- * Includes built-in STAGES plus any custom keys not in STAGES.
- * Falls back to the default STAGES order when no config is present.
+ * Returns all stages sorted by their custom order in stageConfig. Includes built-in STAGES plus any
+ * custom keys not in STAGES. Falls back to the default STAGES order when no config is present.
  */
 export function getOrderedStages(stageConfig?: Record<string, StageConfig>): string[] {
   if (!stageConfig || Object.keys(stageConfig).length === 0) return [...STAGES];
   // Include built-ins + any custom keys not already in STAGES
   const customKeys = Object.keys(stageConfig).filter(
-    k => !STAGES.includes(k as TranslationStage),
+    (k) => !STAGES.includes(k as TranslationStage),
   );
   const allStages = [...STAGES, ...customKeys];
   return allStages.sort((a, b) => {
@@ -208,10 +260,11 @@ export function getOrderedStages(stageConfig?: Record<string, StageConfig>): str
 
 /**
  * Returns a Tailwind text color class based on deadline urgency:
- * - Past due      → red + bold
+ *
+ * - Past due → red + bold
  * - Within 7 days → yellow + bold
- * - Future        → gray
- * - No deadline   → empty string
+ * - Future → gray
+ * - No deadline → empty string
  */
 export function deadlineColorClass(deadline?: string): string {
   if (!deadline) return '';

@@ -42,7 +42,7 @@ function EditTaskModal({
   onSave: (updated: ProjectTask) => void;
 }) {
   const [book, setBook] = useState(task.book);
-  const [chapter, setChapter] = useState(task.chapter);
+  const [chapter, setChapter] = useState(String(task.chapter));
   const [stage, setStage] = useState<string>(task.stage);
   const [assignees, setAssignees] = useState<string[]>(task.assignedTo);
   const [notes, setNotes] = useState(task.notes);
@@ -65,7 +65,7 @@ function EditTaskModal({
     const updated: ProjectTask = {
       ...task,
       book,
-      chapter,
+      chapter: parseInt(chapter) || 1,
       stage,
       assignedTo: assignees,
       notes,
@@ -110,7 +110,7 @@ function EditTaskModal({
               min={1}
               className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1"
               value={chapter}
-              onChange={(e) => setChapter(Math.max(1, parseInt(e.target.value) || 1))}
+              onChange={(e) => setChapter(e.target.value)}
             />
           </div>
           <div>
@@ -688,8 +688,8 @@ function NewTaskModal({
   ) => void;
 }) {
   const [book, setBook] = useState<string>('GEN');
-  const [chapterFrom, setChapterFrom] = useState(1);
-  const [chapterTo, setChapterTo] = useState(1);
+  const [chapterFrom, setChapterFrom] = useState('1');
+  const [chapterTo, setChapterTo] = useState('1');
   const [stage, setStage] = useState<string>(orderedStages[0] ?? 'primer-borrador');
   const [assignees, setAssignees] = useState<string[]>([]);
   const [notes, setNotes] = useState('');
@@ -716,11 +716,16 @@ function NewTaskModal({
     );
   };
 
-  const count = Math.max(1, chapterTo - chapterFrom + 1);
+  const chFromParsed = Math.max(1, parseInt(chapterFrom) || 1);
+  const chToParsed = Math.max(chFromParsed, parseInt(chapterTo) || chFromParsed);
+  const count = chToParsed - chFromParsed + 1;
 
   const handleCreate = () => {
+    const chFrom = chFromParsed;
+    const chTo = chToParsed;
+
     const partials: Omit<ProjectTask, 'id' | 'createdAt' | 'updatedAt' | 'status'>[] = [];
-    for (let ch = chapterFrom; ch <= chapterTo; ch++) {
+    for (let ch = chFrom; ch <= chTo; ch++) {
       partials.push({
         book,
         chapter: ch,
@@ -769,25 +774,28 @@ function NewTaskModal({
                 className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1"
                 value={chapterFrom}
                 onChange={(e) => {
-                  const v = Math.max(1, parseInt(e.target.value) || 1);
-                  setChapterFrom(v);
-                  if (chapterTo < v) setChapterTo(v);
+                  setChapterFrom(e.target.value);
+                  const v = parseInt(e.target.value);
+                  if (!isNaN(v)) {
+                    const toVal = parseInt(chapterTo);
+                    if (isNaN(toVal) || toVal < v) {
+                      setChapterTo(String(v));
+                    }
+                  }
                 }}
               />
               <span className="tw:text-gray-500 tw:flex-shrink-0 tw:text-xs">al</span>
               <input
                 type="number"
-                min={chapterFrom}
+                min={1}
                 className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1"
                 value={chapterTo}
-                onChange={(e) =>
-                  setChapterTo(Math.max(chapterFrom, parseInt(e.target.value) || chapterFrom))
-                }
+                onChange={(e) => setChapterTo(e.target.value)}
               />
             </div>
             {count > 1 && (
               <p className="tw:text-xs tw:text-slate-500 tw:mt-1">
-                Se crearán {count} tareas (caps. {chapterFrom}–{chapterTo})
+                Se crearán {count} tareas (caps. {chFromParsed}–{chToParsed})
               </p>
             )}
           </div>
@@ -964,6 +972,27 @@ globalThis.webViewComponent = function TaskBoardWebView({
   useEffect(() => {
     loadTasks();
   }, [loadTasks]);
+
+  // Listen to collaboration events to refresh tasks in real-time
+  useEffect(() => {
+    let unsubCollab: any;
+    const listen = async () => {
+      try {
+        unsubCollab = await papi.network.subscribeNetworkEvent(
+          'paratextProjectManager.onCollabEvent',
+          (event: any) => {
+            if (event && event.type === 'tasks_update' && event.payload.projectId === projectId) {
+              loadTasks();
+            }
+          }
+        );
+      } catch (_) {}
+    };
+    listen();
+    return () => {
+      if (unsubCollab) unsubCollab();
+    };
+  }, [projectId, loadTasks]);
 
   // Background auto-refresh — silently picks up changes saved by other computers
   const savingRef = useRef(false);

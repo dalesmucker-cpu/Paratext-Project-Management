@@ -36,6 +36,20 @@
         "group": "paratextProjectManager.projectManagerGroup",
         "order": 3,
         "command": "paratextProjectManager.openProjectOverview"
+      },
+      {
+        "label": "%mainMenu_openScriptureViewer%",
+        "localizeNotes": "Application main menu > Project > Project Manager > Open Scripture Viewer",
+        "group": "paratextProjectManager.projectManagerGroup",
+        "order": 4,
+        "command": "paratextProjectManager.openScriptureViewer"
+      },
+      {
+        "label": "%mainMenu_openNotesViewer%",
+        "localizeNotes": "Application main menu > Project > Project Manager > Open Notes Viewer",
+        "group": "paratextProjectManager.projectManagerGroup",
+        "order": 5,
+        "command": "paratextProjectManager.openNotesViewer"
       }
     ]
   },

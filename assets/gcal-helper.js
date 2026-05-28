@@ -284,6 +284,36 @@ async function driveSearch(accessToken, fileName) {
   process.stdout.write(JSON.stringify({ fileId: file ? file.id : null }));
 }
 
+async function driveGetOrCreateFolder(accessToken, folderName) {
+  const q =
+    "name='" +
+    folderName.replace(/'/g, "\\'") +
+    "' and mimeType='application/vnd.google-apps.folder' and trashed=false";
+  const url =
+    'https://www.googleapis.com/drive/v3/files?q=' +
+    encodeURIComponent(q) +
+    '&fields=files(id,name)&pageSize=1';
+  const res = await httpsGetJson(url, accessToken);
+  const data = JSON.parse(res.body);
+  if (data.error) throw new Error('Drive search folder: ' + data.error.message);
+  const existingFolder = (data.files || [])[0];
+  if (existingFolder) {
+    process.stdout.write(JSON.stringify({ folderId: existingFolder.id }));
+    return;
+  }
+
+  const createUrl = 'https://www.googleapis.com/drive/v3/files';
+  const body = {
+    name: folderName,
+    mimeType: 'application/vnd.google-apps.folder',
+  };
+  const createRes = await httpsPostJson(createUrl, accessToken, body);
+  const createData = JSON.parse(createRes.body);
+  if (createData.error) throw new Error('Drive create folder: ' + createData.error.message);
+  process.stdout.write(JSON.stringify({ folderId: createData.id }));
+}
+
+
 async function driveRead(accessToken, fileId) {
   const res = await httpsGetJson(
     `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`,
@@ -299,7 +329,29 @@ async function driveRead(accessToken, fileId) {
   process.stdout.write(res.body);
 }
 
-async function driveWrite(accessToken, fileId, fileName, content) {
+async function driveWrite(accessToken, fileId, fileName, content, folderId) {
+  let buffer;
+  let mimeType = 'application/json';
+
+  const ext = fileName.split('.').pop().toLowerCase();
+  if (ext === 'webm') {
+    mimeType = 'audio/webm';
+    buffer = Buffer.from(content, 'base64');
+  } else if (['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(ext)) {
+    mimeType = 'image/' + (ext === 'jpg' ? 'jpeg' : ext);
+    buffer = Buffer.from(content, 'base64');
+  } else if (ext === 'pdf') {
+    mimeType = 'application/pdf';
+    buffer = Buffer.from(content, 'base64');
+  } else if (ext === 'json') {
+    mimeType = 'application/json';
+    buffer = Buffer.from(content, 'utf8');
+  } else {
+    // general binary fallback if it's not JSON
+    mimeType = 'application/octet-stream';
+    buffer = Buffer.from(content, 'base64');
+  }
+
   if (fileId && fileId.trim() !== '') {
     // Update existing file — media-only upload
     const res = await httpsRequest(
@@ -308,12 +360,12 @@ async function driveWrite(accessToken, fileId, fileName, content) {
         path: `/upload/drive/v3/files/${encodeURIComponent(fileId.trim())}?uploadType=media`,
         method: 'PATCH',
         headers: {
-          'Content-Type': 'application/json; charset=UTF-8',
-          'Content-Length': Buffer.byteLength(content, 'utf8'),
+          'Content-Type': mimeType,
+          'Content-Length': buffer.length,
           Authorization: `Bearer ${accessToken}`,
         },
       },
-      content,
+      buffer,
     );
     const data = JSON.parse(res.body);
     if (data.error) throw new Error(`Drive update: ${data.error.message}`);
@@ -321,12 +373,24 @@ async function driveWrite(accessToken, fileId, fileName, content) {
   } else {
     // Create new file — multipart upload (metadata + content)
     const boundary = 'driveBoundary' + Date.now() + Math.random().toString(36).slice(2, 8);
-    const metadata = JSON.stringify({ name: fileName, mimeType: 'application/json' });
-    const parts = [
-      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n`,
-      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${content}\r\n`,
-      `--${boundary}--`,
-    ].join('');
+    const metaObj = { name: fileName, mimeType: mimeType };
+    if (folderId && folderId.trim() !== '') {
+      metaObj.parents = [folderId.trim()];
+    }
+    const metadata = JSON.stringify(metaObj);
+    
+    const partHeader1 = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n`;
+    const partHeader2 = `--${boundary}\r\nContent-Type: ${mimeType}\r\nContent-Transfer-Encoding: binary\r\n\r\n`;
+    const partFooter = `\r\n--${boundary}--`;
+    
+    // Combine headers and binary buffer
+    const bodyBuffer = Buffer.concat([
+      Buffer.from(partHeader1, 'utf8'),
+      Buffer.from(partHeader2, 'utf8'),
+      buffer,
+      Buffer.from(partFooter, 'utf8')
+    ]);
+
     const res = await httpsRequest(
       {
         hostname: 'www.googleapis.com',
@@ -334,11 +398,11 @@ async function driveWrite(accessToken, fileId, fileName, content) {
         method: 'POST',
         headers: {
           'Content-Type': `multipart/related; boundary=${boundary}`,
-          'Content-Length': Buffer.byteLength(parts, 'utf8'),
+          'Content-Length': bodyBuffer.length,
           Authorization: `Bearer ${accessToken}`,
         },
       },
-      parts,
+      bodyBuffer,
     );
     const data = JSON.parse(res.body);
     if (data.error) throw new Error(`Drive create: ${data.error.message}`);
@@ -726,16 +790,19 @@ async function syncDeadlines(input) {
       await driveAuthFlow(args[0], args[1], args[2]);
     } else if (action === 'drive-search') {
       await driveSearch(args[0], args[1]);
+    } else if (action === 'drive-get-or-create-folder') {
+      await driveGetOrCreateFolder(args[0], args[1]);
     } else if (action === 'drive-read') {
       await driveRead(args[0], args[1]);
     } else if (action === 'drive-write') {
+
       let stdinData = '';
       process.stdin.setEncoding('utf8');
       process.stdin.on('data', (chunk) => {
         stdinData += chunk;
       });
       await new Promise((resolve) => process.stdin.on('end', resolve));
-      await driveWrite(args[0], args[1], args[2], stdinData);
+      await driveWrite(args[0], args[1], args[2], stdinData, args[3]);
     } else {
       process.stderr.write(`Unknown action: ${action}\n`);
       process.exit(1);

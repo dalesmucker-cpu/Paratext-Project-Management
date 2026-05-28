@@ -8,6 +8,8 @@ import type {
   ExecutionToken,
 } from '@papi/core';
 
+import type { ChildProcess } from 'child_process';
+
 // Import bundled web views and their styles
 import taskBoardWebView from './task-board.web-view?inline';
 import taskBoardStyles from './task-board.web-view.scss?inline';
@@ -15,11 +17,17 @@ import myTasksWebView from './my-tasks.web-view?inline';
 import myTasksStyles from './my-tasks.web-view.scss?inline';
 import projectOverviewWebView from './project-overview.web-view?inline';
 import projectOverviewStyles from './project-overview.web-view.scss?inline';
+import notesViewerWebView from './notes-viewer.web-view?inline';
+import notesViewerStyles from './notes-viewer.web-view.scss?inline';
+import scriptureViewerWebView from './scripture-viewer.web-view?inline';
+import scriptureViewerStyles from './scripture-viewer.web-view.scss?inline';
 import type { PendingTimeSyncEntry } from './types/task.types';
 
 const TASK_BOARD_TYPE = 'paratextProjectManager.taskBoard';
 const MY_TASKS_TYPE = 'paratextProjectManager.myTasks';
 const PROJECT_OVERVIEW_TYPE = 'paratextProjectManager.projectOverview';
+const NOTES_VIEWER_TYPE = 'paratextProjectManager.notesViewer';
+const SCRIPTURE_VIEWER_TYPE = 'paratextProjectManager.scriptureViewer';
 const TASKS_FILENAME = 'project-tasks.json';
 
 // Resolve the current user's home directory from the environment.
@@ -42,6 +50,8 @@ const GCAL_CONFIG_PATH = `${PARATEXT_STUDIO_DIR}${SEP}pm-gcal-config.json`;
 const PM_USER_CONFIG_PATH = `${PARATEXT_STUDIO_DIR}${SEP}pm-user-config.json`;
 // Shared Drive config — same file distributed to all team machines
 const PM_TASKS_CONFIG_PATH = `${PARATEXT_STUDIO_DIR}${SEP}pm-tasks-config.json`;
+// File-based notes read log
+const PM_NOTES_READ_LOG_PATH = `${PARATEXT_STUDIO_DIR}${SEP}pm-notes-read-log.json`;
 // User Downloads folder for CSV/HTML export
 const USER_DOWNLOADS_DIR = `${USER_HOME_DIR}${SEP}Downloads`;
 
@@ -82,6 +92,81 @@ const TASKS_DRIVE_DEFAULTS: TasksDriveConfig = {
 // Module-level references set during activate()
 let processApi: NonNullable<ElevatedPrivileges['createProcess']> | undefined;
 let execToken: ExecutionToken;
+
+let notesHelperProcess: ChildProcess | undefined;
+let collabEventEmitter: any;
+const pendingNotesRequests = new Map<
+  string,
+  { resolve: (val: any) => void; reject: (err: any) => void }
+>();
+let notesRequestIdCounter = 0;
+
+function sendToNotesHelper(action: string, args: any[]): Promise<any> {
+  if (!notesHelperProcess) return Promise.reject(new Error('Notes helper not running'));
+  const id = String(notesRequestIdCounter++);
+  return new Promise((resolve, reject) => {
+    pendingNotesRequests.set(id, { resolve, reject });
+    try {
+      notesHelperProcess!.send({ id, action, args });
+    } catch (e) {
+      pendingNotesRequests.delete(id);
+      reject(e);
+    }
+  });
+}
+
+function startNotesHelper(createProcess: ElevatedPrivileges['createProcess']): void {
+  if (notesHelperProcess) return;
+  try {
+    notesHelperProcess = createProcess.fork(execToken, 'assets/notes-helper.js', [], { silent: true });
+
+    notesHelperProcess.on('message', (message: any) => {
+      if (message.event === 'collab') {
+        if (collabEventEmitter) {
+          collabEventEmitter.emit(message.data);
+        }
+        return;
+      }
+      const { id, result, error } = message;
+      const pending = pendingNotesRequests.get(id);
+      if (pending) {
+        pendingNotesRequests.delete(id);
+        if (error) pending.reject(new Error(error));
+        else pending.resolve(result);
+      }
+    });
+
+    notesHelperProcess.on('error', (err) => {
+      logger.warn(`Notes helper error: ${err}`);
+    });
+
+    notesHelperProcess.on('close', (code) => {
+      logger.info(`Notes helper exited with code ${code}`);
+      notesHelperProcess = undefined;
+      for (const pending of pendingNotesRequests.values()) {
+        pending.reject(new Error('Notes helper terminated'));
+      }
+      pendingNotesRequests.clear();
+    });
+  } catch (e) {
+    logger.warn(`Failed to start Notes helper: ${e}`);
+  }
+}
+
+function normalizeName(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '');
+}
+
+function isSameUser(userA: string, userB: string): boolean {
+  if (!userA || !userB) return false;
+  const normA = normalizeName(userA);
+  const normB = normalizeName(userB);
+  return normA.includes(normB) || normB.includes(normA);
+}
 
 // Drive auth state — shared between tasksDriveStartAuth and tasksDrivePollAuth
 let driveAuthPending = false;
@@ -558,6 +643,38 @@ const projectOverviewProvider: IWebViewProvider = {
   },
 };
 
+const notesViewerProvider: IWebViewProvider = {
+  async getWebView(savedWebView: SavedWebViewDefinition): Promise<WebViewDefinition | undefined> {
+    if (savedWebView.webViewType !== NOTES_VIEWER_TYPE)
+      throw new Error(`Wrong webview type: ${savedWebView.webViewType}`);
+    const projectId = savedWebView.projectId ?? pendingProjectId[NOTES_VIEWER_TYPE];
+    pendingProjectId[NOTES_VIEWER_TYPE] = undefined;
+    return {
+      ...savedWebView,
+      projectId,
+      title: 'Notas de Paratext',
+      content: notesViewerWebView,
+      styles: notesViewerStyles,
+    };
+  },
+};
+
+const scriptureViewerProvider: IWebViewProvider = {
+  async getWebView(savedWebView: SavedWebViewDefinition): Promise<WebViewDefinition | undefined> {
+    if (savedWebView.webViewType !== SCRIPTURE_VIEWER_TYPE)
+      throw new Error(`Wrong webview type: ${savedWebView.webViewType}`);
+    const projectId = savedWebView.projectId ?? pendingProjectId[SCRIPTURE_VIEWER_TYPE];
+    pendingProjectId[SCRIPTURE_VIEWER_TYPE] = undefined;
+    return {
+      ...savedWebView,
+      projectId,
+      title: 'Lector de Escritura',
+      content: scriptureViewerWebView,
+      styles: scriptureViewerStyles,
+    };
+  },
+};
+
 // --- Extension Lifecycle ---
 
 export async function activate(context: ExecutionActivationContext): Promise<void> {
@@ -572,6 +689,18 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     );
   }
   processApi = createProcess;
+  startNotesHelper(createProcess);
+
+  context.registrations.add({
+    dispose: () => {
+      if (notesHelperProcess) {
+        try {
+          notesHelperProcess.kill();
+        } catch (_) {}
+        notesHelperProcess = undefined;
+      }
+    },
+  });
 
   // Register WebView providers
   const taskBoardProviderPromise = papi.webViewProviders.registerWebViewProvider(
@@ -585,6 +714,14 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
   const projectOverviewProviderPromise = papi.webViewProviders.registerWebViewProvider(
     PROJECT_OVERVIEW_TYPE,
     projectOverviewProvider,
+  );
+  const notesViewerProviderPromise = papi.webViewProviders.registerWebViewProvider(
+    NOTES_VIEWER_TYPE,
+    notesViewerProvider,
+  );
+  const scriptureViewerProviderPromise = papi.webViewProviders.registerWebViewProvider(
+    SCRIPTURE_VIEWER_TYPE,
+    scriptureViewerProvider,
   );
 
   // --- Open commands ---
@@ -663,14 +800,62 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         logger.warn(`getTasks local read failed for "${projectId}": ${e}`);
       }
 
-      // --- Also try Drive and MERGE (local pending offline changes must not be overwritten) ---
+      // --- If local file is cached, return immediately and sync Drive in background ---
+      if (localContent) {
+        (async () => {
+          try {
+            const token = await getValidDriveToken();
+            if (token) {
+              const driveConfig = await readTasksDriveConfig();
+              let fileId = driveConfig.fileIds[projectId];
+
+              if (!fileId) {
+                const safeName = projectId.replace(/[^a-zA-Z0-9-]/g, '_');
+                const fileName = `paratext-tasks-${safeName}.json`;
+                try {
+                  const searchResult = JSON.parse(
+                    await runGcalHelper('drive-search', [token, fileName], undefined, 10_000),
+                  ) as { fileId: string | null };
+                  if (searchResult.fileId) {
+                    fileId = searchResult.fileId;
+                    const updatedIds = { ...driveConfig.fileIds, [projectId]: fileId };
+                    await writeTasksDriveConfig({ fileIds: updatedIds });
+                  }
+                } catch (searchErr) {
+                  logger.warn(`Drive file search failed for "${projectId}": ${searchErr}`);
+                }
+              }
+
+              if (fileId) {
+                const driveContent = await runGcalHelper(
+                  'drive-read',
+                  [token, fileId],
+                  undefined,
+                  15_000,
+                );
+                JSON.parse(driveContent); // validate
+                const merged = mergeTaskStores(localContent!, driveContent);
+                if (merged !== localContent && tasksPath) {
+                  await runFileHelper('write', tasksPath, merged);
+                  logger.info(`Project Manager: getTasks background merged local+Drive for "${projectId}"`);
+                }
+              }
+            }
+          } catch (driveErr) {
+            logger.warn(`Background Drive getTasks failed: ${driveErr}`);
+          }
+        })();
+
+        return localContent;
+      }
+
+      // --- First-time run (no local content) -> must wait for Drive sync ---
       try {
         const token = await getValidDriveToken();
         if (token) {
           const driveConfig = await readTasksDriveConfig();
           let fileId = driveConfig.fileIds[projectId];
 
-          // If no cached fileId, search Drive by filename so team members auto-discover the file
           if (!fileId) {
             const safeName = projectId.replace(/[^a-zA-Z0-9-]/g, '_');
             const fileName = `paratext-tasks-${safeName}.json`;
@@ -680,10 +865,8 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
               ) as { fileId: string | null };
               if (searchResult.fileId) {
                 fileId = searchResult.fileId;
-                // Cache it locally so future reads are fast
                 const updatedIds = { ...driveConfig.fileIds, [projectId]: fileId };
                 await writeTasksDriveConfig({ fileIds: updatedIds });
-                logger.info(`Project Manager: discovered Drive file ${fileId} for "${projectId}"`);
               }
             } catch (searchErr) {
               logger.warn(`Drive file search failed for "${projectId}": ${searchErr}`);
@@ -698,32 +881,14 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
               15_000,
             );
             JSON.parse(driveContent); // validate
-
-            if (localContent) {
-              // Merge: per-task updatedAt wins — local offline changes are preserved
-              const merged = mergeTaskStores(localContent, driveContent);
-              // Write merged back to local so it stays current
-              if (tasksPath) {
-                try {
-                  await runFileHelper('write', tasksPath, merged);
-                } catch (_) {
-                  /* ignore */
-                }
-              }
-              logger.info(`Project Manager: getTasks merged local+Drive for "${projectId}"`);
-              return merged;
-            }
-            // No local file yet — use Drive as source of truth
-            logger.info(`Project Manager: getTasks from Drive only for "${projectId}"`);
+            logger.info(`Project Manager: getTasks from Drive only (no local file yet) for "${projectId}"`);
             return driveContent;
           }
         }
       } catch (driveErr) {
-        logger.warn(`Drive getTasks failed, using local: ${driveErr}`);
+        logger.warn(`Drive getTasks failed: ${driveErr}`);
       }
 
-      // --- Local only (Drive not configured or failed) ---
-      if (localContent) return localContent;
       return empty;
     },
   );
@@ -742,58 +907,70 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         return `error: ${e}`;
       }
 
-      // --- Also sync to Drive if configured (non-blocking on failure) ---
-      try {
-        const token = await getValidDriveToken();
-        if (token) {
-          const driveConfig = await readTasksDriveConfig();
-          const existingFileId = driveConfig.fileIds[projectId] || '';
-          const safeName = projectId.replace(/[^a-zA-Z0-9-]/g, '_');
-          const fileName = `paratext-tasks-${safeName}.json`;
+      // --- Also sync to Drive if configured (non-blocking in background) ---
+      (async () => {
+        try {
+          const token = await getValidDriveToken();
+          if (token) {
+            const driveConfig = await readTasksDriveConfig();
+            const existingFileId = driveConfig.fileIds[projectId] || '';
+            const safeName = projectId.replace(/[^a-zA-Z0-9-]/g, '_');
+            const fileName = `paratext-tasks-${safeName}.json`;
 
-          // Read Drive version first and merge so neither computer's edits are lost
-          let contentToWrite = tasksJson;
-          if (existingFileId) {
-            try {
-              const driveContent = await runGcalHelper(
-                'drive-read',
-                [token, existingFileId],
-                undefined,
-                15_000,
-              );
-              contentToWrite = mergeTaskStores(tasksJson, driveContent);
-              logger.info(`Project Manager: merged local + Drive tasks for "${projectId}"`);
-            } catch (readErr) {
-              logger.warn(`Drive read-before-merge failed, writing local only: ${readErr}`);
+            // Read Drive version first and merge so neither computer's edits are lost
+            let contentToWrite = tasksJson;
+            if (existingFileId) {
+              try {
+                const driveContent = await runGcalHelper(
+                  'drive-read',
+                  [token, existingFileId],
+                  undefined,
+                  15_000,
+                );
+                contentToWrite = mergeTaskStores(tasksJson, driveContent);
+                logger.info(`Project Manager: merged local + Drive tasks for "${projectId}"`);
+              } catch (readErr) {
+                logger.warn(`Drive read-before-merge failed, writing local only: ${readErr}`);
+              }
+            }
+
+            const result = await runGcalHelper(
+              'drive-write',
+              [token, existingFileId, fileName],
+              contentToWrite,
+              30_000,
+            );
+            const { fileId: newFileId } = JSON.parse(result) as { fileId: string };
+            if (newFileId && newFileId !== existingFileId) {
+              const updatedIds = { ...driveConfig.fileIds, [projectId]: newFileId };
+              await writeTasksDriveConfig({ fileIds: updatedIds });
+              logger.info(`Project Manager: Drive task file ${newFileId} created for "${projectId}"`);
             }
           }
-
-          const result = await runGcalHelper(
-            'drive-write',
-            [token, existingFileId, fileName],
-            contentToWrite,
-            30_000,
-          );
-          const { fileId: newFileId } = JSON.parse(result) as { fileId: string };
-          if (newFileId && newFileId !== existingFileId) {
-            const updatedIds = { ...driveConfig.fileIds, [projectId]: newFileId };
-            await writeTasksDriveConfig({ fileIds: updatedIds });
-            logger.info(`Project Manager: Drive task file ${newFileId} created for "${projectId}"`);
+        } catch (driveErr) {
+          logger.warn(`Drive saveTasks failed (local save OK): ${driveErr}`);
+          // Queue for retry when internet is available
+          try {
+            const cfg = await readTasksDriveConfig();
+            const pending = new Set(cfg.pendingSyncProjects ?? []);
+            pending.add(projectId);
+            await writeTasksDriveConfig({ pendingSyncProjects: Array.from(pending) });
+          } catch (_) {
+            /* ignore — main save already succeeded */
           }
         }
-      } catch (driveErr) {
-        logger.warn(`Drive saveTasks failed (local save OK): ${driveErr}`);
-        // Queue for retry when internet is available
-        try {
-          const cfg = await readTasksDriveConfig();
-          const pending = new Set(cfg.pendingSyncProjects ?? []);
-          pending.add(projectId);
-          await writeTasksDriveConfig({ pendingSyncProjects: Array.from(pending) });
-        } catch (_) {
-          /* ignore — main save already succeeded */
+      })();
+
+      // --- Broadcast via LAN Collaboration if active ---
+      try {
+        const status = await sendToNotesHelper('getCollabStatus', []);
+        if (status && status.role !== 'none') {
+          await sendToNotesHelper('broadcastCollab', [{
+            type: 'tasks_update',
+            payload: { projectId, tasksJson }
+          }]);
         }
-        return 'queued';
-      }
+      } catch (_) {}
 
       return 'ok';
     },
@@ -896,6 +1073,742 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         return 'ok';
       } catch (e) {
         logger.warn(`setTeamMembers failed: ${e}`);
+        return `error: ${e}`;
+      }
+    },
+  );
+
+  // --- Scripture & Notes Commands ---
+
+  // --- LAN Collaboration Event Emitter & Commands ---
+
+  collabEventEmitter = papi.network.createNetworkEventEmitter<{
+    type: string;
+    payload: any;
+  }>('paratextProjectManager.onCollabEvent');
+
+  const startCollabHostPromise = papi.commands.registerCommand(
+    'paratextProjectManager.startCollabHost',
+    async (port: number, username: string, projectId: string): Promise<any> => {
+      try {
+        const projectDir = await resolveProjectDir(projectId);
+        return await sendToNotesHelper('startCollabHost', [port, username, projectId, projectDir]);
+      } catch (e: any) {
+        logger.warn(`startCollabHost failed: ${e}`);
+        return { status: 'error', error: e.message || String(e) };
+      }
+    },
+  );
+
+  const connectCollabClientPromise = papi.commands.registerCommand(
+    'paratextProjectManager.connectCollabClient',
+    async (ip: string, port: number, username: string, projectId: string): Promise<any> => {
+      try {
+        const projectDir = await resolveProjectDir(projectId);
+        return await sendToNotesHelper('connectCollabClient', [ip, port, username, projectId, projectDir]);
+      } catch (e: any) {
+        logger.warn(`connectCollabClient failed: ${e}`);
+        return { status: 'error', error: e.message || String(e) };
+      }
+    },
+  );
+
+  const stopCollabPromise = papi.commands.registerCommand(
+    'paratextProjectManager.stopCollab',
+    async (): Promise<string> => {
+      try {
+        return await sendToNotesHelper('stopCollab', []);
+      } catch (e) {
+        return 'error';
+      }
+    },
+  );
+
+  const getCollabStatusPromise = papi.commands.registerCommand(
+    'paratextProjectManager.getCollabStatus',
+    async (): Promise<any> => {
+      try {
+        return await sendToNotesHelper('getCollabStatus', []);
+      } catch (e) {
+        return { role: 'none', username: '', port: 49885, hostIp: '', activeUsers: [], ips: [] };
+      }
+    },
+  );
+
+  const sendCollabChatPromise = papi.commands.registerCommand(
+    'paratextProjectManager.sendCollabChat',
+    async (username: string, message: string): Promise<string> => {
+      try {
+        const payload = { user: username, message, timestamp: Date.now() };
+        await sendToNotesHelper('broadcastCollab', [{ type: 'chat_message', payload }]);
+        collabEventEmitter.emit({ type: 'chat_message', payload });
+        return 'ok';
+      } catch (e) {
+        return 'error';
+      }
+    },
+  );
+
+  const broadcastCursorPromise = papi.commands.registerCommand(
+    'paratextProjectManager.broadcastCursor',
+    async (username: string, projectId: string, book: string, chapter: number, verse: number | null): Promise<string> => {
+      try {
+        const payload = { user: username, projectId, book, chapter, verse };
+        await sendToNotesHelper('broadcastCollab', [{ type: 'cursor_update', payload }]);
+        collabEventEmitter.emit({ type: 'cursor_update', payload });
+        return 'ok';
+      } catch (e) {
+        return 'error';
+      }
+    },
+  );
+
+  // Network Event Emitter for verse navigation
+  const navigateToVerseEmitter = papi.network.createNetworkEventEmitter<{
+    projectId: string;
+    bookCode: string;
+    chapter: number;
+    verse: number;
+  }>('paratextProjectManager.onNavigateToVerse');
+
+  const navigateToVersePromise = papi.commands.registerCommand(
+    'paratextProjectManager.navigateToVerse',
+    async (
+      projectId: string,
+      bookCode: string,
+      chapter: number,
+      verse: number,
+    ): Promise<string> => {
+      navigateToVerseEmitter.emit({ projectId, bookCode, chapter, verse });
+      try {
+        await papi.commands.sendCommand('paratextProjectManager.openScriptureViewer', projectId);
+      } catch (_) {}
+      return 'ok';
+    },
+  );
+
+  const openNotesViewerPromise = papi.commands.registerCommand(
+    'paratextProjectManager.openNotesViewer',
+    async (projectId?: string) => {
+      let pid = projectId;
+      if (!pid) {
+        pid = await papi.dialogs.selectProject({
+          title: 'Abrir Visor de Notas',
+          prompt: 'Selecciona un proyecto:',
+          includeProjectInterfaces: 'platformScripture.USJ_Chapter',
+        });
+      }
+      if (!pid) return undefined;
+      pendingProjectId[NOTES_VIEWER_TYPE] = pid;
+      return papi.webViews.openWebView(NOTES_VIEWER_TYPE);
+    },
+  );
+
+  const openScriptureViewerPromise = papi.commands.registerCommand(
+    'paratextProjectManager.openScriptureViewer',
+    async (projectId?: string) => {
+      let pid = projectId;
+      if (!pid) {
+        pid = await papi.dialogs.selectProject({
+          title: 'Abrir Lector de Escritura',
+          prompt: 'Selecciona un proyecto:',
+          includeProjectInterfaces: 'platformScripture.USJ_Chapter',
+        });
+      }
+      if (!pid) return undefined;
+      pendingProjectId[SCRIPTURE_VIEWER_TYPE] = pid;
+      return papi.webViews.openWebView(SCRIPTURE_VIEWER_TYPE);
+    },
+  );
+
+  const getProjectNotesPromise = papi.commands.registerCommand(
+    'paratextProjectManager.getProjectNotes',
+    async (projectId: string, currentUser: string): Promise<string> => {
+      try {
+        const projectDir = await resolveProjectDir(projectId);
+        await sendToNotesHelper('registerProjectDir', [projectId, projectDir]);
+        const res = await sendToNotesHelper('getProjectNotes', [
+          projectId,
+          projectDir,
+          currentUser,
+          PM_NOTES_READ_LOG_PATH,
+        ]);
+        return JSON.stringify(res);
+      } catch (e) {
+        logger.warn(`getProjectNotes failed: ${e}`);
+        return JSON.stringify({ threads: [], authors: [], error: String(e) });
+      }
+    },
+  );
+
+  const saveProjectNotePromise = papi.commands.registerCommand(
+    'paratextProjectManager.saveProjectNote',
+    async (
+      projectId: string,
+      authorName: string,
+      threadId: string,
+      commentDate: string,
+      newContents: string,
+    ): Promise<string> => {
+      try {
+        const projectDir = await resolveProjectDir(projectId);
+        await sendToNotesHelper('registerProjectDir', [projectId, projectDir]);
+        await sendToNotesHelper('saveProjectNote', [
+          projectId,
+          projectDir,
+          authorName,
+          threadId,
+          commentDate,
+          newContents,
+        ]);
+        return 'ok';
+      } catch (e) {
+        logger.warn(`saveProjectNote failed: ${e}`);
+        return `error: ${e}`;
+      }
+    },
+  );
+
+  const deleteProjectNotePromise = papi.commands.registerCommand(
+    'paratextProjectManager.deleteProjectNote',
+    async (
+      projectId: string,
+      authorName: string,
+      threadId: string,
+      commentDate: string,
+    ): Promise<string> => {
+      try {
+        const projectDir = await resolveProjectDir(projectId);
+        await sendToNotesHelper('registerProjectDir', [projectId, projectDir]);
+        await sendToNotesHelper('deleteProjectNote', [
+          projectId,
+          projectDir,
+          authorName,
+          threadId,
+          commentDate,
+        ]);
+        return 'ok';
+      } catch (e) {
+        logger.warn(`deleteProjectNote failed: ${e}`);
+        return `error: ${e}`;
+      }
+    },
+  );
+
+  const addNoteReplyPromise = papi.commands.registerCommand(
+    'paratextProjectManager.addNoteReply',
+    async (projectId: string, currentUser: string, replyDataJson: string): Promise<string> => {
+      try {
+        const replyData = JSON.parse(replyDataJson);
+        const projectDir = await resolveProjectDir(projectId);
+        await sendToNotesHelper('registerProjectDir', [projectId, projectDir]);
+
+        const res = (await sendToNotesHelper('addNoteReply', [
+          projectId,
+          projectDir,
+          currentUser,
+          replyData,
+        ])) as { status: string; fullName: string };
+
+        // Auto mark read for replying user
+        try {
+          const threadId = replyData.threadId;
+          const authorFullName = res.fullName || currentUser;
+
+          let readLog: Record<string, Record<string, string>> = {};
+          const exists = await runFileHelper('exists', PM_NOTES_READ_LOG_PATH);
+          if (exists.trim() === 'true') {
+            const content = await runFileHelper('read', PM_NOTES_READ_LOG_PATH);
+            readLog = JSON.parse(content);
+          }
+          const userKeys = Object.keys(readLog);
+          const matchedKey = userKeys.find((k) => isSameUser(k, authorFullName)) || authorFullName;
+          if (!readLog[matchedKey]) readLog[matchedKey] = {};
+          readLog[matchedKey][threadId] = new Date().toISOString();
+          await runFileHelper('write', PM_NOTES_READ_LOG_PATH, JSON.stringify(readLog, null, 2));
+        } catch (err) {
+          logger.warn(`addNoteReply auto-mark-read failed: ${err}`);
+        }
+
+        // --- Broadcast via LAN Collaboration if active ---
+        try {
+          const status = await sendToNotesHelper('getCollabStatus', []);
+          if (status && status.role !== 'none') {
+            await sendToNotesHelper('broadcastCollab', [{
+              type: 'note_update',
+              payload: {
+                projectId,
+                senderUser: currentUser,
+                replyData
+              }
+            }]);
+          }
+        } catch (_) {}
+
+        return 'ok';
+      } catch (e) {
+        logger.warn(`addNoteReply failed: ${e}`);
+        return `error: ${e}`;
+      }
+    },
+  );
+
+  const markNoteAsReadPromise = papi.commands.registerCommand(
+    'paratextProjectManager.markNoteAsRead',
+    async (currentUser: string, threadId: string, latestCommentDate: string): Promise<string> => {
+      try {
+        let readLog: Record<string, Record<string, string>> = {};
+        const exists = await runFileHelper('exists', PM_NOTES_READ_LOG_PATH);
+        if (exists.trim() === 'true') {
+          const content = await runFileHelper('read', PM_NOTES_READ_LOG_PATH);
+          readLog = JSON.parse(content);
+        }
+        const userKeys = Object.keys(readLog);
+        const matchedKey = userKeys.find((k) => isSameUser(k, currentUser)) || currentUser;
+        if (!readLog[matchedKey]) readLog[matchedKey] = {};
+        readLog[matchedKey][threadId] = latestCommentDate;
+        await runFileHelper('write', PM_NOTES_READ_LOG_PATH, JSON.stringify(readLog, null, 2));
+        return 'ok';
+      } catch (e) {
+        logger.warn(`markNoteAsRead failed: ${e}`);
+        return `error: ${e}`;
+      }
+    },
+  );
+
+  const getProjectBooksPromise = papi.commands.registerCommand(
+    'paratextProjectManager.getProjectBooks',
+    async (projectId: string): Promise<string> => {
+      try {
+        const projectDir = await resolveProjectDir(projectId);
+        await sendToNotesHelper('registerProjectDir', [projectId, projectDir]);
+        const books = await sendToNotesHelper('getProjectBooks', [projectId, projectDir]);
+        return JSON.stringify(books);
+      } catch (e) {
+        logger.warn(`getProjectBooks failed: ${e}`);
+        return JSON.stringify([]);
+      }
+    },
+  );
+
+  const getChapterTextPromise = papi.commands.registerCommand(
+    'paratextProjectManager.getChapterText',
+    async (projectId: string, bookCode: string, chapter: number): Promise<string> => {
+      try {
+        const projectDir = await resolveProjectDir(projectId);
+        await sendToNotesHelper('registerProjectDir', [projectId, projectDir]);
+        const res = await sendToNotesHelper('getChapterText', [
+          projectId,
+          projectDir,
+          bookCode,
+          chapter,
+        ]);
+        return JSON.stringify(res);
+      } catch (e) {
+        logger.warn(`getChapterText failed: ${e}`);
+        return JSON.stringify({ blocks: [], totalChapters: 0, error: String(e) });
+      }
+    },
+  );
+
+  const updateVerseTextPromise = papi.commands.registerCommand(
+    'paratextProjectManager.updateVerseText',
+    async (
+      projectId: string,
+      bookCode: string,
+      chapter: number,
+      verse: number,
+      newText: string,
+    ): Promise<string> => {
+      try {
+        const projectDir = await resolveProjectDir(projectId);
+        await sendToNotesHelper('registerProjectDir', [projectId, projectDir]);
+        await sendToNotesHelper('updateVerseText', [
+          projectId,
+          projectDir,
+          bookCode,
+          chapter,
+          verse,
+          newText,
+        ]);
+        return 'ok';
+      } catch (e) {
+        logger.warn(`updateVerseText failed: ${e}`);
+        return `error: ${e}`;
+      }
+    },
+  );
+
+  const getNotesSettingsPromise = papi.commands.registerCommand(
+    'paratextProjectManager.getNotesSettings',
+    async (currentUser: string): Promise<string> => {
+      try {
+        const exists = await runFileHelper('exists', PM_USER_CONFIG_PATH);
+        if (exists.trim() !== 'true') return '';
+        const content = await runFileHelper('read', PM_USER_CONFIG_PATH);
+        const config = JSON.parse(content) as { notesSettings?: Record<string, any> };
+        const settings = config.notesSettings || {};
+        const userKeys = Object.keys(settings);
+        const matchedKey = userKeys.find((k) => isSameUser(k, currentUser)) || currentUser;
+        return JSON.stringify(settings[matchedKey] || null);
+      } catch (e) {
+        logger.warn(`getNotesSettings failed: ${e}`);
+        return '';
+      }
+    },
+  );
+
+  const saveNotesSettingsPromise = papi.commands.registerCommand(
+    'paratextProjectManager.saveNotesSettings',
+    async (currentUser: string, settingsJson: string): Promise<string> => {
+      try {
+        let config: Record<string, any> = {};
+        const exists = await runFileHelper('exists', PM_USER_CONFIG_PATH);
+        if (exists.trim() === 'true') {
+          const content = await runFileHelper('read', PM_USER_CONFIG_PATH);
+          config = JSON.parse(content);
+        }
+        if (!config.notesSettings) config.notesSettings = {};
+        const userKeys = Object.keys(config.notesSettings);
+        const matchedKey = userKeys.find((k) => isSameUser(k, currentUser)) || currentUser;
+        config.notesSettings[matchedKey] = JSON.parse(settingsJson);
+        await runFileHelper('write', PM_USER_CONFIG_PATH, JSON.stringify(config, null, 2));
+        return 'ok';
+      } catch (e) {
+        logger.warn(`saveNotesSettings failed: ${e}`);
+        return `error: ${e}`;
+      }
+    },
+  );
+
+  // Google Drive folder IDs cache for attachments and audios
+  const driveAudioFolderIds: Record<string, string> = {};
+  const driveAttachmentFolderIds: Record<string, string> = {};
+
+  async function getDriveAudioFolderId(token: string, projectId: string): Promise<string> {
+    if (driveAudioFolderIds[projectId]) return driveAudioFolderIds[projectId];
+    const projectDir = await resolveProjectDir(projectId);
+    const parts = projectDir.split(SEP);
+    const projectName = parts[parts.length - 1] || projectId;
+    const folderName = `Paratext PM Audios (${projectName})`;
+    logger.info(`Project Manager: ensuring Google Drive folder exists: "${folderName}"`);
+    const folderResStr = await runGcalHelper(
+      'drive-get-or-create-folder',
+      [token, folderName],
+      undefined,
+      15_000,
+    );
+    const res = JSON.parse(folderResStr) as { folderId: string };
+    if (res.folderId) {
+      driveAudioFolderIds[projectId] = res.folderId;
+      logger.info(`Project Manager: Google Drive folder ID resolved: ${res.folderId}`);
+      return res.folderId;
+    }
+    throw new Error(`Could not resolve Google Drive audio folder for project ${projectId}`);
+  }
+
+  async function getDriveAttachmentFolderId(token: string, projectId: string): Promise<string> {
+    if (driveAttachmentFolderIds[projectId]) return driveAttachmentFolderIds[projectId];
+    const projectDir = await resolveProjectDir(projectId);
+    const parts = projectDir.split(SEP);
+    const projectName = parts[parts.length - 1] || projectId;
+    const folderName = `Paratext PM Attachments (${projectName})`;
+    logger.info(`Project Manager: ensuring Google Drive folder exists: "${folderName}"`);
+    const folderResStr = await runGcalHelper(
+      'drive-get-or-create-folder',
+      [token, folderName],
+      undefined,
+      15_000,
+    );
+    const res = JSON.parse(folderResStr) as { folderId: string };
+    if (res.folderId) {
+      driveAttachmentFolderIds[projectId] = res.folderId;
+      logger.info(`Project Manager: Google Drive folder ID resolved: ${res.folderId}`);
+      return res.folderId;
+    }
+    throw new Error(`Could not resolve Google Drive attachment folder for project ${projectId}`);
+  }
+
+  async function ensureAudioNoteLocally(projectId: string, filename: string): Promise<string> {
+    const projectDir = await resolveProjectDir(projectId);
+    const filePath = `${projectDir}${SEP}audio_notes${SEP}${filename}`;
+    const exists = await sendToNotesHelper('exists', [filePath]);
+
+    if (exists !== true) {
+      logger.info(
+        `Project Manager: audio file not found locally: ${filename}. Checking Google Drive...`,
+      );
+      try {
+        const token = await getValidDriveToken();
+        if (token) {
+          const folderId = await getDriveAudioFolderId(token, projectId);
+          let searchResStr = await runGcalHelper(
+            'drive-search',
+            [token, filename, folderId],
+            undefined,
+            10_000,
+          );
+          let searchResult = JSON.parse(searchResStr) as { fileId: string | null };
+          if (!searchResult.fileId) {
+            logger.info(
+              `Project Manager: audio file ${filename} not found on Drive, trying ${filename}.base64`,
+            );
+            searchResStr = await runGcalHelper(
+              'drive-search',
+              [token, filename + '.base64', folderId],
+              undefined,
+              10_000,
+            );
+            searchResult = JSON.parse(searchResStr) as { fileId: string | null };
+          }
+
+          if (searchResult.fileId) {
+            logger.info(
+              `Project Manager: found audio file on Drive with ID ${searchResult.fileId}. Downloading...`,
+            );
+            const driveContent = await runGcalHelper(
+              'drive-read',
+              [token, searchResult.fileId],
+              undefined,
+              20_000,
+            );
+            await sendToNotesHelper('writeFile', [filePath, driveContent]);
+            logger.info(`Project Manager: downloaded and saved audio note locally: ${filePath}`);
+          } else {
+            logger.warn(`Project Manager: audio file not found on Google Drive: ${filename}`);
+          }
+        }
+      } catch (driveErr) {
+        logger.warn(`Project Manager: failed to fetch audio note from Google Drive: ${driveErr}`);
+      }
+    }
+    return filePath;
+  }
+
+  async function ensureAttachmentLocally(projectId: string, filename: string): Promise<string> {
+    const projectDir = await resolveProjectDir(projectId);
+    const filePath = `${projectDir}${SEP}attachments${SEP}${filename}`;
+    const exists = await sendToNotesHelper('exists', [filePath]);
+
+    if (exists !== true) {
+      logger.info(
+        `Project Manager: attachment file not found locally: ${filename}. Checking Google Drive...`,
+      );
+      try {
+        const token = await getValidDriveToken();
+        if (token) {
+          const folderId = await getDriveAttachmentFolderId(token, projectId);
+          let searchResStr = await runGcalHelper(
+            'drive-search',
+            [token, filename, folderId],
+            undefined,
+            10_000,
+          );
+          let searchResult = JSON.parse(searchResStr) as { fileId: string | null };
+          if (!searchResult.fileId) {
+            logger.info(
+              `Project Manager: attachment file ${filename} not found on Drive, trying ${filename}.base64`,
+            );
+            searchResStr = await runGcalHelper(
+              'drive-search',
+              [token, filename + '.base64', folderId],
+              undefined,
+              10_000,
+            );
+            searchResult = JSON.parse(searchResStr) as { fileId: string | null };
+          }
+
+          if (searchResult.fileId) {
+            logger.info(
+              `Project Manager: found attachment file on Drive with ID ${searchResult.fileId}. Downloading...`,
+            );
+            const driveContent = await runGcalHelper(
+              'drive-read',
+              [token, searchResult.fileId],
+              undefined,
+              20_000,
+            );
+            await sendToNotesHelper('writeFile', [filePath, driveContent]);
+            logger.info(`Project Manager: downloaded and saved attachment locally: ${filePath}`);
+          } else {
+            logger.warn(`Project Manager: attachment file not found on Google Drive: ${filename}`);
+          }
+        }
+      } catch (driveErr) {
+        logger.warn(`Project Manager: failed to fetch attachment from Google Drive: ${driveErr}`);
+      }
+    }
+    return filePath;
+  }
+
+  const saveAudioNotePromise = papi.commands.registerCommand(
+    'paratextProjectManager.saveAudioNote',
+    async (
+      projectId: string,
+      filename: string,
+      base64Data: string,
+    ): Promise<{ status: string; fileId?: string; driveUrl?: string; error?: string }> => {
+      let fileId: string | undefined;
+      let driveUrl: string | undefined;
+      try {
+        const projectDir = await resolveProjectDir(projectId);
+        await sendToNotesHelper('registerProjectDir', [projectId, projectDir]);
+        await sendToNotesHelper('saveLocalAudioNote', [projectDir, filename, base64Data]);
+        logger.info(`Project Manager: saved audio note file: ${filename}`);
+
+        // Try uploading to Google Drive
+        try {
+          const token = await getValidDriveToken();
+          if (token) {
+            const folderId = await getDriveAudioFolderId(token, projectId);
+            const res = await runGcalHelper(
+              'drive-write',
+              [token, '', filename, folderId],
+              base64Data,
+              30_000,
+            );
+            if (res) {
+              const parsed = JSON.parse(res) as { fileId?: string };
+              if (parsed.fileId) {
+                fileId = parsed.fileId;
+                driveUrl = `https://drive.google.com/open?id=${fileId}`;
+              }
+            }
+          }
+        } catch (driveErr) {
+          logger.warn(`Project Manager: failed to upload audio note to Drive: ${driveErr}`);
+        }
+
+        return { status: 'ok', fileId, driveUrl };
+      } catch (e) {
+        logger.warn(`saveAudioNote failed: ${e}`);
+        return { status: 'error', error: String(e) };
+      }
+    },
+  );
+
+  const getAudioNotePromise = papi.commands.registerCommand(
+    'paratextProjectManager.getAudioNote',
+    async (projectId: string, filename: string): Promise<string> => {
+      try {
+        const filePath = await ensureAudioNoteLocally(projectId, filename);
+        const exists = await sendToNotesHelper('exists', [filePath]);
+        if (exists !== true) {
+          throw new Error(`Audio file not found: ${filePath}`);
+        }
+        const base64 = await sendToNotesHelper('readFileBase64', [filePath]);
+        const parts = filename.split('.');
+        const ext = parts[parts.length - 1].toLowerCase();
+        let mime = 'audio/webm';
+        if (ext === 'wav') mime = 'audio/wav';
+        if (ext === 'mp3') mime = 'audio/mp3';
+        if (ext === 'm4a') mime = 'audio/mp4';
+        if (ext === 'ogg') mime = 'audio/ogg';
+        return `data:${mime};base64,${base64}`;
+      } catch (e) {
+        logger.warn(`getAudioNote failed: ${e}`);
+        return `error: ${e}`;
+      }
+    },
+  );
+
+  const saveAttachmentPromise = papi.commands.registerCommand(
+    'paratextProjectManager.saveAttachment',
+    async (
+      projectId: string,
+      filename: string,
+      base64Data: string,
+    ): Promise<{ status: string; fileId?: string; driveUrl?: string; error?: string }> => {
+      let fileId: string | undefined;
+      let driveUrl: string | undefined;
+      try {
+        const projectDir = await resolveProjectDir(projectId);
+        await sendToNotesHelper('registerProjectDir', [projectId, projectDir]);
+        await sendToNotesHelper('saveLocalAttachment', [projectDir, filename, base64Data]);
+        logger.info(`Project Manager: saved attachment file: ${filename}`);
+
+        // Try uploading to Google Drive
+        try {
+          const token = await getValidDriveToken();
+          if (token) {
+            const folderId = await getDriveAttachmentFolderId(token, projectId);
+            const res = await runGcalHelper(
+              'drive-write',
+              [token, '', filename, folderId],
+              base64Data,
+              30_000,
+            );
+            if (res) {
+              const parsed = JSON.parse(res) as { fileId?: string };
+              if (parsed.fileId) {
+                fileId = parsed.fileId;
+                driveUrl = `https://drive.google.com/open?id=${fileId}`;
+              }
+            }
+          }
+        } catch (driveErr) {
+          logger.warn(`Project Manager: failed to upload attachment to Drive: ${driveErr}`);
+        }
+
+        return { status: 'ok', fileId, driveUrl };
+      } catch (e) {
+        logger.warn(`saveAttachment failed: ${e}`);
+        return { status: 'error', error: String(e) };
+      }
+    },
+  );
+
+  const getAttachmentPromise = papi.commands.registerCommand(
+    'paratextProjectManager.getAttachment',
+    async (projectId: string, filename: string): Promise<string> => {
+      try {
+        const filePath = await ensureAttachmentLocally(projectId, filename);
+        const exists = await sendToNotesHelper('exists', [filePath]);
+        if (exists !== true) {
+          throw new Error(`Attachment file not found: ${filePath}`);
+        }
+        const base64 = await sendToNotesHelper('readFileBase64', [filePath]);
+        const parts = filename.split('.');
+        const ext = parts[parts.length - 1].toLowerCase();
+        let mime = 'application/octet-stream';
+        if (ext === 'png') mime = 'image/png';
+        if (ext === 'jpg' || ext === 'jpeg') mime = 'image/jpeg';
+        if (ext === 'webp') mime = 'image/webp';
+        if (ext === 'gif') mime = 'image/gif';
+        if (ext === 'pdf') mime = 'application/pdf';
+        if (ext === 'txt') mime = 'text/plain; charset=utf-8';
+        return `data:${mime};base64,${base64}`;
+      } catch (e) {
+        logger.warn(`getAttachment failed: ${e}`);
+        return `error: ${e}`;
+      }
+    },
+  );
+
+  const openAttachmentPromise = papi.commands.registerCommand(
+    'paratextProjectManager.openAttachment',
+    async (projectId: string, filename: string): Promise<string> => {
+      try {
+        const filePath = await ensureAttachmentLocally(projectId, filename);
+        const exists = await sendToNotesHelper('exists', [filePath]);
+        if (exists !== true) {
+          throw new Error(`Attachment file not found: ${filePath}`);
+        }
+        return await sendToNotesHelper('openPath', [filePath]);
+      } catch (e) {
+        logger.warn(`openAttachment failed: ${e}`);
+        return `error: ${e}`;
+      }
+    },
+  );
+
+  const openExternalPromise = papi.commands.registerCommand(
+    'paratextProjectManager.openExternal',
+    async (url: string): Promise<string> => {
+      try {
+        return await sendToNotesHelper('openExternal', [url]);
+      } catch (e) {
+        logger.warn(`openExternal failed: ${e}`);
         return `error: ${e}`;
       }
     },
@@ -1537,6 +2450,35 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     await tasksDriveGetPendingSyncPromise,
     await getTeamMembersPromise,
     await setTeamMembersPromise,
+    await notesViewerProviderPromise,
+    await scriptureViewerProviderPromise,
+    await openNotesViewerPromise,
+    await openScriptureViewerPromise,
+    await getProjectNotesPromise,
+    await saveProjectNotePromise,
+    await deleteProjectNotePromise,
+    await addNoteReplyPromise,
+    await markNoteAsReadPromise,
+    await getProjectBooksPromise,
+    await getChapterTextPromise,
+    await updateVerseTextPromise,
+    await getNotesSettingsPromise,
+    await saveNotesSettingsPromise,
+    await saveAudioNotePromise,
+    await getAudioNotePromise,
+    await saveAttachmentPromise,
+    await getAttachmentPromise,
+    await openAttachmentPromise,
+    await openExternalPromise,
+    await navigateToVersePromise,
+    navigateToVerseEmitter,
+    await startCollabHostPromise,
+    await connectCollabClientPromise,
+    await stopCollabPromise,
+    await getCollabStatusPromise,
+    await sendCollabChatPromise,
+    await broadcastCursorPromise,
+    collabEventEmitter,
   );
 
   logger.info('Project Manager extension finished activating!');

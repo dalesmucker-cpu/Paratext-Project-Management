@@ -14,6 +14,7 @@ import {
   getOrderedStages,
   deadlineColorClass,
 } from './types/task.types';
+import UnreadNotesWidget from './components/unread-notes-widget.web-view';
 
 // ---- Task Row ----
 
@@ -295,6 +296,27 @@ globalThis.webViewComponent = function MyTasksWebView({
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Listen to collaboration events to refresh tasks in real-time
+  useEffect(() => {
+    let unsubCollab: any;
+    const listen = async () => {
+      try {
+        unsubCollab = await papi.network.subscribeNetworkEvent(
+          'paratextProjectManager.onCollabEvent',
+          (event: any) => {
+            if (event && event.type === 'tasks_update' && event.payload.projectId === projectId) {
+              loadData();
+            }
+          }
+        );
+      } catch (_) {}
+    };
+    listen();
+    return () => {
+      if (unsubCollab) unsubCollab();
+    };
+  }, [projectId, loadData]);
 
   // Background auto-refresh — silently picks up changes saved by other computers
   const savingRef = useRef(false);
@@ -769,6 +791,14 @@ globalThis.webViewComponent = function MyTasksWebView({
           </div>
         </div>
       )}
+
+      <div className="tw:mx-2 tw:mt-2 tw:flex-shrink-0">
+        <UnreadNotesWidget
+          projectId={projectId}
+          currentUser={currentUser}
+          onRefreshTrigger={loadData}
+        />
+      </div>
 
       {/* Task list */}
       {loading ? (
