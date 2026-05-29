@@ -740,7 +740,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
       }
       if (!pid) return undefined;
       pendingProjectId[TASK_BOARD_TYPE] = pid;
-      return papi.webViews.openWebView(TASK_BOARD_TYPE);
+      return papi.webViews.openWebView(TASK_BOARD_TYPE, undefined, { existingId: `task-board-${pid}` });
     },
   );
 
@@ -757,7 +757,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
       }
       if (!pid) return undefined;
       pendingProjectId[MY_TASKS_TYPE] = pid;
-      return papi.webViews.openWebView(MY_TASKS_TYPE);
+      return papi.webViews.openWebView(MY_TASKS_TYPE, undefined, { existingId: `my-tasks-${pid}` });
     },
   );
 
@@ -774,7 +774,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
       }
       if (!pid) return undefined;
       pendingProjectId[PROJECT_OVERVIEW_TYPE] = pid;
-      return papi.webViews.openWebView(PROJECT_OVERVIEW_TYPE);
+      return papi.webViews.openWebView(PROJECT_OVERVIEW_TYPE, undefined, { existingId: `project-overview-${pid}` });
     },
   );
 
@@ -1216,7 +1216,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
       }
       if (!pid) return undefined;
       pendingProjectId[NOTES_VIEWER_TYPE] = pid;
-      return papi.webViews.openWebView(NOTES_VIEWER_TYPE);
+      return papi.webViews.openWebView(NOTES_VIEWER_TYPE, undefined, { existingId: `notes-viewer-${pid}` });
     },
   );
 
@@ -1233,7 +1233,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
       }
       if (!pid) return undefined;
       pendingProjectId[SCRIPTURE_VIEWER_TYPE] = pid;
-      return papi.webViews.openWebView(SCRIPTURE_VIEWER_TYPE);
+      return papi.webViews.openWebView(SCRIPTURE_VIEWER_TYPE, undefined, { existingId: `scripture-viewer-${pid}` });
     },
   );
 
