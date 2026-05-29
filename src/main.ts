@@ -95,6 +95,7 @@ let execToken: ExecutionToken;
 
 let notesHelperProcess: ChildProcess | undefined;
 let collabEventEmitter: any;
+let lastNavigatedVerse: { projectId: string; bookCode: string; chapter: number; verse: number } | null = null;
 const pendingNotesRequests = new Map<
   string,
   { resolve: (val: any) => void; reject: (err: any) => void }
@@ -1179,11 +1180,26 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
       chapter: number,
       verse: number,
     ): Promise<string> => {
+      lastNavigatedVerse = { projectId, bookCode, chapter, verse };
       navigateToVerseEmitter.emit({ projectId, bookCode, chapter, verse });
       try {
         await papi.commands.sendCommand('paratextProjectManager.openScriptureViewer', projectId);
       } catch (_) {}
       return 'ok';
+    },
+  );
+
+  const getLastNavigatedVersePromise = papi.commands.registerCommand(
+    'paratextProjectManager.getLastNavigatedVerse',
+    async (
+      projectId: string,
+    ): Promise<{ projectId: string; bookCode: string; chapter: number; verse: number } | null> => {
+      if (lastNavigatedVerse && lastNavigatedVerse.projectId === projectId) {
+        const val = lastNavigatedVerse;
+        lastNavigatedVerse = null;
+        return val;
+      }
+      return null;
     },
   );
 
@@ -2471,6 +2487,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     await openAttachmentPromise,
     await openExternalPromise,
     await navigateToVersePromise,
+    await getLastNavigatedVersePromise,
     navigateToVerseEmitter,
     await startCollabHostPromise,
     await connectCollabClientPromise,

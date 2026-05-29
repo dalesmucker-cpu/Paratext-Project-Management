@@ -144,5 +144,9 @@ declare module 'papi-shared-types' {
       chapter: number,
       verse: number,
     ) => Promise<string>;
+    /** Gets the last navigated verse to prevent defaulting to RUT on mount */
+    'paratextProjectManager.getLastNavigatedVerse': (
+      projectId: string,
+    ) => Promise<{ projectId: string; bookCode: string; chapter: number; verse: number } | null>;
   }
 }

@@ -2,6 +2,7 @@ import { WebViewProps } from '@papi/core';
 import papi from '@papi/frontend';
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import type { ParatextNoteThread, ParatextComment } from './types/note.types';
+import { ScrollGroupSelector } from 'platform-bible-react';
 
 // Hardcoded default lists
 const BIBLE_BOOKS = [
@@ -487,6 +488,7 @@ const EditableVerse: React.FC<EditableVerseProps> = ({
       ref={ref}
       contentEditable
       suppressContentEditableWarning
+      spellCheck={false}
       onBlur={handleBlur}
       onKeyDown={handleKeyDown}
       onClick={(e) => e.stopPropagation()}
@@ -498,11 +500,19 @@ const EditableVerse: React.FC<EditableVerseProps> = ({
   );
 };
 
-globalThis.webViewComponent = function ScriptureViewerWebView({ projectId }: WebViewProps) {
+globalThis.webViewComponent = function ScriptureViewerWebView({
+  projectId,
+  useWebViewScrollGroupScrRef,
+}: WebViewProps) {
   const [books, setBooks] = useState<BookInfo[]>([]);
   const [selectedBook, setSelectedBook] = useState<string>('');
   const [selectedChapter, setSelectedChapter] = useState<number>(1);
   const [totalChapters, setTotalChapters] = useState<number>(1);
+
+  // Scroll group integration
+  const [scrRef, setScrRef, scrollGroupId, setScrollGroupId] = useWebViewScrollGroupScrRef
+    ? useWebViewScrollGroupScrRef()
+    : [undefined, undefined, undefined, undefined];
 
   // Content states
   const [chapterBlocks, setChapterBlocks] = useState<ChapterBlock[]>([]);
@@ -609,6 +619,45 @@ globalThis.webViewComponent = function ScriptureViewerWebView({ projectId }: Web
     });
     return () => unsubscribe();
   }, [projectId, selectedBook, selectedChapter]);
+
+  // Sync scroll group changes (from other windows) to local state
+  useEffect(() => {
+    if (!scrRef) return;
+    const { book, chapterNum, verseNum } = scrRef;
+    if (!book) return;
+
+    const bookChanged = selectedBook !== book;
+    const chapterChanged = selectedChapter !== chapterNum;
+    const verseChanged = selectedVerseNum !== verseNum;
+
+    if (bookChanged || chapterChanged) {
+      pendingVerseRef.current = verseNum;
+      setSelectedBook(book);
+      setSelectedChapter(chapterNum);
+      setIsEditingVerse(false);
+    } else if (verseChanged) {
+      setSelectedVerseNum(verseNum);
+      setIsEditingVerse(false);
+    }
+  }, [scrRef]);
+
+  // Sync local changes back to the scroll group
+  useEffect(() => {
+    if (scrollGroupId === undefined || !scrRef || !setScrRef) return;
+
+    const targetVerse = selectedVerseNum ?? 1;
+    if (
+      scrRef.book !== selectedBook ||
+      scrRef.chapterNum !== selectedChapter ||
+      scrRef.verseNum !== targetVerse
+    ) {
+      setScrRef({
+        book: selectedBook,
+        chapterNum: selectedChapter,
+        verseNum: targetVerse,
+      });
+    }
+  }, [selectedBook, selectedChapter, selectedVerseNum, scrollGroupId, scrRef, setScrRef]);
 
   // Listen to collaboration events
   useEffect(() => {
@@ -839,9 +888,23 @@ globalThis.webViewComponent = function ScriptureViewerWebView({ projectId }: Web
       setBooks(bookList);
 
       if (bookList.length > 0) {
-        const defaultBook = bookList.find((b) => b.code === 'RUT') || bookList[0];
-        setSelectedBook(defaultBook.code);
-        setSelectedChapter(1);
+        const lastNav = await papi.commands.sendCommand(
+          'paratextProjectManager.getLastNavigatedVerse',
+          projectId,
+        );
+        if (lastNav) {
+          setSelectedBook(lastNav.bookCode);
+          setSelectedChapter(lastNav.chapter);
+          pendingVerseRef.current = lastNav.verse;
+        } else if (scrRef && scrRef.book) {
+          setSelectedBook(scrRef.book);
+          setSelectedChapter(scrRef.chapterNum);
+          pendingVerseRef.current = scrRef.verseNum;
+        } else {
+          const defaultBook = bookList.find((b) => b.code === 'RUT') || bookList[0];
+          setSelectedBook(defaultBook.code);
+          setSelectedChapter(1);
+        }
       } else {
         setError('No se encontraron libros de Escritura en este proyecto (archivos .SFM).');
       }
@@ -1494,6 +1557,17 @@ globalThis.webViewComponent = function ScriptureViewerWebView({ projectId }: Web
           </div>
 
           <div className="tw:flex tw:items-center tw:gap-2">
+            {/* Scroll Group Selector */}
+            {useWebViewScrollGroupScrRef && (
+              <div className="tw:inline-flex tw:items-center tw:scale-90">
+                <ScrollGroupSelector
+                  availableScrollGroupIds={[undefined, ...Array(5).keys()]}
+                  onChangeScrollGroupId={setScrollGroupId}
+                  scrollGroupId={scrollGroupId}
+                />
+              </div>
+            )}
+
             {/* Font size adjustment */}
             <button
               onClick={() => setFontSize((f) => Math.max(12, f - 2))}
