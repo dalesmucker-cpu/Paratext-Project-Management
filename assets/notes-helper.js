@@ -1116,7 +1116,11 @@ async function handleAction(action, args) {
         exec(`start "" "${url.replace(/"/g, '\\"')}"`, (err) => {
           if (err) reject(err);
           else resolve('ok');
-     case 'startCollabHost': {
+        });
+      });
+    }
+
+    case 'startCollabHost': {
       const [portOrRoomId, username, projectId, projectDir, collabTypeArg, serverUrlArg] = args;
       if (projectDir) projectDirs.set(projectId, projectDir);
 
