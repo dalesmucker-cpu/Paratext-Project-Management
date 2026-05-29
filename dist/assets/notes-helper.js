@@ -1116,163 +1116,311 @@ async function handleAction(action, args) {
         exec(`start "" "${url.replace(/"/g, '\\"')}"`, (err) => {
           if (err) reject(err);
           else resolve('ok');
-        });
-      });
-    }
-
-    case 'startCollabHost': {
-      const [port, username, projectId, projectDir] = args;
+     case 'startCollabHost': {
+      const [portOrRoomId, username, projectId, projectDir, collabTypeArg, serverUrlArg] = args;
       if (projectDir) projectDirs.set(projectId, projectDir);
 
       cleanupCollab();
 
       collabRole = 'host';
+      collabType = collabTypeArg || 'local';
       collabUsername = username;
-      collabPort = port || 49885;
-      collabActiveUsers = new Set([username]);
 
-      return new Promise((resolve, reject) => {
-        try {
-          collabServer = net.createServer((socket) => {
-            let socketUser = '';
-            collabSockets.push(socket);
+      if (collabType === 'online') {
+        collabRoomId = portOrRoomId;
+        collabServerUrl = serverUrlArg || 'ws://localhost:8080';
+        collabActiveUsers = new Set([username]);
 
-            setupSocketReceiver(
-              socket,
-              (msg) => {
-                if (msg.type === 'handshake') {
-                  socketUser = msg.payload.username;
-                  collabActiveUsers.add(socketUser);
+        return new Promise((resolve, reject) => {
+          try {
+            const ws = new globalThis.WebSocket(collabServerUrl);
+            collabWs = ws;
 
-                  // Broadcast updated user list
-                  broadcastCollab({ type: 'user_list', payload: { users: Array.from(collabActiveUsers) } });
+            ws.onopen = () => {
+              ws.send(JSON.stringify({
+                type: 'host_room',
+                payload: { roomId: collabRoomId, username: collabUsername }
+              }));
+            };
 
-                  // Send init sync (current tasks)
+            ws.onmessage = (event) => {
+              try {
+                const msg = JSON.parse(event.data);
+
+                if (msg.type === 'handshake_ack') {
+                  resolve({ status: 'ok', role: 'host' });
+                  process.send({ event: 'collab', data: { type: 'user_list', payload: { users: Array.from(collabActiveUsers) } } });
+                  process.send({
+                    event: 'collab',
+                    data: { type: 'chat_message', payload: { user: 'Sistema', message: `Iniciaste sesión online en la sala: ${collabRoomId}`, timestamp: Date.now() } }
+                  });
+                } else if (msg.type === 'error') {
+                  cleanupCollab();
+                  reject(new Error(msg.payload.message));
+                } else if (msg.type === 'user_joined') {
+                  const guestName = msg.payload.username;
                   const tasksPath = path.join(projectDir, 'project-tasks.json');
                   let tasksJson = '{}';
                   if (fs.existsSync(tasksPath)) {
                     tasksJson = fs.readFileSync(tasksPath, 'utf8');
                   }
-                  socket.write(JSON.stringify({ type: 'init_sync', payload: { tasksJson } }) + '\n');
-
-                  // Send system chat message
-                  broadcastCollab({
-                    type: 'chat_message',
-                    payload: { user: 'Sistema', message: `${socketUser} se ha unido a la colaboración.`, timestamp: Date.now() }
-                  });
-
-                  // Notify host main.ts
-                  process.send({ event: 'collab', data: { type: 'user_list', payload: { users: Array.from(collabActiveUsers) } } });
-                  process.send({
-                    event: 'collab',
-                    data: { type: 'chat_message', payload: { user: 'Sistema', message: `${socketUser} se ha unido a la colaboración.`, timestamp: Date.now() } }
-                  });
-                } else if (msg.type === 'tasks_update') {
-                  saveTasksLocal(msg.payload.projectId, msg.payload.tasksJson);
-                  broadcastCollab(msg, socket);
-                  process.send({ event: 'collab', data: msg });
-                } else if (msg.type === 'note_update') {
-                  saveCollabComment(msg.payload.projectId, msg.payload.senderUser, msg.payload.replyData);
-                  broadcastCollab(msg, socket);
-                  process.send({ event: 'collab', data: msg });
-                } else if (msg.type === 'cursor_update') {
-                  broadcastCollab(msg, socket);
+                  ws.send(JSON.stringify({
+                    type: 'send_to',
+                    target: guestName,
+                    payload: { type: 'init_sync', payload: { tasksJson } }
+                  }));
+                } else if (msg.type === 'user_list') {
+                  collabActiveUsers = new Set(msg.payload.users);
                   process.send({ event: 'collab', data: msg });
                 } else if (msg.type === 'chat_message') {
-                  broadcastCollab(msg, socket);
+                  process.send({ event: 'collab', data: msg });
+                } else if (msg.type === 'tasks_update') {
+                  saveTasksLocal(projectId, msg.payload.tasksJson);
+                  process.send({ event: 'collab', data: msg });
+                } else if (msg.type === 'note_update') {
+                  saveCollabComment(projectId, msg.payload.senderUser, msg.payload.replyData);
+                  process.send({ event: 'collab', data: msg });
+                } else if (msg.type === 'cursor_update') {
+                  process.send({ event: 'collab', data: msg });
+                } else if (msg.type === 'status_update') {
                   process.send({ event: 'collab', data: msg });
                 }
-              },
-              () => {
-                collabSockets = collabSockets.filter((s) => s !== socket);
-                if (socketUser) {
-                  collabActiveUsers.delete(socketUser);
-                  broadcastCollab({ type: 'user_list', payload: { users: Array.from(collabActiveUsers) } });
-                  broadcastCollab({
-                    type: 'chat_message',
-                    payload: { user: 'Sistema', message: `${socketUser} ha salido de la colaboración.`, timestamp: Date.now() }
-                  });
-                  process.send({ event: 'collab', data: { type: 'user_list', payload: { users: Array.from(collabActiveUsers) } } });
-                  process.send({
-                    event: 'collab',
-                    data: { type: 'chat_message', payload: { user: 'Sistema', message: `${socketUser} ha salido de la colaboración.`, timestamp: Date.now() } }
-                  });
-                }
+              } catch (err) {
+                console.error('Error parsing host ws msg:', err);
               }
-            );
-          });
+            };
 
-          collabServer.on('error', (err) => {
+            ws.onerror = (err) => {
+              cleanupCollab();
+              reject(err);
+            };
+
+            ws.onclose = () => {
+              cleanupCollab();
+              process.send({ event: 'collab', data: { type: 'status_update', payload: { role: 'none', error: 'Se cerró la sesión online.' } } });
+            };
+
+          } catch (e) {
             cleanupCollab();
-            reject(err);
-          });
+            reject(e);
+          }
+        });
+      } else {
+        collabPort = portOrRoomId || 49885;
+        collabActiveUsers = new Set([username]);
 
-          collabServer.listen(collabPort, '0.0.0.0', () => {
-            resolve({ status: 'ok', role: 'host', ips: getLocalIps() });
-          });
-        } catch (e) {
-          cleanupCollab();
-          reject(e);
-        }
-      });
+        return new Promise((resolve, reject) => {
+          try {
+            collabServer = net.createServer((socket) => {
+              let socketUser = '';
+              collabSockets.push(socket);
+
+              setupSocketReceiver(
+                socket,
+                (msg) => {
+                  if (msg.type === 'handshake') {
+                    socketUser = msg.payload.username;
+                    collabActiveUsers.add(socketUser);
+
+                    // Broadcast updated user list
+                    broadcastCollab({ type: 'user_list', payload: { users: Array.from(collabActiveUsers) } });
+
+                    // Send init sync (current tasks)
+                    const tasksPath = path.join(projectDir, 'project-tasks.json');
+                    let tasksJson = '{}';
+                    if (fs.existsSync(tasksPath)) {
+                      tasksJson = fs.readFileSync(tasksPath, 'utf8');
+                    }
+                    socket.write(JSON.stringify({ type: 'init_sync', payload: { tasksJson } }) + '\n');
+
+                    // Send system chat message
+                    broadcastCollab({
+                      type: 'chat_message',
+                      payload: { user: 'Sistema', message: `${socketUser} se ha unido a la colaboración.`, timestamp: Date.now() }
+                    });
+
+                    // Notify host main.ts
+                    process.send({ event: 'collab', data: { type: 'user_list', payload: { users: Array.from(collabActiveUsers) } } });
+                    process.send({
+                      event: 'collab',
+                      data: { type: 'chat_message', payload: { user: 'Sistema', message: `${socketUser} se ha unido a la colaboración.`, timestamp: Date.now() } }
+                    });
+                  } else if (msg.type === 'tasks_update') {
+                    saveTasksLocal(msg.payload.projectId, msg.payload.tasksJson);
+                    broadcastCollab(msg, socket);
+                    process.send({ event: 'collab', data: msg });
+                  } else if (msg.type === 'note_update') {
+                    saveCollabComment(msg.payload.projectId, msg.payload.senderUser, msg.payload.replyData);
+                    broadcastCollab(msg, socket);
+                    process.send({ event: 'collab', data: msg });
+                  } else if (msg.type === 'cursor_update') {
+                    broadcastCollab(msg, socket);
+                    process.send({ event: 'collab', data: msg });
+                  } else if (msg.type === 'chat_message') {
+                    broadcastCollab(msg, socket);
+                    process.send({ event: 'collab', data: msg });
+                  }
+                },
+                () => {
+                  collabSockets = collabSockets.filter((s) => s !== socket);
+                  if (socketUser) {
+                    collabActiveUsers.delete(socketUser);
+                    broadcastCollab({ type: 'user_list', payload: { users: Array.from(collabActiveUsers) } });
+                    broadcastCollab({
+                      type: 'chat_message',
+                      payload: { user: 'Sistema', message: `${socketUser} ha salido de la colaboración.`, timestamp: Date.now() }
+                    });
+                    process.send({ event: 'collab', data: { type: 'user_list', payload: { users: Array.from(collabActiveUsers) } } });
+                    process.send({
+                      event: 'collab',
+                      data: { type: 'chat_message', payload: { user: 'Sistema', message: `${socketUser} ha salido de la colaboración.`, timestamp: Date.now() } }
+                    });
+                  }
+                }
+              );
+            });
+
+            collabServer.on('error', (err) => {
+              cleanupCollab();
+              reject(err);
+            });
+
+            collabServer.listen(collabPort, '0.0.0.0', () => {
+              resolve({ status: 'ok', role: 'host', ips: getLocalIps() });
+            });
+          } catch (e) {
+            cleanupCollab();
+            reject(e);
+          }
+        });
+      }
     }
 
     case 'connectCollabClient': {
-      const [ip, port, username, projectId, projectDir] = args;
+      const [ipOrRoomId, portOrNull, username, projectId, projectDir, collabTypeArg, serverUrlArg] = args;
       if (projectDir) projectDirs.set(projectId, projectDir);
 
       cleanupCollab();
 
       collabRole = 'client';
+      collabType = collabTypeArg || 'local';
       collabUsername = username;
-      collabPort = port || 49885;
-      collabHostIp = ip;
-      collabActiveUsers = new Set();
 
-      return new Promise((resolve, reject) => {
-        try {
-          const socket = net.createConnection({ host: ip, port: port }, () => {
-            collabClientSocket = socket;
-            socket.write(JSON.stringify({ type: 'handshake', payload: { username } }) + '\n');
-            resolve({ status: 'ok', role: 'client' });
-          });
+      if (collabType === 'online') {
+        collabRoomId = ipOrRoomId;
+        collabServerUrl = serverUrlArg || 'ws://localhost:8080';
+        collabActiveUsers = new Set();
 
-          socket.on('error', (err) => {
-            cleanupCollab();
-            reject(err);
-          });
+        return new Promise((resolve, reject) => {
+          try {
+            const ws = new globalThis.WebSocket(collabServerUrl);
+            collabWs = ws;
 
-          setupSocketReceiver(
-            socket,
-            (msg) => {
-              if (msg.type === 'init_sync') {
-                saveTasksLocal(projectId, msg.payload.tasksJson);
-                process.send({ event: 'collab', data: { type: 'tasks_update', payload: { projectId } } });
-              } else if (msg.type === 'user_list') {
-                collabActiveUsers = new Set(msg.payload.users);
-                process.send({ event: 'collab', data: msg });
-              } else if (msg.type === 'tasks_update') {
-                saveTasksLocal(msg.payload.projectId, msg.payload.tasksJson);
-                process.send({ event: 'collab', data: msg });
-              } else if (msg.type === 'note_update') {
-                saveCollabComment(msg.payload.projectId, msg.payload.senderUser, msg.payload.replyData);
-                process.send({ event: 'collab', data: msg });
-              } else if (msg.type === 'cursor_update') {
-                process.send({ event: 'collab', data: msg });
-              } else if (msg.type === 'chat_message') {
-                process.send({ event: 'collab', data: msg });
+            ws.onopen = () => {
+              ws.send(JSON.stringify({
+                type: 'join_room',
+                payload: { roomId: collabRoomId, username: collabUsername }
+              }));
+            };
+
+            ws.onmessage = (event) => {
+              try {
+                const msg = JSON.parse(event.data);
+
+                if (msg.type === 'handshake_ack') {
+                  resolve({ status: 'ok', role: 'client' });
+                } else if (msg.type === 'error') {
+                  cleanupCollab();
+                  reject(new Error(msg.payload.message));
+                } else if (msg.type === 'init_sync') {
+                  saveTasksLocal(projectId, msg.payload.tasksJson);
+                  process.send({ event: 'collab', data: { type: 'tasks_update', payload: { projectId } } });
+                } else if (msg.type === 'user_list') {
+                  collabActiveUsers = new Set(msg.payload.users);
+                  process.send({ event: 'collab', data: msg });
+                } else if (msg.type === 'tasks_update') {
+                  saveTasksLocal(msg.payload.projectId, msg.payload.tasksJson);
+                  process.send({ event: 'collab', data: msg });
+                } else if (msg.type === 'note_update') {
+                  saveCollabComment(msg.payload.projectId, msg.payload.senderUser, msg.payload.replyData);
+                  process.send({ event: 'collab', data: msg });
+                } else if (msg.type === 'cursor_update') {
+                  process.send({ event: 'collab', data: msg });
+                } else if (msg.type === 'chat_message') {
+                  process.send({ event: 'collab', data: msg });
+                } else if (msg.type === 'status_update') {
+                  process.send({ event: 'collab', data: msg });
+                }
+              } catch (err) {
+                console.error('Error parsing client ws msg:', err);
               }
-            },
-            () => {
+            };
+
+            ws.onerror = (err) => {
               cleanupCollab();
-              process.send({ event: 'collab', data: { type: 'status_update', payload: { role: 'none', error: 'Se perdió la conexión con el servidor.' } } });
-            }
-          );
-        } catch (e) {
-          cleanupCollab();
-          reject(e);
-        }
-      });
+              reject(err);
+            };
+
+            ws.onclose = () => {
+              cleanupCollab();
+              process.send({ event: 'collab', data: { type: 'status_update', payload: { role: 'none', error: 'Se perdió la conexión con el servidor online.' } } });
+            };
+
+          } catch (e) {
+            cleanupCollab();
+            reject(e);
+          }
+        });
+      } else {
+        collabPort = portOrNull || 49885;
+        collabHostIp = ipOrRoomId;
+        collabActiveUsers = new Set();
+
+        return new Promise((resolve, reject) => {
+          try {
+            const socket = net.createConnection({ host: collabHostIp, port: collabPort }, () => {
+              collabClientSocket = socket;
+              socket.write(JSON.stringify({ type: 'handshake', payload: { username } }) + '\n');
+              resolve({ status: 'ok', role: 'client' });
+            });
+
+            socket.on('error', (err) => {
+              cleanupCollab();
+              reject(err);
+            });
+
+            setupSocketReceiver(
+              socket,
+              (msg) => {
+                if (msg.type === 'init_sync') {
+                  saveTasksLocal(projectId, msg.payload.tasksJson);
+                  process.send({ event: 'collab', data: { type: 'tasks_update', payload: { projectId } } });
+                } else if (msg.type === 'user_list') {
+                  collabActiveUsers = new Set(msg.payload.users);
+                  process.send({ event: 'collab', data: msg });
+                } else if (msg.type === 'tasks_update') {
+                  saveTasksLocal(msg.payload.projectId, msg.payload.tasksJson);
+                  process.send({ event: 'collab', data: msg });
+                } else if (msg.type === 'note_update') {
+                  saveCollabComment(msg.payload.projectId, msg.payload.senderUser, msg.payload.replyData);
+                  process.send({ event: 'collab', data: msg });
+                } else if (msg.type === 'cursor_update') {
+                  process.send({ event: 'collab', data: msg });
+                } else if (msg.type === 'chat_message') {
+                  process.send({ event: 'collab', data: msg });
+                }
+              },
+              () => {
+                cleanupCollab();
+                process.send({ event: 'collab', data: { type: 'status_update', payload: { role: 'none', error: 'Se perdió la conexión con el servidor.' } } });
+              }
+            );
+          } catch (e) {
+            cleanupCollab();
+            reject(e);
+          }
+        });
+      }
     }
 
     case 'stopCollab': {
@@ -1283,9 +1431,12 @@ async function handleAction(action, args) {
     case 'getCollabStatus': {
       return {
         role: collabRole,
+        type: collabType,
         username: collabUsername,
         port: collabPort,
         hostIp: collabHostIp,
+        roomId: collabRoomId,
+        serverUrl: collabServerUrl,
         activeUsers: Array.from(collabActiveUsers),
         ips: getLocalIps()
       };
@@ -1302,14 +1453,18 @@ async function handleAction(action, args) {
   }
 }
 
-// --- LAN Collaboration State & Helpers ---
+// --- LAN & Online Collaboration State & Helpers ---
 let collabRole = 'none'; // 'host', 'client', 'none'
+let collabType = 'local'; // 'local', 'online'
 let collabServer = null;
-let collabSockets = []; // host-only: active client sockets
-let collabClientSocket = null; // client-only: socket to host
+let collabSockets = []; // host-only: active local TCP client sockets
+let collabClientSocket = null; // client-only: local TCP socket to host
+let collabWs = null; // WebSocket connection to relay server (for online host/client)
 let collabUsername = '';
 let collabPort = 49885;
 let collabHostIp = '127.0.0.1';
+let collabRoomId = '';
+let collabServerUrl = '';
 let collabActiveUsers = new Set(); // active usernames online
 
 function getLocalIps() {
@@ -1343,11 +1498,28 @@ function cleanupCollab() {
     collabClientSocket = null;
   }
 
+  if (collabWs) {
+    try { collabWs.close(); } catch (_) {}
+    collabWs = null;
+  }
+
   collabRole = 'none';
+  collabType = 'local';
   collabActiveUsers = new Set();
+  collabRoomId = '';
+  collabServerUrl = '';
 }
 
 function broadcastCollab(msg, excludeSocket = null) {
+  if (collabType === 'online') {
+    if (collabWs && collabWs.readyState === 1) { // 1 is OPEN
+      try {
+        collabWs.send(JSON.stringify({ type: 'broadcast', payload: msg }));
+      } catch (_) {}
+    }
+    return;
+  }
+
   const line = JSON.stringify(msg) + '\n';
   if (collabRole === 'host') {
     for (const socket of collabSockets) {

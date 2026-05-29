@@ -1090,10 +1090,23 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
 
   const startCollabHostPromise = papi.commands.registerCommand(
     'paratextProjectManager.startCollabHost',
-    async (port: number, username: string, projectId: string): Promise<any> => {
+    async (
+      portOrRoomId: number | string,
+      username: string,
+      projectId: string,
+      collabType?: 'local' | 'online',
+      serverUrl?: string,
+    ): Promise<any> => {
       try {
         const projectDir = await resolveProjectDir(projectId);
-        return await sendToNotesHelper('startCollabHost', [port, username, projectId, projectDir]);
+        return await sendToNotesHelper('startCollabHost', [
+          portOrRoomId,
+          username,
+          projectId,
+          projectDir,
+          collabType || 'local',
+          serverUrl || '',
+        ]);
       } catch (e: any) {
         logger.warn(`startCollabHost failed: ${e}`);
         return { status: 'error', error: e.message || String(e) };
@@ -1103,10 +1116,25 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
 
   const connectCollabClientPromise = papi.commands.registerCommand(
     'paratextProjectManager.connectCollabClient',
-    async (ip: string, port: number, username: string, projectId: string): Promise<any> => {
+    async (
+      ipOrRoomId: string,
+      portOrNull: number | null,
+      username: string,
+      projectId: string,
+      collabType?: 'local' | 'online',
+      serverUrl?: string,
+    ): Promise<any> => {
       try {
         const projectDir = await resolveProjectDir(projectId);
-        return await sendToNotesHelper('connectCollabClient', [ip, port, username, projectId, projectDir]);
+        return await sendToNotesHelper('connectCollabClient', [
+          ipOrRoomId,
+          portOrNull,
+          username,
+          projectId,
+          projectDir,
+          collabType || 'local',
+          serverUrl || '',
+        ]);
       } catch (e: any) {
         logger.warn(`connectCollabClient failed: ${e}`);
         return { status: 'error', error: e.message || String(e) };
@@ -1131,7 +1159,17 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
       try {
         return await sendToNotesHelper('getCollabStatus', []);
       } catch (e) {
-        return { role: 'none', username: '', port: 49885, hostIp: '', activeUsers: [], ips: [] };
+        return {
+          role: 'none',
+          type: 'local',
+          username: '',
+          port: 49885,
+          hostIp: '',
+          roomId: '',
+          serverUrl: '',
+          activeUsers: [],
+          ips: [],
+        };
       }
     },
   );

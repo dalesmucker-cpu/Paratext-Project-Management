@@ -666,6 +666,9 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
 
   // --- Collaboration state ---
   const [collabRole, setCollabRole] = useState<'host' | 'client' | 'none'>('none');
+  const [collabType, setCollabType] = useState<'local' | 'online'>('local');
+  const [collabRoomId, setCollabRoomId] = useState('');
+  const [collabServerUrl, setCollabServerUrl] = useState('wss://paratext-pm-collab.onrender.com');
   const [collabUsername, setCollabUsername] = useState('');
   const [collabPort, setCollabPort] = useState(49885);
   const [collabHostIp, setCollabHostIp] = useState('127.0.0.1');
@@ -677,6 +680,14 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
   const [collabConnecting, setCollabConnecting] = useState(false);
   const [showCollabSection, setShowCollabSection] = useState(false);
   const [chatInput, setChatInput] = useState('');
+
+  useEffect(() => {
+    if (!collabRoomId && projectId) {
+      const cleanId = projectId.replace(/[^a-zA-Z0-9]/g, '').substring(0, 6).toUpperCase();
+      const randNum = Math.floor(1000 + Math.random() * 9000);
+      setCollabRoomId(`PM-${cleanId || 'ROOM'}-${randNum}`);
+    }
+  }, [projectId, collabRoomId]);
 
   // --- Tab state ---
   const [currentTab, setCurrentTab] = useState<'summary' | 'calendar'>('summary');
@@ -908,17 +919,20 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
     }
   }, []);
 
-  // --- LAN Collaboration callbacks & subscription ---
+  // --- Collaboration callbacks & subscription ---
 
   const loadCollabStatus = useCallback(async () => {
     try {
       const status: any = await papi.commands.sendCommand('paratextProjectManager.getCollabStatus');
       if (status) {
         setCollabRole(status.role);
+        setCollabType(status.type || 'local');
         setCollabPort(status.port || 49885);
         setCollabHostIp(status.hostIp || '127.0.0.1');
         setCollabActiveUsers(status.activeUsers || []);
         setCollabIps(status.ips || []);
+        if (status.roomId) setCollabRoomId(status.roomId);
+        if (status.serverUrl) setCollabServerUrl(status.serverUrl);
         if (status.username) setCollabUsername(status.username);
       }
     } catch (_) {}
@@ -929,21 +943,27 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       setCollabErrorMsg('Por favor, ingresa un nombre de usuario.');
       return;
     }
+    if (collabType === 'online' && !collabRoomId.trim()) {
+      setCollabErrorMsg('Por favor, ingresa un ID de Sala.');
+      return;
+    }
     setCollabConnecting(true);
     setCollabErrorMsg('');
     setCollabStatusMsg('');
     try {
       const res: any = await papi.commands.sendCommand(
         'paratextProjectManager.startCollabHost',
-        collabPort,
+        collabType === 'online' ? collabRoomId.trim() : collabPort,
         collabUsername.trim(),
         projectId,
+        collabType,
+        collabType === 'online' ? collabServerUrl.trim() : '',
       );
       if (res && res.status === 'ok') {
-        setCollabStatusMsg('Servidor de colaboración iniciado.');
+        setCollabStatusMsg(collabType === 'online' ? 'Sesión de colaboración online iniciada.' : 'Servidor de colaboración local iniciado.');
         await loadCollabStatus();
       } else {
-        setCollabErrorMsg(res?.error || 'Error desconocido al iniciar servidor.');
+        setCollabErrorMsg(res?.error || 'Error desconocido al iniciar colaboración.');
       }
     } catch (e: any) {
       setCollabErrorMsg(e?.message || String(e));
@@ -957,7 +977,11 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       setCollabErrorMsg('Por favor, ingresa un nombre de usuario.');
       return;
     }
-    if (!collabHostIp.trim()) {
+    if (collabType === 'online' && !collabRoomId.trim()) {
+      setCollabErrorMsg('Por favor, ingresa el ID de la Sala.');
+      return;
+    }
+    if (collabType === 'local' && !collabHostIp.trim()) {
       setCollabErrorMsg('Por favor, ingresa la IP del anfitrión.');
       return;
     }
@@ -967,16 +991,18 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
     try {
       const res: any = await papi.commands.sendCommand(
         'paratextProjectManager.connectCollabClient',
-        collabHostIp.trim(),
-        collabPort,
+        collabType === 'online' ? collabRoomId.trim() : collabHostIp.trim(),
+        collabType === 'online' ? null : collabPort,
         collabUsername.trim(),
         projectId,
+        collabType,
+        collabType === 'online' ? collabServerUrl.trim() : '',
       );
       if (res && res.status === 'ok') {
-        setCollabStatusMsg('Conectado al servidor de colaboración.');
+        setCollabStatusMsg(collabType === 'online' ? 'Conectado a la sala online.' : 'Conectado al servidor de colaboración local.');
         await loadCollabStatus();
       } else {
-        setCollabErrorMsg(res?.error || 'No se pudo conectar al servidor.');
+        setCollabErrorMsg(res?.error || 'No se pudo conectar.');
       }
     } catch (e: any) {
       setCollabErrorMsg(e?.message || String(e));
@@ -2165,13 +2191,44 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
               </div>
             )}
 
+            {collabRole === 'none' && (
+              <div className="tw:flex tw:border tw:rounded tw:overflow-hidden tw:bg-white">
+                <button
+                  type="button"
+                  onClick={() => setCollabType('local')}
+                  className={`tw:flex-1 tw:py-1.5 tw:text-[10px] tw:font-semibold tw:transition-colors ${
+                    collabType === 'local'
+                      ? 'tw:bg-slate-600 tw:text-white'
+                      : 'tw:bg-white tw:text-slate-600 hover:tw:bg-slate-50'
+                  }`}
+                >
+                  🌐 Red Local (LAN)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCollabType('online')}
+                  className={`tw:flex-1 tw:py-1.5 tw:text-[10px] tw:font-semibold tw:transition-colors ${
+                    collabType === 'online'
+                      ? 'tw:bg-slate-600 tw:text-white'
+                      : 'tw:bg-white tw:text-slate-600 hover:tw:bg-slate-50'
+                  }`}
+                >
+                  ☁️ En Línea (Internet)
+                </button>
+              </div>
+            )}
+
             {collabRole === 'none' ? (
               <div className="tw:grid tw:grid-cols-1 md:tw:grid-cols-2 tw:gap-4 tw:border tw:p-3 tw:rounded tw:bg-gray-50">
                 {/* Host Mode */}
                 <div className="tw:space-y-2">
-                  <h4 className="tw:font-semibold tw:text-slate-800">Modo Anfitrión (Host)</h4>
+                  <h4 className="tw:font-semibold tw:text-slate-800">
+                    Modo Anfitrión (Host) {collabType === 'online' ? 'Online' : ''}
+                  </h4>
                   <p className="tw:text-[10px] tw:text-gray-500">
-                    Inicia un servidor local para que otros se conecten a tu proyecto a través de la red local.
+                    {collabType === 'online'
+                      ? 'Inicia una sala online en internet para que tu equipo se conecte desde cualquier lugar.'
+                      : 'Inicia un servidor local para que otros se conecten a tu proyecto a través de la red local.'}
                   </p>
                   <div>
                     <label className="tw:block tw:text-[10px] tw:text-gray-400">Nombre de Usuario</label>
@@ -2182,29 +2239,56 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                       placeholder="Tu nombre…"
                     />
                   </div>
-                  <div>
-                    <label className="tw:block tw:text-[10px] tw:text-gray-400">Puerto (Opcional)</label>
-                    <input
-                      type="number"
-                      className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
-                      value={collabPort}
-                      onChange={(e) => setCollabPort(parseInt(e.target.value, 10) || 49885)}
-                    />
-                  </div>
+                  {collabType === 'online' ? (
+                    <>
+                      <div>
+                        <label className="tw:block tw:text-[10px] tw:text-gray-400">ID de la Sala</label>
+                        <input
+                          className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:font-mono"
+                          value={collabRoomId}
+                          onChange={(e) => setCollabRoomId(e.target.value.toUpperCase())}
+                          placeholder="e.g. MI-SALA-12"
+                        />
+                      </div>
+                      <div>
+                        <label className="tw:block tw:text-[10px] tw:text-gray-400">Servidor Relay (Opcional)</label>
+                        <input
+                          className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:font-mono tw:text-[10px]"
+                          value={collabServerUrl}
+                          onChange={(e) => setCollabServerUrl(e.target.value)}
+                          placeholder="wss://..."
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <div>
+                      <label className="tw:block tw:text-[10px] tw:text-gray-400">Puerto (Opcional)</label>
+                      <input
+                        type="number"
+                        className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
+                        value={collabPort}
+                        onChange={(e) => setCollabPort(parseInt(e.target.value, 10) || 49885)}
+                      />
+                    </div>
+                  )}
                   <button
                     onClick={handleStartCollabHost}
                     disabled={collabConnecting}
                     className="tw:w-full tw:py-1.5 tw:bg-slate-600 hover:tw:bg-slate-700 tw:text-white tw:rounded tw:font-semibold disabled:tw:opacity-50"
                   >
-                    {collabConnecting ? 'Iniciando...' : 'Iniciar Servidor'}
+                    {collabConnecting ? 'Iniciando...' : 'Iniciar Colaboración'}
                   </button>
                 </div>
 
                 {/* Client Mode */}
                 <div className="tw:space-y-2 tw:border-t md:tw:border-t-0 md:tw:border-l tw:pt-3 md:tw:pt-0 md:tw:pl-4">
-                  <h4 className="tw:font-semibold tw:text-slate-800">Modo Invitado (Cliente)</h4>
+                  <h4 className="tw:font-semibold tw:text-slate-800">
+                    Modo Invitado (Cliente) {collabType === 'online' ? 'Online' : ''}
+                  </h4>
                   <p className="tw:text-[10px] tw:text-gray-500">
-                    Conéctate al servidor de un anfitrión para sincronizar y ver cambios en tiempo real.
+                    {collabType === 'online'
+                      ? 'Conéctate a una sala online existente compartida por un anfitrión.'
+                      : 'Conéctate al servidor de un anfitrión local para sincronizar en tiempo real.'}
                   </p>
                   <div>
                     <label className="tw:block tw:text-[10px] tw:text-gray-400">Nombre de Usuario</label>
@@ -2215,24 +2299,49 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                       placeholder="Tu nombre…"
                     />
                   </div>
-                  <div>
-                    <label className="tw:block tw:text-[10px] tw:text-gray-400">IP del Anfitrión</label>
-                    <input
-                      className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
-                      value={collabHostIp}
-                      onChange={(e) => setCollabHostIp(e.target.value)}
-                      placeholder="e.g. 192.168.1.15"
-                    />
-                  </div>
-                  <div>
-                    <label className="tw:block tw:text-[10px] tw:text-gray-400">Puerto</label>
-                    <input
-                      type="number"
-                      className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
-                      value={collabPort}
-                      onChange={(e) => setCollabPort(parseInt(e.target.value, 10) || 49885)}
-                    />
-                  </div>
+                  {collabType === 'online' ? (
+                    <>
+                      <div>
+                        <label className="tw:block tw:text-[10px] tw:text-gray-400">ID de la Sala</label>
+                        <input
+                          className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:font-mono"
+                          value={collabRoomId}
+                          onChange={(e) => setCollabRoomId(e.target.value.toUpperCase())}
+                          placeholder="ID de la sala del anfitrión…"
+                        />
+                      </div>
+                      <div>
+                        <label className="tw:block tw:text-[10px] tw:text-gray-400">Servidor Relay (Opcional)</label>
+                        <input
+                          className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:font-mono tw:text-[10px]"
+                          value={collabServerUrl}
+                          onChange={(e) => setCollabServerUrl(e.target.value)}
+                          placeholder="wss://..."
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="tw:block tw:text-[10px] tw:text-gray-400">IP del Anfitrión</label>
+                        <input
+                          className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
+                          value={collabHostIp}
+                          onChange={(e) => setCollabHostIp(e.target.value)}
+                          placeholder="e.g. 192.168.1.15"
+                        />
+                      </div>
+                      <div>
+                        <label className="tw:block tw:text-[10px] tw:text-gray-400">Puerto</label>
+                        <input
+                          type="number"
+                          className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
+                          value={collabPort}
+                          onChange={(e) => setCollabPort(parseInt(e.target.value, 10) || 49885)}
+                        />
+                      </div>
+                    </>
+                  )}
                   <button
                     onClick={handleConnectCollabClient}
                     disabled={collabConnecting}
@@ -2246,11 +2355,27 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
               <div className="tw:space-y-3">
                 {/* Active Session Info */}
                 <div className="tw:flex tw:justify-between tw:items-start tw:bg-slate-50 tw:border tw:p-3 tw:rounded">
-                  <div className="tw:space-y-1">
+                  <div className="tw:space-y-1 tw:flex-1 tw:mr-2">
                     <p className="tw:font-semibold tw:text-slate-800">
-                      Sesión Activa: {collabRole === 'host' ? 'Anfitrión' : 'Invitado'}
+                      Sesión {collabType === 'online' ? 'Online' : 'Local'} Activa: {collabRole === 'host' ? 'Anfitrión' : 'Invitado'}
                     </p>
-                    {collabRole === 'host' ? (
+                    {collabType === 'online' ? (
+                      <div>
+                        <p className="tw:text-[10px] tw:text-gray-500">
+                          {collabRole === 'host'
+                            ? 'Comparte el ID de la Sala con tu equipo para que se unan:'
+                            : 'Conectado a la sala online:'}
+                        </p>
+                        <div className="tw:flex tw:items-center tw:flex-wrap tw:gap-2 tw:mt-1">
+                          <span className="tw:bg-indigo-100 tw:text-indigo-800 tw:px-2 tw:py-0.5 tw:rounded tw:text-xs tw:font-mono tw:font-bold">
+                            {collabRoomId}
+                          </span>
+                          <span className="tw:text-[9px] tw:text-gray-400 tw:font-mono">
+                            Relay: {collabServerUrl.replace(/^wss?:\/\//, '')}
+                          </span>
+                        </div>
+                      </div>
+                    ) : collabRole === 'host' ? (
                       <div>
                         <p className="tw:text-[10px] tw:text-gray-500">
                           Comparte tu IP con el equipo para que se conecten:

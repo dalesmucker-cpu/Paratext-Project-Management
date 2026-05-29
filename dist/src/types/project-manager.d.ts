@@ -109,16 +109,20 @@ declare module 'papi-shared-types' {
     'paratextProjectManager.openExternal': (url: string) => Promise<string>;
     /** Starts a collaboration host server */
     'paratextProjectManager.startCollabHost': (
-      port: number,
+      portOrRoomId: number | string,
       username: string,
       projectId: string,
+      collabType?: 'local' | 'online',
+      serverUrl?: string,
     ) => Promise<any>;
     /** Connects to a collaboration host server */
     'paratextProjectManager.connectCollabClient': (
-      ip: string,
-      port: number,
+      ipOrRoomId: string,
+      portOrNull: number | null,
       username: string,
       projectId: string,
+      collabType?: 'local' | 'online',
+      serverUrl?: string,
     ) => Promise<any>;
     /** Stops the collaboration session */
     'paratextProjectManager.stopCollab': () => Promise<string>;
