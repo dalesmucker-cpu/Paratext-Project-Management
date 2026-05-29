@@ -531,6 +531,24 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   const [selectedThreadIdInSidebar, setSelectedThreadIdInSidebar] = useState<string | null>(null);
   const pendingVerseRef = useRef<number | null>(null);
 
+  // Flash highlight state for navigated-to verse
+  const [flashVerseNum, setFlashVerseNum] = useState<number | null>(null);
+  const flashTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const triggerVerseFlash = useCallback((verseNum: number) => {
+    if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+    setFlashVerseNum(verseNum);
+    flashTimerRef.current = setTimeout(() => {
+      setFlashVerseNum(null);
+      flashTimerRef.current = null;
+    }, 1800);
+    // Scroll the verse into view after a short delay for render
+    setTimeout(() => {
+      const el = document.getElementById(`verse-${verseNum}`);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 150);
+  }, []);
+
   // Verse editing states
   const [isEditingVerse, setIsEditingVerse] = useState(false);
   const [verseEditText, setVerseEditText] = useState('');
@@ -615,6 +633,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       } else {
         setSelectedVerseNum(verse);
         setIsEditingVerse(false);
+        triggerVerseFlash(verse);
       }
 
       if (scrollGroupId !== undefined && setScrRef) {
@@ -1016,8 +1035,10 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     if (selectedBook) {
       loadChapter(selectedBook, selectedChapter);
       if (pendingVerseRef.current !== null) {
-        setSelectedVerseNum(pendingVerseRef.current);
+        const pv = pendingVerseRef.current;
+        setSelectedVerseNum(pv);
         pendingVerseRef.current = null;
+        triggerVerseFlash(pv);
       } else {
         setSelectedVerseNum(null);
       }
@@ -1701,7 +1722,11 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                         >
                           {/* Verse number tag */}
                           <sup
-                            className="tw:select-none tw:font-bold tw:mr-1 tw:px-1 tw:rounded tw:text-slate-400"
+                            className={`tw:select-none tw:font-bold tw:mr-1 tw:px-1 tw:rounded ${
+                              flashVerseNum === child.number
+                                ? 'verse-flash tw:text-white'
+                                : 'tw:text-slate-400'
+                            }`}
                             style={{ fontSize: '0.65em', top: '-0.3em' }}
                           >
                             {child.number}

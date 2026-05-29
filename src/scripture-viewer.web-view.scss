@@ -9,3 +9,24 @@ body,
   padding: 0 !important;
   overflow: hidden !important;
 }
+
+@keyframes verse-flash-pulse {
+  0% {
+    background-color: #6366f1;
+    transform: scale(1.3);
+  }
+  40% {
+    background-color: #818cf8;
+    transform: scale(1.15);
+  }
+  100% {
+    background-color: transparent;
+    transform: scale(1);
+  }
+}
+
+.verse-flash {
+  animation: verse-flash-pulse 1.6s ease-out forwards;
+  border-radius: 4px;
+  padding: 1px 4px;
+}

@@ -1182,9 +1182,6 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     ): Promise<string> => {
       lastNavigatedVerse = { projectId, bookCode, chapter, verse };
       navigateToVerseEmitter.emit({ projectId, bookCode, chapter, verse });
-      try {
-        await papi.commands.sendCommand('paratextProjectManager.openScriptureViewer', projectId);
-      } catch (_) {}
       return 'ok';
     },
   );
