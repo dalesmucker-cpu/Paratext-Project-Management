@@ -620,15 +620,23 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     return () => unsubscribe();
   }, [projectId, selectedBook, selectedChapter]);
 
+  // Keep refs of current values to avoid stale closures in scroll group sync
+  const selectedBookRef = useRef(selectedBook);
+  selectedBookRef.current = selectedBook;
+  const selectedChapterRef = useRef(selectedChapter);
+  selectedChapterRef.current = selectedChapter;
+  const selectedVerseNumRef = useRef(selectedVerseNum);
+  selectedVerseNumRef.current = selectedVerseNum;
+
   // Sync scroll group changes (from other windows) to local state
   useEffect(() => {
     if (!scrRef) return;
     const { book, chapterNum, verseNum } = scrRef;
     if (!book) return;
 
-    const bookChanged = selectedBook !== book;
-    const chapterChanged = selectedChapter !== chapterNum;
-    const verseChanged = selectedVerseNum !== verseNum;
+    const bookChanged = selectedBookRef.current !== book;
+    const chapterChanged = selectedChapterRef.current !== chapterNum;
+    const verseChanged = selectedVerseNumRef.current !== verseNum;
 
     if (bookChanged || chapterChanged) {
       pendingVerseRef.current = verseNum;
