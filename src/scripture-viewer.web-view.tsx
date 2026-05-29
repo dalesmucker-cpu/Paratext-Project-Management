@@ -616,9 +616,17 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
         setSelectedVerseNum(verse);
         setIsEditingVerse(false);
       }
+
+      if (scrollGroupId !== undefined && setScrRef) {
+        setScrRef({
+          book: bookCode,
+          chapterNum: chapter,
+          verseNum: verse,
+        });
+      }
     });
     return () => unsubscribe();
-  }, [projectId, selectedBook, selectedChapter]);
+  }, [projectId, selectedBook, selectedChapter, scrollGroupId, setScrRef]);
 
   // Keep refs of current values to avoid stale closures in scroll group sync
   const selectedBookRef = useRef(selectedBook);
@@ -649,23 +657,37 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     }
   }, [scrRef]);
 
-  // Sync local changes back to the scroll group
-  useEffect(() => {
-    if (scrollGroupId === undefined || !scrRef || !setScrRef) return;
+  // Helper to navigate to a new reference and explicitly push it to the scroll group
+  const navigateToReference = useCallback(
+    (bookCode: string, chapterNum: number, verseNum: number = 1) => {
+      setSelectedBook(bookCode);
+      setSelectedChapter(chapterNum);
+      setSelectedVerseNum(verseNum);
+      if (scrollGroupId !== undefined && setScrRef) {
+        setScrRef({
+          book: bookCode,
+          chapterNum,
+          verseNum,
+        });
+      }
+    },
+    [scrollGroupId, setScrRef],
+  );
 
-    const targetVerse = selectedVerseNum ?? 1;
-    if (
-      scrRef.book !== selectedBook ||
-      scrRef.chapterNum !== selectedChapter ||
-      scrRef.verseNum !== targetVerse
-    ) {
-      setScrRef({
-        book: selectedBook,
-        chapterNum: selectedChapter,
-        verseNum: targetVerse,
-      });
-    }
-  }, [selectedBook, selectedChapter, selectedVerseNum, scrollGroupId, scrRef, setScrRef]);
+  // Helper to select a verse locally and explicitly push it to the scroll group
+  const selectVerse = useCallback(
+    (verseNum: number | null) => {
+      setSelectedVerseNum(verseNum);
+      if (verseNum !== null && scrollGroupId !== undefined && setScrRef) {
+        setScrRef({
+          book: selectedBookRef.current,
+          chapterNum: selectedChapterRef.current,
+          verseNum,
+        });
+      }
+    },
+    [scrollGroupId, setScrRef],
+  );
 
   // Listen to collaboration events
   useEffect(() => {
@@ -860,7 +882,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
             key={index}
             onClick={(e) => {
               e.stopPropagation();
-              setSelectedVerseNum(verseNum);
+              selectVerse(verseNum);
               setNotesPopupVerseNum(verseNum);
               setSelectedThreadIdInSidebar(match.threadId);
             }}
@@ -904,6 +926,13 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
           setSelectedBook(lastNav.bookCode);
           setSelectedChapter(lastNav.chapter);
           pendingVerseRef.current = lastNav.verse;
+          if (scrollGroupId !== undefined && setScrRef) {
+            setScrRef({
+              book: lastNav.bookCode,
+              chapterNum: lastNav.chapter,
+              verseNum: lastNav.verse,
+            });
+          }
         } else if (scrRef && scrRef.book) {
           setSelectedBook(scrRef.book);
           setSelectedChapter(scrRef.chapterNum);
@@ -912,6 +941,13 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
           const defaultBook = bookList.find((b) => b.code === 'RUT') || bookList[0];
           setSelectedBook(defaultBook.code);
           setSelectedChapter(1);
+          if (scrollGroupId !== undefined && setScrRef) {
+            setScrRef({
+              book: defaultBook.code,
+              chapterNum: 1,
+              verseNum: 1,
+            });
+          }
         }
       } else {
         setError('No se encontraron libros de Escritura en este proyecto (archivos .SFM).');
@@ -922,7 +958,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, scrRef, scrollGroupId, setScrRef]);
 
   useEffect(() => {
     initData();
@@ -1330,7 +1366,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     if (selectedStr) {
       // User is selecting/has selected text. Do NOT enter edit mode.
       // Save the selection for context menu
-      setSelectedVerseNum(verseNum);
+      selectVerse(verseNum);
       setSelectedText(selectedStr);
       setIsEditingVerse(false);
 
@@ -1360,7 +1396,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       ) as HTMLElement | null;
       prevEditable?.blur();
     }
-    setSelectedVerseNum(verseNum);
+    selectVerse(verseNum);
     setIsEditingVerse(true);
     setVerseEditText(verseText);
     setSelectedText('');
@@ -1376,7 +1412,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       e.preventDefault();
       e.stopPropagation();
 
-      setSelectedVerseNum(verseNum);
+      selectVerse(verseNum);
       setSelectedText(selectedStr);
       setIsEditingVerse(false);
 
@@ -1398,7 +1434,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   };
 
   const handleNoteIndicatorClick = (verseNum: number) => {
-    setSelectedVerseNum(verseNum);
+    selectVerse(verseNum);
     setNotesPopupVerseNum(verseNum);
     setIsEditingVerse(false);
     setShowNewNoteForm(false);
@@ -1522,8 +1558,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
             <select
               value={selectedBook}
               onChange={(e) => {
-                setSelectedBook(e.target.value);
-                setSelectedChapter(1);
+                navigateToReference(e.target.value, 1, 1);
               }}
               className="tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:text-xs tw:font-semibold tw:text-slate-700 focus:tw:outline-none focus:tw:border-indigo-500"
             >
@@ -1538,14 +1573,14 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
             <div className="tw:flex tw:items-center tw:gap-1">
               <button
                 disabled={selectedChapter <= 1}
-                onClick={() => setSelectedChapter((c) => c - 1)}
+                onClick={() => navigateToReference(selectedBook, selectedChapter - 1, 1)}
                 className="tw:px-2 tw:py-1 tw:bg-slate-100 hover:tw:bg-slate-200 tw:border tw:rounded tw:text-xs tw:disabled:tw:opacity-40 tw:cursor-pointer"
               >
                 ◀
               </button>
               <select
                 value={selectedChapter}
-                onChange={(e) => setSelectedChapter(Number(e.target.value))}
+                onChange={(e) => navigateToReference(selectedBook, Number(e.target.value), 1)}
                 className="tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:text-xs tw:font-semibold tw:text-slate-700 focus:tw:outline-none focus:tw:border-indigo-500"
               >
                 {Array.from({ length: totalChapters }, (_, idx) => idx + 1).map((ch) => (
@@ -1556,7 +1591,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
               </select>
               <button
                 disabled={selectedChapter >= totalChapters}
-                onClick={() => setSelectedChapter((c) => c + 1)}
+                onClick={() => navigateToReference(selectedBook, selectedChapter + 1, 1)}
                 className="tw:px-2 tw:py-1 tw:bg-slate-100 hover:tw:bg-slate-200 tw:border tw:rounded tw:text-xs tw:disabled:tw:opacity-40 tw:cursor-pointer"
               >
                 ▶
