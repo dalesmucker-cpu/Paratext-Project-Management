@@ -2058,414 +2058,418 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         ))}
       </div>
 
-      {/* Team Members — always visible, outside scrollable area */}
-      <div className="tw:border-b tw:border-gray-200 tw:bg-white tw:no-print">
-        <button
-          className="tw:w-full tw:flex tw:items-center tw:justify-between tw:px-3 tw:py-1.5 tw:hover:bg-gray-50 tw:text-left"
-          onClick={() => setShowTeamSection((s) => !s)}
-        >
-          <span className="tw:font-semibold tw:text-xs tw:text-gray-700">
-            👥 Equipo ({teamMembers.length} miembros)
-          </span>
-          <span className="tw:text-gray-400 tw:text-xs">{showTeamSection ? '▲' : '▼'}</span>
-        </button>
-
-        {showTeamSection && (
-          <div className="tw:px-3 tw:pb-3 tw:space-y-2">
-            {/* Current members */}
-            <div className="tw:flex tw:flex-wrap tw:gap-1.5">
-              {teamMembers.map((m) => (
-                <span
-                  key={m}
-                  className="tw:inline-flex tw:items-center tw:gap-1 tw:bg-slate-100 tw:text-slate-700 tw:text-xs tw:px-2 tw:py-0.5 tw:rounded-full"
-                >
-                  {m}
-                  <button
-                    type="button"
-                    className="tw:text-slate-400 tw:hover:text-red-500 tw:leading-none tw:font-bold"
-                    title={`Quitar a ${m}`}
-                    onClick={async () => {
-                      const updated = teamMembers.filter((x) => x !== m);
-                      setTeamSaving(true);
-                      setTeamMessage('');
-                      try {
-                        await papi.commands.sendCommand(
-                          'paratextProjectManager.setTeamMembers',
-                          JSON.stringify(updated),
-                        );
-                        setTeamMembers(updated);
-                        setTeamMessage('Guardado ✓');
-                        setTimeout(() => setTeamMessage(''), 3000);
-                      } catch (e) {
-                        setTeamMessage(`Error: ${e}`);
-                      } finally {
-                        setTeamSaving(false);
-                      }
-                    }}
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
-            </div>
-            {/* Add new member */}
-            <form
-              className="tw:flex tw:gap-2"
-              onSubmit={async (e) => {
-                e.preventDefault();
-                const name = teamInput.trim();
-                if (!name || teamMembers.includes(name)) return;
-                const updated = [...teamMembers, name];
-                setTeamSaving(true);
-                setTeamMessage('');
-                try {
-                  await papi.commands.sendCommand(
-                    'paratextProjectManager.setTeamMembers',
-                    JSON.stringify(updated),
-                  );
-                  setTeamMembers(updated);
-                  setTeamInput('');
-                  setTeamMessage('Guardado ✓');
-                  setTimeout(() => setTeamMessage(''), 3000);
-                } catch (e) {
-                  setTeamMessage(`Error: ${e}`);
-                } finally {
-                  setTeamSaving(false);
-                }
-              }}
-            >
-              <input
-                className="tw:flex-1 tw:border tw:rounded tw:px-2 tw:py-1 tw:text-xs"
-                placeholder="Nombre del nuevo miembro…"
-                value={teamInput}
-                onChange={(e) => setTeamInput(e.target.value)}
-                disabled={teamSaving}
-              />
-              <button
-                type="submit"
-                className="tw:px-3 tw:py-1 tw:bg-slate-600 tw:text-white tw:text-xs tw:rounded tw:hover:bg-slate-700 tw:disabled:opacity-50"
-                disabled={teamSaving || !teamInput.trim()}
-              >
-                + Agregar
-              </button>
-            </form>
-            {teamMessage && (
-              <p
-                className={`tw:text-xs ${teamMessage.startsWith('tw:Error') ? 'tw:text-red-600' : 'tw:text-green-600'}`}
-              >
-                {teamMessage}
-              </p>
-            )}
-            <p className="tw:text-xs tw:text-gray-400">
-              Los cambios se reflejan en el Tablero y Mis Tareas al recargar esos paneles.
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* Collaboration — always visible, outside scrollable area */}
-      <div className="tw:border-b tw:border-gray-200 tw:bg-white tw:no-print">
-        <button
-          className="tw:w-full tw:flex tw:items-center tw:justify-between tw:px-3 tw:py-1.5 tw:hover:bg-gray-50 tw:text-left"
-          onClick={() => setShowCollabSection((s) => !s)}
-        >
-          <span className="tw:font-semibold tw:text-xs tw:text-gray-700 tw:flex tw:items-center tw:gap-1.5">
-            🌐 Colaboración en Red Local (LAN)
-            {collabRole !== 'none' && (
-              <span className="tw:w-2 tw:h-2 tw:rounded-full tw:bg-green-500 tw:animate-pulse" />
-            )}
-          </span>
-          <span className="tw:text-gray-400 tw:text-xs">{showCollabSection ? '▲' : '▼'}</span>
-        </button>
-
-        {showCollabSection && (
-          <div className="tw:px-3 tw:pb-3 tw:space-y-3 tw:text-xs">
-            {collabStatusMsg && (
-              <div className="tw:bg-green-50 tw:border tw:border-green-200 tw:text-green-700 tw:p-2 tw:rounded">
-                {collabStatusMsg}
-              </div>
-            )}
-            {collabErrorMsg && (
-              <div className="tw:bg-red-50 tw:border tw:border-red-200 tw:text-red-700 tw:p-2 tw:rounded">
-                {collabErrorMsg}
-              </div>
-            )}
-
-            {collabRole === 'none' && (
-              <div className="tw:flex tw:border tw:rounded tw:overflow-hidden tw:bg-white">
-                <button
-                  type="button"
-                  onClick={() => setCollabType('local')}
-                  className={`tw:flex-1 tw:py-1.5 tw:text-[10px] tw:font-semibold tw:transition-colors ${
-                    collabType === 'local'
-                      ? 'tw:bg-slate-600 tw:text-white'
-                      : 'tw:bg-white tw:text-slate-600 hover:tw:bg-slate-50'
-                  }`}
-                >
-                  🌐 Red Local (LAN)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCollabType('online')}
-                  className={`tw:flex-1 tw:py-1.5 tw:text-[10px] tw:font-semibold tw:transition-colors ${
-                    collabType === 'online'
-                      ? 'tw:bg-slate-600 tw:text-white'
-                      : 'tw:bg-white tw:text-slate-600 hover:tw:bg-slate-50'
-                  }`}
-                >
-                  ☁️ En Línea (Internet)
-                </button>
-              </div>
-            )}
-
-            {collabRole === 'none' ? (
-              <div className="tw:grid tw:grid-cols-1 md:tw:grid-cols-2 tw:gap-4 tw:border tw:p-3 tw:rounded tw:bg-gray-50">
-                {/* Host Mode */}
-                <div className="tw:space-y-2">
-                  <h4 className="tw:font-semibold tw:text-slate-800">
-                    Modo Anfitrión (Host) {collabType === 'online' ? 'Online' : ''}
-                  </h4>
-                  <p className="tw:text-[10px] tw:text-gray-500">
-                    {collabType === 'online'
-                      ? 'Inicia una sala online en internet para que tu equipo se conecte desde cualquier lugar.'
-                      : 'Inicia un servidor local para que otros se conecten a tu proyecto a través de la red local.'}
-                  </p>
-                  <div>
-                    <label className="tw:block tw:text-[10px] tw:text-gray-400">Nombre de Usuario</label>
-                    <input
-                      className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
-                      value={collabUsername}
-                      onChange={(e) => setCollabUsername(e.target.value)}
-                      placeholder="Tu nombre…"
-                    />
-                  </div>
-                  {collabType === 'online' ? (
-                    <>
-                      <div>
-                        <label className="tw:block tw:text-[10px] tw:text-gray-400">ID de la Sala</label>
-                        <input
-                          className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:font-mono"
-                          value={collabRoomId}
-                          onChange={(e) => setCollabRoomId(e.target.value.toUpperCase())}
-                          placeholder="e.g. MI-SALA-12"
-                        />
-                      </div>
-                      <div>
-                        <label className="tw:block tw:text-[10px] tw:text-gray-400">Servidor Relay (Opcional)</label>
-                        <input
-                          className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:font-mono tw:text-[10px]"
-                          value={collabServerUrl}
-                          onChange={(e) => setCollabServerUrl(e.target.value)}
-                          placeholder="wss://..."
-                        />
-                      </div>
-                    </>
-                  ) : (
-                    <div>
-                      <label className="tw:block tw:text-[10px] tw:text-gray-400">Puerto (Opcional)</label>
-                      <input
-                        type="number"
-                        className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
-                        value={collabPort}
-                        onChange={(e) => setCollabPort(parseInt(e.target.value, 10) || 49885)}
-                      />
-                    </div>
-                  )}
-                  <button
-                    onClick={handleStartCollabHost}
-                    disabled={collabConnecting}
-                    className="tw:w-full tw:py-1.5 tw:bg-slate-600 hover:tw:bg-slate-700 tw:text-white tw:rounded tw:font-semibold disabled:tw:opacity-50"
-                  >
-                    {collabConnecting ? 'Iniciando...' : 'Iniciar Colaboración'}
-                  </button>
-                </div>
-
-                {/* Client Mode */}
-                <div className="tw:space-y-2 tw:border-t md:tw:border-t-0 md:tw:border-l tw:pt-3 md:tw:pt-0 md:tw:pl-4">
-                  <h4 className="tw:font-semibold tw:text-slate-800">
-                    Modo Invitado (Cliente) {collabType === 'online' ? 'Online' : ''}
-                  </h4>
-                  <p className="tw:text-[10px] tw:text-gray-500">
-                    {collabType === 'online'
-                      ? 'Conéctate a una sala online existente compartida por un anfitrión.'
-                      : 'Conéctate al servidor de un anfitrión local para sincronizar en tiempo real.'}
-                  </p>
-                  <div>
-                    <label className="tw:block tw:text-[10px] tw:text-gray-400">Nombre de Usuario</label>
-                    <input
-                      className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
-                      value={collabUsername}
-                      onChange={(e) => setCollabUsername(e.target.value)}
-                      placeholder="Tu nombre…"
-                    />
-                  </div>
-                  {collabType === 'online' ? (
-                    <>
-                      <div>
-                        <label className="tw:block tw:text-[10px] tw:text-gray-400">ID de la Sala</label>
-                        <input
-                          className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:font-mono"
-                          value={collabRoomId}
-                          onChange={(e) => setCollabRoomId(e.target.value.toUpperCase())}
-                          placeholder="ID de la sala del anfitrión…"
-                        />
-                      </div>
-                      <div>
-                        <label className="tw:block tw:text-[10px] tw:text-gray-400">Servidor Relay (Opcional)</label>
-                        <input
-                          className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:font-mono tw:text-[10px]"
-                          value={collabServerUrl}
-                          onChange={(e) => setCollabServerUrl(e.target.value)}
-                          placeholder="wss://..."
-                        />
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div>
-                        <label className="tw:block tw:text-[10px] tw:text-gray-400">IP del Anfitrión</label>
-                        <input
-                          className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
-                          value={collabHostIp}
-                          onChange={(e) => setCollabHostIp(e.target.value)}
-                          placeholder="e.g. 192.168.1.15"
-                        />
-                      </div>
-                      <div>
-                        <label className="tw:block tw:text-[10px] tw:text-gray-400">Puerto</label>
-                        <input
-                          type="number"
-                          className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
-                          value={collabPort}
-                          onChange={(e) => setCollabPort(parseInt(e.target.value, 10) || 49885)}
-                        />
-                      </div>
-                    </>
-                  )}
-                  <button
-                    onClick={handleConnectCollabClient}
-                    disabled={collabConnecting}
-                    className="tw:w-full tw:py-1.5 tw:bg-indigo-600 hover:tw:bg-indigo-700 tw:text-white tw:rounded tw:font-semibold disabled:tw:opacity-50"
-                  >
-                    {collabConnecting ? 'Conectando...' : 'Conectarse'}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="tw:space-y-3">
-                {/* Active Session Info */}
-                <div className="tw:flex tw:justify-between tw:items-start tw:bg-slate-50 tw:border tw:p-3 tw:rounded">
-                  <div className="tw:space-y-1 tw:flex-1 tw:mr-2">
-                    <p className="tw:font-semibold tw:text-slate-800">
-                      Sesión {collabType === 'online' ? 'Online' : 'Local'} Activa: {collabRole === 'host' ? 'Anfitrión' : 'Invitado'}
-                    </p>
-                    {collabType === 'online' ? (
-                      <div>
-                        <p className="tw:text-[10px] tw:text-gray-500">
-                          {collabRole === 'host'
-                            ? 'Comparte el ID de la Sala con tu equipo para que se unan:'
-                            : 'Conectado a la sala online:'}
-                        </p>
-                        <div className="tw:flex tw:items-center tw:flex-wrap tw:gap-2 tw:mt-1">
-                          <span className="tw:bg-indigo-100 tw:text-indigo-800 tw:px-2 tw:py-0.5 tw:rounded tw:text-xs tw:font-mono tw:font-bold">
-                            {collabRoomId}
-                          </span>
-                          <span className="tw:text-[9px] tw:text-gray-400 tw:font-mono">
-                            Relay: {collabServerUrl.replace(/^wss?:\/\//, '')}
-                          </span>
-                        </div>
-                      </div>
-                    ) : collabRole === 'host' ? (
-                      <div>
-                        <p className="tw:text-[10px] tw:text-gray-500">
-                          Comparte tu IP con el equipo para que se conecten:
-                        </p>
-                        <div className="tw:flex tw:flex-wrap tw:gap-1 tw:mt-1">
-                          {collabIps.map((ip) => (
-                            <span key={ip} className="tw:bg-slate-200 tw:text-slate-700 tw:px-1.5 tw:py-0.5 tw:rounded tw:text-[10px] tw:font-mono">
-                              {ip}:{collabPort}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="tw:text-[10px] tw:text-gray-500">
-                        Conectado a: <span className="tw:font-mono">{collabHostIp}:{collabPort}</span>
-                      </p>
-                    )}
-                    <div className="tw:pt-1">
-                      <span className="tw:text-[10px] tw:text-gray-400">Usuarios en línea:</span>
-                      <div className="tw:flex tw:flex-wrap tw:gap-1.5 tw:mt-1">
-                        {collabActiveUsers.map((user) => (
-                          <span key={user} className="tw:inline-flex tw:items-center tw:gap-1 tw:bg-green-50 tw:border tw:border-green-100 tw:text-green-800 tw:text-[10px] tw:px-2 tw:py-0.5 tw:rounded-full">
-                            <span className="tw:w-1.5 tw:h-1.5 tw:rounded-full tw:bg-green-500" />
-                            {user}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    onClick={handleStopCollab}
-                    className="tw:px-3 tw:py-1 tw:bg-red-600 hover:tw:bg-red-700 tw:text-white tw:rounded tw:font-semibold"
-                  >
-                    Salir
-                  </button>
-                </div>
-
-                {/* Group Chat */}
-                <div className="tw:border tw:rounded tw:bg-white">
-                  <div className="tw:bg-slate-50 tw:border-b tw:px-2 tw:py-1.5 tw:font-semibold tw:text-slate-700">
-                    💬 Chat de Coordinación
-                  </div>
-                  <div className="tw:h-32 tw:overflow-y-auto tw:p-2 tw:space-y-1.5 tw:bg-slate-50/50">
-                    {collabChatMessages.length === 0 ? (
-                      <p className="tw:text-gray-400 tw:italic tw:text-center tw:pt-8 tw:text-[10px]">
-                        No hay mensajes. Envía un mensaje para coordinar con el equipo.
-                      </p>
-                    ) : (
-                      collabChatMessages.map((msg, idx) => (
-                        <div key={idx} className="tw:text-[11px] tw:bg-white tw:p-1.5 tw:rounded tw:border tw:shadow-sm">
-                          <div className="tw:flex tw:justify-between tw:mb-0.5">
-                            <span className="tw:font-bold tw:text-slate-700">{msg.user}</span>
-                            <span className="tw:text-[9px] tw:text-gray-400">
-                              {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          </div>
-                          <p className="tw:text-gray-600">{msg.message}</p>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                  <form onSubmit={handleSendChat} className="tw:flex tw:border-t">
-                    <input
-                      className="tw:flex-1 tw:px-2 tw:py-1.5 tw:text-xs tw:outline-none"
-                      placeholder="Escribe un mensaje para el equipo…"
-                      value={chatInput}
-                      onChange={(e) => setChatInput(e.target.value)}
-                    />
-                    <button
-                      type="submit"
-                      disabled={!chatInput.trim()}
-                      className="tw:px-3 tw:py-1.5 tw:bg-indigo-600 hover:tw:bg-indigo-700 tw:text-white tw:font-semibold disabled:tw:opacity-50"
-                    >
-                      Enviar
-                    </button>
-                  </form>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-
       {loading ? (
         <div className="tw:flex tw:items-center tw:justify-center tw:flex-1 tw:text-gray-400">
           Cargando…
         </div>
       ) : currentTab === 'summary' ? (
-        <div className="tw:flex-1 tw:overflow-auto tw:p-2">
+        <div className="tw:flex-1 tw:overflow-auto tw:p-3 tw:space-y-3">
+          {/* Team Members */}
+          <div className="tw:border tw:border-gray-200 tw:rounded-lg tw:bg-white tw:no-print">
+            <button
+              type="button"
+              className="tw:w-full tw:flex tw:items-center tw:justify-between tw:px-3 tw:py-1.5 tw:hover:bg-gray-50 tw:text-left tw:rounded-t-lg"
+              onClick={() => setShowTeamSection((s) => !s)}
+            >
+              <span className="tw:font-semibold tw:text-xs tw:text-gray-700">
+                👥 Equipo ({teamMembers.length} miembros)
+              </span>
+              <span className="tw:text-gray-400 tw:text-xs">{showTeamSection ? '▲' : '▼'}</span>
+            </button>
+
+            {showTeamSection && (
+              <div className="tw:px-3 tw:pb-3 tw:pt-2 tw:space-y-2">
+                {/* Current members */}
+                <div className="tw:flex tw:flex-wrap tw:gap-1.5">
+                  {teamMembers.map((m) => (
+                    <span
+                      key={m}
+                      className="tw:inline-flex tw:items-center tw:gap-1 tw:bg-slate-100 tw:text-slate-700 tw:text-xs tw:px-2 tw:py-0.5 tw:rounded-full"
+                    >
+                      {m}
+                      <button
+                        type="button"
+                        className="tw:text-slate-400 tw:hover:text-red-500 tw:leading-none tw:font-bold"
+                        title={`Quitar a ${m}`}
+                        onClick={async () => {
+                          const updated = teamMembers.filter((x) => x !== m);
+                          setTeamSaving(true);
+                          setTeamMessage('');
+                          try {
+                            await papi.commands.sendCommand(
+                              'paratextProjectManager.setTeamMembers',
+                              JSON.stringify(updated),
+                            );
+                            setTeamMembers(updated);
+                            setTeamMessage('Guardado ✓');
+                            setTimeout(() => setTeamMessage(''), 3000);
+                          } catch (e) {
+                            setTeamMessage(`Error: ${e}`);
+                          } finally {
+                            setTeamSaving(false);
+                          }
+                        }}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                {/* Add new member */}
+                <form
+                  className="tw:flex tw:gap-2"
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    const name = teamInput.trim();
+                    if (!name || teamMembers.includes(name)) return;
+                    const updated = [...teamMembers, name];
+                    setTeamSaving(true);
+                    setTeamMessage('');
+                    try {
+                      await papi.commands.sendCommand(
+                        'paratextProjectManager.setTeamMembers',
+                        JSON.stringify(updated),
+                      );
+                      setTeamMembers(updated);
+                      setTeamInput('');
+                      setTeamMessage('Guardado ✓');
+                      setTimeout(() => setTeamMessage(''), 3000);
+                    } catch (e) {
+                      setTeamMessage(`Error: ${e}`);
+                    } finally {
+                      setTeamSaving(false);
+                    }
+                  }}
+                >
+                  <input
+                    className="tw:flex-1 tw:border tw:rounded tw:px-2 tw:py-1 tw:text-xs"
+                    placeholder="Nombre del nuevo miembro…"
+                    value={teamInput}
+                    onChange={(e) => setTeamInput(e.target.value)}
+                    disabled={teamSaving}
+                  />
+                  <button
+                    type="submit"
+                    className="tw:px-3 tw:py-1 tw:bg-slate-600 tw:text-white tw:text-xs tw:rounded tw:hover:bg-slate-700 tw:disabled:opacity-50"
+                    disabled={teamSaving || !teamInput.trim()}
+                  >
+                    + Agregar
+                  </button>
+                </form>
+                {teamMessage && (
+                  <p
+                    className={`tw:text-xs ${teamMessage.startsWith('tw:Error') ? 'tw:text-red-600' : 'tw:text-green-600'}`}
+                  >
+                    {teamMessage}
+                  </p>
+                )}
+                <p className="tw:text-xs tw:text-gray-400">
+                  Los cambios se reflejan en el Tablero y Mis Tareas al recargar esos paneles.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Collaboration */}
+          <div className="tw:border tw:border-gray-200 tw:rounded-lg tw:bg-white tw:no-print">
+            <button
+              type="button"
+              className="tw:w-full tw:flex tw:items-center tw:justify-between tw:px-3 tw:py-1.5 tw:hover:bg-gray-50 tw:text-left tw:rounded-t-lg"
+              onClick={() => setShowCollabSection((s) => !s)}
+            >
+              <span className="tw:font-semibold tw:text-xs tw:text-gray-700 tw:flex tw:items-center tw:gap-1.5">
+                🌐 Colaboración en Tiempo Real
+                {collabRole !== 'none' && (
+                  <span className="tw:w-2 tw:h-2 tw:rounded-full tw:bg-green-500 tw:animate-pulse" />
+                )}
+              </span>
+              <span className="tw:text-gray-400 tw:text-xs">{showCollabSection ? '▲' : '▼'}</span>
+            </button>
+
+            {showCollabSection && (
+              <div className="tw:px-3 tw:pb-3 tw:pt-2 tw:space-y-3 tw:text-xs">
+                {collabStatusMsg && (
+                  <div className="tw:bg-green-50 tw:border tw:border-green-200 tw:text-green-700 tw:p-2 tw:rounded">
+                    {collabStatusMsg}
+                  </div>
+                )}
+                {collabErrorMsg && (
+                  <div className="tw:bg-red-50 tw:border tw:border-red-200 tw:text-red-700 tw:p-2 tw:rounded">
+                    {collabErrorMsg}
+                  </div>
+                )}
+
+                {collabRole === 'none' && (
+                  <div className="tw:flex tw:border tw:rounded tw:overflow-hidden tw:bg-white">
+                    <button
+                      type="button"
+                      onClick={() => setCollabType('local')}
+                      className={`tw:flex-1 tw:py-1.5 tw:text-[10px] tw:font-semibold tw:transition-colors ${
+                        collabType === 'local'
+                          ? 'tw:bg-slate-600 tw:text-white'
+                          : 'tw:bg-white tw:text-slate-600 hover:tw:bg-slate-50'
+                      }`}
+                    >
+                      🌐 Red Local (LAN)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCollabType('online')}
+                      className={`tw:flex-1 tw:py-1.5 tw:text-[10px] tw:font-semibold tw:transition-colors ${
+                        collabType === 'online'
+                          ? 'tw:bg-slate-600 tw:text-white'
+                          : 'tw:bg-white tw:text-slate-600 hover:tw:bg-slate-50'
+                      }`}
+                    >
+                      ☁️ En Línea (Internet)
+                    </button>
+                  </div>
+                )}
+
+                {collabRole === 'none' ? (
+                  <div className="tw:grid tw:grid-cols-1 md:tw:grid-cols-2 tw:gap-4 tw:border tw:p-3 tw:rounded tw:bg-gray-50">
+                    {/* Host Mode */}
+                    <div className="tw:space-y-2">
+                      <h4 className="tw:font-semibold tw:text-slate-800">
+                        Modo Anfitrión (Host) {collabType === 'online' ? 'Online' : ''}
+                      </h4>
+                      <p className="tw:text-[10px] tw:text-gray-500">
+                        {collabType === 'online'
+                          ? 'Inicia una sala online en internet para que tu equipo se conecte desde cualquier lugar.'
+                          : 'Inicia un servidor local para que otros se conecten a tu proyecto a través de la red local.'}
+                      </p>
+                      <div>
+                        <label className="tw:block tw:text-[10px] tw:text-gray-400">Nombre de Usuario</label>
+                        <input
+                          className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
+                          value={collabUsername}
+                          onChange={(e) => setCollabUsername(e.target.value)}
+                          placeholder="Tu nombre…"
+                        />
+                      </div>
+                      {collabType === 'online' ? (
+                        <>
+                          <div>
+                            <label className="tw:block tw:text-[10px] tw:text-gray-400">ID de la Sala</label>
+                            <input
+                              className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:font-mono"
+                              value={collabRoomId}
+                              onChange={(e) => setCollabRoomId(e.target.value.toUpperCase())}
+                              placeholder="e.g. MI-SALA-12"
+                            />
+                          </div>
+                          <div>
+                            <label className="tw:block tw:text-[10px] tw:text-gray-400">Servidor Relay (Opcional)</label>
+                            <input
+                              className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:font-mono tw:text-[10px]"
+                              value={collabServerUrl}
+                              onChange={(e) => setCollabServerUrl(e.target.value)}
+                              placeholder="wss://..."
+                            />
+                          </div>
+                        </>
+                      ) : (
+                        <div>
+                          <label className="tw:block tw:text-[10px] tw:text-gray-400">Puerto (Opcional)</label>
+                          <input
+                            type="number"
+                            className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
+                            value={collabPort}
+                            onChange={(e) => setCollabPort(parseInt(e.target.value, 10) || 49885)}
+                          />
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={handleStartCollabHost}
+                        disabled={collabConnecting}
+                        className="tw:w-full tw:py-1.5 tw:bg-slate-600 hover:tw:bg-slate-700 tw:text-white tw:rounded tw:font-semibold disabled:tw:opacity-50"
+                      >
+                        {collabConnecting ? 'Iniciando...' : 'Iniciar Colaboración'}
+                      </button>
+                    </div>
+
+                    {/* Client Mode */}
+                    <div className="tw:space-y-2 tw:border-t md:tw:border-t-0 md:tw:border-l tw:pt-3 md:tw:pt-0 md:tw:pl-4">
+                      <h4 className="tw:font-semibold tw:text-slate-800">
+                        Modo Invitado (Cliente) {collabType === 'online' ? 'Online' : ''}
+                      </h4>
+                      <p className="tw:text-[10px] tw:text-gray-500">
+                        {collabType === 'online'
+                          ? 'Conéctate a una sala online existente compartida por un anfitrión.'
+                          : 'Conéctate al servidor de un anfitrión local para sincronizar en tiempo real.'}
+                      </p>
+                      <div>
+                        <label className="tw:block tw:text-[10px] tw:text-gray-400">Nombre de Usuario</label>
+                        <input
+                          className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
+                          value={collabUsername}
+                          onChange={(e) => setCollabUsername(e.target.value)}
+                          placeholder="Tu nombre…"
+                        />
+                      </div>
+                      {collabType === 'online' ? (
+                        <>
+                          <div>
+                            <label className="tw:block tw:text-[10px] tw:text-gray-400">ID de la Sala</label>
+                            <input
+                              className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:font-mono"
+                              value={collabRoomId}
+                              onChange={(e) => setCollabRoomId(e.target.value.toUpperCase())}
+                              placeholder="ID de la sala del anfitrión…"
+                            />
+                          </div>
+                          <div>
+                            <label className="tw:block tw:text-[10px] tw:text-gray-400">Servidor Relay (Opcional)</label>
+                            <input
+                              className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:font-mono tw:text-[10px]"
+                              value={collabServerUrl}
+                              onChange={(e) => setCollabServerUrl(e.target.value)}
+                              placeholder="wss://..."
+                            />
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div>
+                            <label className="tw:block tw:text-[10px] tw:text-gray-400">IP del Anfitrión</label>
+                            <input
+                              className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
+                              value={collabHostIp}
+                              onChange={(e) => setCollabHostIp(e.target.value)}
+                              placeholder="e.g. 192.168.1.15"
+                            />
+                          </div>
+                          <div>
+                            <label className="tw:block tw:text-[10px] tw:text-gray-400">Puerto</label>
+                            <input
+                              type="number"
+                              className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
+                              value={collabPort}
+                              onChange={(e) => setCollabPort(parseInt(e.target.value, 10) || 49885)}
+                            />
+                          </div>
+                        </>
+                      )}
+                      <button
+                        type="button"
+                        onClick={handleConnectCollabClient}
+                        disabled={collabConnecting}
+                        className="tw:w-full tw:py-1.5 tw:bg-indigo-600 hover:tw:bg-indigo-700 tw:text-white tw:rounded tw:font-semibold disabled:tw:opacity-50"
+                      >
+                        {collabConnecting ? 'Conectando...' : 'Conectarse'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="tw:space-y-3">
+                    {/* Active Session Info */}
+                    <div className="tw:flex tw:justify-between tw:items-start tw:bg-slate-50 tw:border tw:p-3 tw:rounded">
+                      <div className="tw:space-y-1 tw:flex-1 tw:mr-2">
+                        <p className="tw:font-semibold tw:text-slate-800">
+                          Sesión {collabType === 'online' ? 'Online' : 'Local'} Activa: {collabRole === 'host' ? 'Anfitrión' : 'Invitado'}
+                        </p>
+                        {collabType === 'online' ? (
+                          <div>
+                            <p className="tw:text-[10px] tw:text-gray-500">
+                              {collabRole === 'host'
+                                ? 'Comparte el ID de la Sala con tu equipo para que se unan:'
+                                : 'Conectado a la sala online:'}
+                            </p>
+                            <div className="tw:flex tw:items-center tw:flex-wrap tw:gap-2 tw:mt-1">
+                              <span className="tw:bg-indigo-100 tw:text-indigo-800 tw:px-2 tw:py-0.5 tw:rounded tw:text-xs tw:font-mono tw:font-bold">
+                                {collabRoomId}
+                              </span>
+                              <span className="tw:text-[9px] tw:text-gray-400 tw:font-mono">
+                                Relay: {collabServerUrl.replace(/^wss?:\/\//, '')}
+                              </span>
+                            </div>
+                          </div>
+                        ) : collabRole === 'host' ? (
+                          <div>
+                            <p className="tw:text-[10px] tw:text-gray-500">
+                              Comparte tu IP con el equipo para que se conecten:
+                            </p>
+                            <div className="tw:flex tw:flex-wrap tw:gap-1 tw:mt-1">
+                              {collabIps.map((ip) => (
+                                <span key={ip} className="tw:bg-slate-200 tw:text-slate-700 tw:px-1.5 tw:py-0.5 tw:rounded tw:text-[10px] tw:font-mono">
+                                  {ip}:{collabPort}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="tw:text-[10px] tw:text-gray-500">
+                            Conectado a: <span className="tw:font-mono">{collabHostIp}:{collabPort}</span>
+                          </p>
+                        )}
+                        <div className="tw:pt-1">
+                          <span className="tw:text-[10px] tw:text-gray-400">Usuarios en línea:</span>
+                          <div className="tw:flex tw:flex-wrap tw:gap-1.5 tw:mt-1">
+                            {collabActiveUsers.map((user) => (
+                              <span key={user} className="tw:inline-flex tw:items-center tw:gap-1 tw:bg-green-50 tw:border tw:border-green-100 tw:text-green-800 tw:text-[10px] tw:px-2 tw:py-0.5 tw:rounded-full">
+                                <span className="tw:w-1.5 tw:h-1.5 tw:rounded-full tw:bg-green-500" />
+                                {user}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleStopCollab}
+                        className="tw:px-3 tw:py-1 tw:bg-red-600 hover:tw:bg-red-700 tw:text-white tw:rounded tw:font-semibold"
+                      >
+                        Salir
+                      </button>
+                    </div>
+
+                    {/* Group Chat */}
+                    <div className="tw:border tw:rounded tw:bg-white">
+                      <div className="tw:bg-slate-50 tw:border-b tw:px-2 tw:py-1.5 tw:font-semibold tw:text-slate-700">
+                        💬 Chat de Coordinación
+                      </div>
+                      <div className="tw:h-32 tw:overflow-y-auto tw:p-2 tw:space-y-1.5 tw:bg-slate-50/50">
+                        {collabChatMessages.length === 0 ? (
+                          <p className="tw:text-gray-400 tw:italic tw:text-center tw:pt-8 tw:text-[10px]">
+                            No hay mensajes. Envía un mensaje para coordinar con el equipo.
+                          </p>
+                        ) : (
+                          collabChatMessages.map((msg, idx) => (
+                            <div key={idx} className="tw:text-[11px] tw:bg-white tw:p-1.5 tw:rounded tw:border tw:shadow-sm">
+                              <div className="tw:flex tw:justify-between tw:mb-0.5">
+                                <span className="tw:font-bold tw:text-slate-700">{msg.user}</span>
+                                <span className="tw:text-[9px] tw:text-gray-400">
+                                  {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              </div>
+                              <p className="tw:text-gray-600">{msg.message}</p>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                      <form onSubmit={handleSendChat} className="tw:flex tw:border-t">
+                        <input
+                          className="tw:flex-1 tw:px-2 tw:py-1.5 tw:text-xs tw:outline-none"
+                          placeholder="Escribe un mensaje para el equipo…"
+                          value={chatInput}
+                          onChange={(e) => setChatInput(e.target.value)}
+                        />
+                        <button
+                          type="submit"
+                          disabled={!chatInput.trim()}
+                          className="tw:px-3 tw:py-1.5 tw:bg-indigo-600 hover:tw:bg-indigo-700 tw:text-white tw:font-semibold disabled:tw:opacity-50"
+                        >
+                          Enviar
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {totalTasks === 0 ? (
             <div className="tw:flex tw:items-center tw:justify-center tw:py-8 tw:text-gray-400">
               No hay tareas creadas todavía. Abre el Tablero de Tareas para crear tareas.
