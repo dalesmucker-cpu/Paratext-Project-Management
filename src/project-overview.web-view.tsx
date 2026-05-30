@@ -988,11 +988,22 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
     setCollabConnecting(true);
     setCollabErrorMsg('');
     setCollabStatusMsg('');
+    let finalIp = collabHostIp.trim();
+    let finalPort = collabPort;
+    if (collabType === 'local' && finalIp.includes(':')) {
+      const parts = finalIp.split(':');
+      finalIp = parts[0].trim();
+      const parsedPort = parseInt(parts[1].trim(), 10);
+      if (!isNaN(parsedPort)) {
+        finalPort = parsedPort;
+      }
+    }
+
     try {
       const res: any = await papi.commands.sendCommand(
         'paratextProjectManager.connectCollabClient',
-        collabType === 'online' ? collabRoomId.trim() : collabHostIp.trim(),
-        collabType === 'online' ? null : collabPort,
+        collabType === 'online' ? collabRoomId.trim() : finalIp,
+        collabType === 'online' ? null : finalPort,
         collabUsername.trim(),
         projectId,
         collabType,
