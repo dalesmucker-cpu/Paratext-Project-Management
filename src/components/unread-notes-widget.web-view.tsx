@@ -155,7 +155,7 @@ function AttachmentViewer({ projectId, filename }: { projectId: string; filename
               alt={filename}
               className="tw:max-h-40 tw:w-auto tw:object-cover tw:max-w-full"
             />
-            <div className="tw:absolute tw:inset-0 tw:bg-black/10 tw:opacity-0 tw:group-hover:tw:opacity-100 tw:transition tw:flex tw:items-center tw:justify-center tw:text-white tw:text-[10px] tw:font-semibold tw:backdrop-blur-[1px]">
+            <div className="tw:absolute tw:inset-0 tw:bg-black/10 tw:opacity-0 tw:group-tw:hover:opacity-100 tw:transition tw:flex tw:items-center tw:justify-center tw:text-white tw:text-[10px] tw:font-semibold tw:backdrop-blur-[1px]">
               🔎 Abrir archivo
             </div>
           </div>
@@ -169,16 +169,16 @@ function AttachmentViewer({ projectId, filename }: { projectId: string; filename
   let cardColor = 'tw:bg-slate-50 tw:border-slate-200 tw:hover:bg-slate-100';
   if (ext === 'pdf') {
     fileIcon = '📕';
-    cardColor = 'tw:bg-red-50/50 tw:border-red-200 tw:hover:tw:bg-red-50';
+    cardColor = 'tw:bg-red-50/50 tw:border-red-200 tw:hover:bg-red-50';
   } else if (['doc', 'docx'].includes(ext)) {
     fileIcon = '📘';
-    cardColor = 'tw:bg-blue-50/50 tw:border-blue-200 tw:hover:tw:bg-blue-50';
+    cardColor = 'tw:bg-blue-50/50 tw:border-blue-200 tw:hover:bg-blue-50';
   } else if (['xls', 'xlsx'].includes(ext)) {
     fileIcon = '📗';
-    cardColor = 'tw:bg-emerald-50/50 tw:border-emerald-200 tw:hover:tw:bg-emerald-55';
+    cardColor = 'tw:bg-emerald-50/50 tw:border-emerald-200 tw:hover:bg-emerald-55';
   } else if (ext === 'txt') {
     fileIcon = '📝';
-    cardColor = 'tw:bg-amber-50/50 tw:border-amber-200 tw:hover:tw:bg-amber-50';
+    cardColor = 'tw:bg-amber-50/50 tw:border-amber-200 tw:hover:bg-amber-50';
   }
 
   // Remove the timestamp prefix att_12345678_ from the displayed name
@@ -200,7 +200,7 @@ function AttachmentViewer({ projectId, filename }: { projectId: string; filename
       <button
         type="button"
         onClick={handleOpen}
-        className="tw:px-2.5 tw:py-1 tw:bg-white tw:hover:tw:bg-slate-50 tw:border tw:border-slate-300 tw:rounded tw:text-[10px] tw:font-semibold tw:text-slate-700 tw:shadow-sm tw:transition tw:whitespace-nowrap tw:cursor-pointer"
+        className="tw:px-2.5 tw:py-1 tw:bg-white tw:hover:bg-slate-50 tw:border tw:border-slate-300 tw:rounded tw:text-[10px] tw:font-semibold tw:text-slate-700 tw:shadow-sm tw:transition tw:whitespace-nowrap tw:cursor-pointer"
       >
         Abrir
       </button>
@@ -820,21 +820,21 @@ export default function UnreadNotesWidget({
         <div className="tw:flex tw:gap-2">
           <button
             onClick={toggleExpand}
-            className="tw:p-1 tw:rounded tw:hover:tw:bg-slate-200 tw:transition-colors tw:text-xs tw:font-medium tw:cursor-pointer"
+            className="tw:p-1 tw:rounded tw:hover:bg-slate-200 tw:transition-colors tw:text-xs tw:font-medium tw:cursor-pointer"
             title={isExpanded ? 'Contraer vista' : 'Expandir vista'}
           >
             {isExpanded ? '🔍 Contraer' : '🔍 Expandir'}
           </button>
           <button
             onClick={() => setShowSettings(!showSettings)}
-            className={`tw:p-1 tw:rounded tw:hover:tw:bg-slate-200 tw:transition-colors tw:text-xs tw:cursor-pointer ${showSettings ? 'tw:bg-slate-200' : ''}`}
+            className={`tw:p-1 tw:rounded tw:hover:bg-slate-200 tw:transition-colors tw:text-xs tw:cursor-pointer ${showSettings ? 'tw:bg-slate-200' : ''}`}
             title="Configurar visualización"
           >
             ⚙️ Configurar
           </button>
           <button
             onClick={loadNotes}
-            className="tw:p-1 tw:rounded tw:hover:tw:bg-slate-200 tw:transition-colors tw:text-xs tw:cursor-pointer"
+            className="tw:p-1 tw:rounded tw:hover:bg-slate-200 tw:transition-colors tw:text-xs tw:cursor-pointer"
             title="Actualizar notas"
             disabled={loading}
           >
@@ -945,7 +945,7 @@ export default function UnreadNotesWidget({
                   <div className="tw:flex tw:items-center tw:gap-1.5 tw:flex-wrap">
                     <button
                       onClick={() => handleNavigateToVerse(thread)}
-                      className="tw:font-bold tw:text-slate-800 tw:bg-slate-100 tw:border tw:px-1.5 tw:py-0.5 tw:rounded tw:hover:tw:bg-slate-200 tw:transition tw:cursor-pointer"
+                      className="tw:font-bold tw:text-slate-800 tw:bg-slate-100 tw:border tw:px-1.5 tw:py-0.5 tw:rounded tw:hover:bg-slate-200 tw:transition tw:cursor-pointer"
                       title="Ir al versículo en Texto"
                     >
                       📖 {thread.book} {thread.chapter}:{thread.verse}
@@ -961,7 +961,7 @@ export default function UnreadNotesWidget({
                   {thread.isUnread && (
                     <button
                       onClick={() => handleMarkRead(thread)}
-                      className="tw:px-2 tw:py-0.5 tw:bg-amber-100 tw:hover:tw:bg-amber-200 tw:text-amber-800 tw:border tw:border-amber-200 tw:rounded tw:text-[10px] tw:cursor-pointer"
+                      className="tw:px-2 tw:py-0.5 tw:bg-amber-100 tw:hover:bg-amber-200 tw:text-amber-800 tw:border tw:border-amber-200 tw:rounded tw:text-[10px] tw:cursor-pointer"
                       title="Marcar como leída"
                     >
                       ✓ Marcar como leída
@@ -1016,7 +1016,7 @@ export default function UnreadNotesWidget({
                                     text: comm.plainText,
                                   })
                                 }
-                                className="tw:text-slate-500 tw:hover:tw:underline tw:hover:tw:text-slate-700 tw:cursor-pointer tw:bg-transparent tw:border-none tw:p-0"
+                                className="tw:text-slate-500 tw:hover:underline tw:hover:text-slate-700 tw:cursor-pointer tw:bg-transparent tw:border-none tw:p-0"
                               >
                                 Editar
                               </button>
@@ -1024,7 +1024,7 @@ export default function UnreadNotesWidget({
                                 onClick={() =>
                                   handleDeleteComment(thread.threadId, comm.date, comm.user)
                                 }
-                                className="tw:text-red-500 tw:hover:tw:underline tw:hover:tw:text-red-700 tw:cursor-pointer tw:bg-transparent tw:border-none tw:p-0"
+                                className="tw:text-red-500 tw:hover:underline tw:hover:text-red-700 tw:cursor-pointer tw:bg-transparent tw:border-none tw:p-0"
                               >
                                 Eliminar
                               </button>
@@ -1047,14 +1047,14 @@ export default function UnreadNotesWidget({
                             <div className="tw:flex tw:justify-end tw:gap-1.5">
                               <button
                                 onClick={() => setEditingComment(null)}
-                                className="tw:px-2 tw:py-0.5 tw:bg-gray-200 tw:hover:tw:bg-gray-300 tw:rounded tw:text-[10px] tw:cursor-pointer"
+                                className="tw:px-2 tw:py-0.5 tw:bg-gray-200 tw:hover:bg-gray-300 tw:rounded tw:text-[10px] tw:cursor-pointer"
                                 disabled={savingEdit}
                               >
                                 Cancelar
                               </button>
                               <button
                                 onClick={handleSaveEdit}
-                                className="tw:px-2 tw:py-0.5 tw:bg-slate-600 tw:hover:tw:bg-slate-700 tw:text-white tw:rounded tw:text-[10px] tw:cursor-pointer"
+                                className="tw:px-2 tw:py-0.5 tw:bg-slate-600 tw:hover:bg-slate-700 tw:text-white tw:rounded tw:text-[10px] tw:cursor-pointer"
                                 disabled={savingEdit}
                               >
                                 {savingEdit ? 'Guardando...' : 'Guardar'}
@@ -1083,13 +1083,13 @@ export default function UnreadNotesWidget({
                     <div className="tw:flex tw:gap-1.5">
                       <button
                         onClick={stopRecording}
-                        className="tw:px-2 tw:py-0.5 tw:bg-green-600 tw:hover:tw:bg-green-700 tw:text-white tw:font-medium tw:text-[10px] tw:rounded tw:transition-colors tw:cursor-pointer"
+                        className="tw:px-2 tw:py-0.5 tw:bg-green-600 tw:hover:bg-green-700 tw:text-white tw:font-medium tw:text-[10px] tw:rounded tw:transition-colors tw:cursor-pointer"
                       >
                         Enviar
                       </button>
                       <button
                         onClick={cancelRecording}
-                        className="tw:px-2 tw:py-0.5 tw:bg-gray-400 tw:hover:tw:bg-gray-500 tw:text-white tw:font-medium tw:text-[10px] tw:rounded tw:transition-colors tw:cursor-pointer"
+                        className="tw:px-2 tw:py-0.5 tw:bg-gray-400 tw:hover:bg-gray-500 tw:text-white tw:font-medium tw:text-[10px] tw:rounded tw:transition-colors tw:cursor-pointer"
                       >
                         Cancelar
                       </button>
@@ -1122,7 +1122,7 @@ export default function UnreadNotesWidget({
                         disabled={
                           isRecording || replying[thread.threadId] || attachingThreadId !== null
                         }
-                        className="tw:p-1 tw:text-xs tw:bg-slate-100 tw:hover:tw:bg-slate-200 tw:text-slate-700 tw:border tw:border-slate-200 tw:rounded tw:transition-colors tw:cursor-pointer"
+                        className="tw:p-1 tw:text-xs tw:bg-slate-100 tw:hover:bg-slate-200 tw:text-slate-700 tw:border tw:border-slate-200 tw:rounded tw:transition-colors tw:cursor-pointer"
                         title="Adjuntar archivo"
                       >
                         {attachingThreadId === thread.threadId ? '⏳' : '📎'}
@@ -1133,7 +1133,7 @@ export default function UnreadNotesWidget({
                         disabled={
                           isRecording || replying[thread.threadId] || attachingThreadId !== null
                         }
-                        className="tw:p-1 tw:text-xs tw:bg-slate-100 tw:hover:tw:bg-slate-200 tw:text-slate-700 tw:border tw:border-slate-200 tw:rounded tw:transition-colors tw:cursor-pointer"
+                        className="tw:p-1 tw:text-xs tw:bg-slate-100 tw:hover:bg-slate-200 tw:text-slate-700 tw:border tw:border-slate-200 tw:rounded tw:transition-colors tw:cursor-pointer"
                         title="Grabar nota de voz"
                       >
                         🎙️
@@ -1146,7 +1146,7 @@ export default function UnreadNotesWidget({
                           isRecording ||
                           attachingThreadId !== null
                         }
-                        className="tw:px-2.5 tw:py-0.5 tw:bg-slate-600 tw:hover:tw:bg-slate-700 tw:text-white tw:font-semibold tw:rounded tw:text-[10px] tw:disabled:tw:opacity-40 tw:whitespace-nowrap tw:transition-colors tw:cursor-pointer"
+                        className="tw:px-2.5 tw:py-0.5 tw:bg-slate-600 tw:hover:bg-slate-700 tw:text-white tw:font-semibold tw:rounded tw:text-[10px] tw:disabled:opacity-40 tw:whitespace-nowrap tw:transition-colors tw:cursor-pointer"
                       >
                         {replying[thread.threadId] ? 'Enviando...' : 'Responder'}
                       </button>
@@ -1168,13 +1168,13 @@ export default function UnreadNotesWidget({
             <div className="tw:flex tw:justify-end tw:gap-3">
               <button
                 onClick={() => setCommentToDelete(null)}
-                className="tw:px-4 tw:py-2 tw:bg-slate-100 hover:tw:bg-slate-200 tw:border tw:border-slate-200 tw:text-slate-700 tw:rounded-lg tw:text-sm tw:font-semibold tw:transition-colors tw:cursor-pointer"
+                className="tw:px-4 tw:py-2 tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:border-slate-200 tw:text-slate-700 tw:rounded-lg tw:text-sm tw:font-semibold tw:transition-colors tw:cursor-pointer"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleDeleteCommentConfirm}
-                className="tw:px-4 tw:py-2 tw:bg-red-600 hover:tw:bg-red-700 tw:text-white tw:rounded-lg tw:text-sm tw:font-semibold tw:transition-colors tw:cursor-pointer"
+                className="tw:px-4 tw:py-2 tw:bg-red-600 tw:hover:bg-red-700 tw:text-white tw:rounded-lg tw:text-sm tw:font-semibold tw:transition-colors tw:cursor-pointer"
               >
                 Eliminar
               </button>

@@ -1179,8 +1179,14 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     async (username: string, message: string): Promise<string> => {
       try {
         const payload = { user: username, message, timestamp: Date.now() };
-        await sendToNotesHelper('broadcastCollab', [{ type: 'chat_message', payload }]);
+        // Emit locally first so it shows up instantly in the sender's UI
         collabEventEmitter.emit({ type: 'chat_message', payload });
+        // Then try to broadcast via helper process
+        try {
+          await sendToNotesHelper('broadcastCollab', [{ type: 'chat_message', payload }]);
+        } catch (helperErr) {
+          logger.warn(`Failed to broadcast chat to helper: ${helperErr}`);
+        }
         return 'ok';
       } catch (e) {
         return 'error';
@@ -1193,8 +1199,14 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     async (username: string, projectId: string, book: string, chapter: number, verse: number | null): Promise<string> => {
       try {
         const payload = { user: username, projectId, book, chapter, verse };
-        await sendToNotesHelper('broadcastCollab', [{ type: 'cursor_update', payload }]);
+        // Emit locally first
         collabEventEmitter.emit({ type: 'cursor_update', payload });
+        // Then try to broadcast via helper process
+        try {
+          await sendToNotesHelper('broadcastCollab', [{ type: 'cursor_update', payload }]);
+        } catch (helperErr) {
+          logger.warn(`Failed to broadcast cursor update to helper: ${helperErr}`);
+        }
         return 'ok';
       } catch (e) {
         return 'error';

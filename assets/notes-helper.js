@@ -1478,7 +1478,8 @@ function getLocalIps() {
     const iface = interfaces[name];
     if (iface) {
       for (const entry of iface) {
-        if (entry.family === 'IPv4' && !entry.internal) {
+        const family = String(entry.family).toLowerCase();
+        if ((family === 'ipv4' || family === '4') && !entry.internal) {
           addresses.push(entry.address);
         }
       }

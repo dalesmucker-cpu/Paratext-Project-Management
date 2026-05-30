@@ -226,7 +226,7 @@ function AttachmentViewer({ projectId, filename }: { projectId: string; filename
               alt={filename}
               className="tw:max-h-40 tw:w-auto tw:object-cover tw:max-w-full"
             />
-            <div className="tw:absolute tw:inset-0 tw:bg-black/10 tw:opacity-0 tw:group-hover:tw:opacity-100 tw:transition tw:flex tw:items-center tw:justify-center tw:text-white tw:text-[10px] tw:font-semibold tw:backdrop-blur-[1px]">
+            <div className="tw:absolute tw:inset-0 tw:bg-black/10 tw:opacity-0 tw:group-tw:hover:opacity-100 tw:transition tw:flex tw:items-center tw:justify-center tw:text-white tw:text-[10px] tw:font-semibold tw:backdrop-blur-[1px]">
               🔎 Abrir archivo
             </div>
           </div>
@@ -240,16 +240,16 @@ function AttachmentViewer({ projectId, filename }: { projectId: string; filename
   let cardColor = 'tw:bg-slate-50 tw:border-slate-200 tw:hover:bg-slate-100';
   if (ext === 'pdf') {
     fileIcon = '📕';
-    cardColor = 'tw:bg-red-50/50 tw:border-red-200 tw:hover:tw:bg-red-50';
+    cardColor = 'tw:bg-red-50/50 tw:border-red-200 tw:hover:bg-red-50';
   } else if (['doc', 'docx'].includes(ext)) {
     fileIcon = '📘';
-    cardColor = 'tw:bg-blue-50/50 tw:border-blue-200 tw:hover:tw:bg-blue-50';
+    cardColor = 'tw:bg-blue-50/50 tw:border-blue-200 tw:hover:bg-blue-50';
   } else if (['xls', 'xlsx'].includes(ext)) {
     fileIcon = '📗';
-    cardColor = 'tw:bg-emerald-50/50 tw:border-emerald-200 tw:hover:tw:bg-emerald-55';
+    cardColor = 'tw:bg-emerald-50/50 tw:border-emerald-200 tw:hover:bg-emerald-55';
   } else if (ext === 'txt') {
     fileIcon = '📝';
-    cardColor = 'tw:bg-amber-50/50 tw:border-amber-200 tw:hover:tw:bg-amber-50';
+    cardColor = 'tw:bg-amber-50/50 tw:border-amber-200 tw:hover:bg-amber-50';
   }
 
   const cleanDisplayName = filename.replace(/^att_\d+_/, '');
@@ -270,7 +270,7 @@ function AttachmentViewer({ projectId, filename }: { projectId: string; filename
       <button
         type="button"
         onClick={handleOpen}
-        className="tw:px-2.5 tw:py-1 tw:bg-white tw:hover:tw:bg-slate-50 tw:border tw:border-slate-300 tw:rounded tw:text-[10px] tw:font-semibold tw:text-slate-700 tw:shadow-sm tw:transition tw:whitespace-nowrap tw:cursor-pointer"
+        className="tw:px-2.5 tw:py-1 tw:bg-white tw:hover:bg-slate-50 tw:border tw:border-slate-300 tw:rounded tw:text-[10px] tw:font-semibold tw:text-slate-700 tw:shadow-sm tw:transition tw:whitespace-nowrap tw:cursor-pointer"
       >
         Abrir
       </button>
@@ -305,7 +305,7 @@ function renderTextWithLinks(text: string, baseKey: string): React.ReactNode[] |
         key={`${baseKey}-link-${matchIndex}`}
         href={href}
         onClick={handleLinkClick}
-        className="tw:text-indigo-600 tw:hover:tw:text-indigo-800 tw:underline tw:break-all tw:cursor-pointer tw:font-medium"
+        className="tw:text-indigo-600 tw:hover:text-indigo-800 tw:underline tw:break-all tw:cursor-pointer tw:font-medium"
         title="Abrir enlace en el navegador"
       >
         {url}
@@ -1059,7 +1059,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                   </strong>
                   <button
                     onClick={() => setShowUserPicker(true)}
-                    className="tw:text-indigo-600 tw:hover:tw:text-indigo-800 tw:hover:tw:underline tw:text-xs tw:ml-1 tw:cursor-pointer"
+                    className="tw:text-indigo-600 tw:hover:text-indigo-800 tw:hover:underline tw:text-xs tw:ml-1 tw:cursor-pointer"
                   >
                     Cambiar
                   </button>
@@ -1090,7 +1090,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
         <div className="tw:flex tw:items-center tw:gap-2">
           <button
             onClick={() => setShowSettings(!showSettings)}
-            className={`tw:px-2.5 tw:py-1 tw:text-xs tw:border tw:rounded-md tw:font-medium tw:hover:tw:bg-slate-50 tw:transition-colors tw:flex tw:items-center tw:gap-1 tw:cursor-pointer ${
+            className={`tw:px-2.5 tw:py-1 tw:text-xs tw:border tw:rounded-md tw:font-medium tw:hover:bg-slate-50 tw:transition-colors tw:flex tw:items-center tw:gap-1 tw:cursor-pointer ${
               showSettings
                 ? 'tw:bg-indigo-50 tw:border-indigo-200 tw:text-indigo-700'
                 : 'tw:bg-white tw:text-slate-600 tw:border-slate-200'
@@ -1101,7 +1101,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
           <button
             onClick={() => loadNotes(selectedThreadId)}
             disabled={loading}
-            className="tw:p-1 tw:px-2.5 tw:text-xs tw:bg-slate-100 tw:hover:tw:bg-slate-200 tw:border tw:border-slate-200 tw:text-slate-700 tw:rounded-md tw:font-medium tw:transition-colors tw:cursor-pointer"
+            className="tw:p-1 tw:px-2.5 tw:text-xs tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:border-slate-200 tw:text-slate-700 tw:rounded-md tw:font-medium tw:transition-colors tw:cursor-pointer"
             title="Sincronizar / Actualizar"
           >
             {loading ? 'Sincronizando...' : '↻ Actualizar'}
@@ -1193,7 +1193,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
               {searchText && (
                 <button
                   onClick={() => setSearchText('')}
-                  className="tw:absolute tw:right-2 tw:top-1/2 tw:-translate-y-1/2 tw:text-gray-400 tw:hover:tw:text-gray-600 tw:cursor-pointer"
+                  className="tw:absolute tw:right-2 tw:top-1/2 tw:-translate-y-1/2 tw:text-gray-400 tw:hover:text-gray-600 tw:cursor-pointer"
                 >
                   ✕
                 </button>
@@ -1255,7 +1255,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                     className={`tw:w-full tw:text-left tw:p-3 tw:flex tw:flex-col tw:gap-1 tw:transition-all tw:cursor-pointer ${
                       isSelected
                         ? 'tw:bg-indigo-50/70 tw:border-l-4 tw:border-indigo-600'
-                        : 'tw:hover:tw:bg-slate-50 tw:border-l-4 tw:border-transparent'
+                        : 'tw:hover:bg-slate-50 tw:border-l-4 tw:border-transparent'
                     }`}
                   >
                     <div className="tw:flex tw:items-center tw:justify-between tw:gap-1 tw:w-full">
@@ -1264,7 +1264,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                           e.stopPropagation();
                           handleNavigateToVerse(thread);
                         }}
-                        className="tw:font-bold tw:text-xs tw:text-indigo-600 tw:hover:tw:text-indigo-850 tw:flex tw:items-center tw:gap-1 tw:cursor-pointer tw:hover:tw:underline"
+                        className="tw:font-bold tw:text-xs tw:text-indigo-600 tw:hover:text-indigo-850 tw:flex tw:items-center tw:gap-1 tw:cursor-pointer tw:hover:underline"
                         title="Ir al versículo en Texto"
                       >
                         📖 {thread.book} {thread.chapter}:{thread.verse}
@@ -1317,7 +1317,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                     📖 Referencia:{' '}
                     <span
                       onClick={() => handleNavigateToVerse(selectedThread)}
-                      className="tw:text-indigo-600 tw:hover:tw:text-indigo-855 tw:hover:tw:underline tw:cursor-pointer tw:font-semibold tw:inline-flex tw:items-center tw:gap-1"
+                      className="tw:text-indigo-600 tw:hover:text-indigo-855 tw:hover:underline tw:cursor-pointer tw:font-semibold tw:inline-flex tw:items-center tw:gap-1"
                       title="Ir al versículo en Texto"
                     >
                       {selectedThread.book} {selectedThread.chapter}:{selectedThread.verse}
@@ -1340,7 +1340,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                   {selectedThread.isUnread ? (
                     <button
                       onClick={() => handleMarkRead(selectedThread)}
-                      className="tw:px-2.5 tw:py-1 tw:bg-amber-100 tw:hover:tw:bg-amber-200 tw:text-amber-800 tw:border tw:border-amber-200 tw:rounded tw:text-xs tw:transition-colors tw:cursor-pointer"
+                      className="tw:px-2.5 tw:py-1 tw:bg-amber-100 tw:hover:bg-amber-200 tw:text-amber-800 tw:border tw:border-amber-200 tw:rounded tw:text-xs tw:transition-colors tw:cursor-pointer"
                     >
                       ✓ Marcar como leída
                     </button>
@@ -1404,7 +1404,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                                   onClick={() =>
                                     setEditingComment({ date: comm.date, text: comm.plainText })
                                   }
-                                  className="tw:text-indigo-600 tw:hover:tw:underline tw:hover:tw:text-indigo-800 tw:font-medium tw:cursor-pointer tw:bg-transparent tw:border-none tw:p-0"
+                                  className="tw:text-indigo-600 tw:hover:underline tw:hover:text-indigo-800 tw:font-medium tw:cursor-pointer tw:bg-transparent tw:border-none tw:p-0"
                                 >
                                   Editar
                                 </button>
@@ -1416,7 +1416,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                                       comm.user,
                                     )
                                   }
-                                  className="tw:text-red-500 tw:hover:tw:underline tw:hover:tw:text-red-700 tw:font-medium tw:cursor-pointer tw:bg-transparent tw:border-none tw:p-0"
+                                  className="tw:text-red-500 tw:hover:underline tw:hover:text-red-700 tw:font-medium tw:cursor-pointer tw:bg-transparent tw:border-none tw:p-0"
                                 >
                                   Eliminar
                                 </button>
@@ -1439,7 +1439,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                             <div className="tw:flex tw:justify-end tw:gap-2">
                               <button
                                 onClick={() => setEditingComment(null)}
-                                className="tw:px-2.5 tw:py-1 tw:bg-slate-100 tw:hover:tw:bg-slate-200 tw:rounded tw:border tw:border-slate-200 tw:text-xs tw:font-medium tw:cursor-pointer"
+                                className="tw:px-2.5 tw:py-1 tw:bg-slate-100 tw:hover:bg-slate-200 tw:rounded tw:border tw:border-slate-200 tw:text-xs tw:font-medium tw:cursor-pointer"
                                 disabled={savingEdit}
                               >
                                 Cancelar
@@ -1477,13 +1477,13 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                     <div className="tw:flex tw:gap-2">
                       <button
                         onClick={stopRecording}
-                        className="tw:px-3.5 tw:py-1.5 tw:bg-green-600 tw:hover:tw:bg-green-700 tw:text-white tw:font-semibold tw:text-xs tw:rounded-md tw:shadow-sm tw:transition-colors tw:cursor-pointer"
+                        className="tw:px-3.5 tw:py-1.5 tw:bg-green-600 tw:hover:bg-green-700 tw:text-white tw:font-semibold tw:text-xs tw:rounded-md tw:shadow-sm tw:transition-colors tw:cursor-pointer"
                       >
                         Enviar nota
                       </button>
                       <button
                         onClick={cancelRecording}
-                        className="tw:px-3.5 tw:py-1.5 tw:bg-gray-400 tw:hover:tw:bg-gray-500 tw:text-white tw:font-semibold tw:text-xs tw:rounded-md tw:shadow-sm tw:transition-colors tw:cursor-pointer"
+                        className="tw:px-3.5 tw:py-1.5 tw:bg-gray-400 tw:hover:bg-gray-500 tw:text-white tw:font-semibold tw:text-xs tw:rounded-md tw:shadow-sm tw:transition-colors tw:cursor-pointer"
                       >
                         Cancelar
                       </button>
@@ -1512,7 +1512,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                       type="button"
                       onClick={handleAttachClick}
                       disabled={replying || attaching || !currentUser}
-                      className="tw:p-2 tw:bg-slate-100 tw:hover:tw:bg-slate-200 tw:text-slate-700 tw:border tw:border-slate-200 tw:rounded-lg tw:transition-colors tw:h-[38px] tw:flex tw:items-center tw:justify-center tw:w-[38px] tw:cursor-pointer"
+                      className="tw:p-2 tw:bg-slate-100 tw:hover:bg-slate-200 tw:text-slate-700 tw:border tw:border-slate-200 tw:rounded-lg tw:transition-colors tw:h-[38px] tw:flex tw:items-center tw:justify-center tw:w-[38px] tw:cursor-pointer"
                       title="Adjuntar archivo"
                     >
                       {attaching ? '⏳' : '📎'}
@@ -1521,7 +1521,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                       type="button"
                       onClick={startRecording}
                       disabled={replying || attaching || !currentUser}
-                      className="tw:p-2 tw:bg-slate-100 tw:hover:tw:bg-slate-200 tw:text-slate-700 tw:border tw:border-slate-200 tw:rounded-lg tw:transition-colors tw:h-[38px] tw:flex tw:items-center tw:justify-center tw:w-[38px] tw:cursor-pointer"
+                      className="tw:p-2 tw:bg-slate-100 tw:hover:bg-slate-200 tw:text-slate-700 tw:border tw:border-slate-200 tw:rounded-lg tw:transition-colors tw:h-[38px] tw:flex tw:items-center tw:justify-center tw:w-[38px] tw:cursor-pointer"
                       title="Grabar nota de voz"
                     >
                       🎙️
@@ -1529,7 +1529,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                     <button
                       onClick={() => handleReply(selectedThread)}
                       disabled={replying || attaching || !replyText.trim() || !currentUser}
-                      className="tw:px-4 tw:py-2 tw:bg-slate-600 tw:hover:bg-slate-700 tw:text-white tw:font-semibold tw:rounded-lg tw:text-xs tw:disabled:tw:opacity-40 tw:whitespace-nowrap tw:transition-all tw:shadow-sm tw:h-[38px] tw:cursor-pointer"
+                      className="tw:px-4 tw:py-2 tw:bg-slate-600 tw:hover:bg-slate-700 tw:text-white tw:font-semibold tw:rounded-lg tw:text-xs tw:disabled:opacity-40 tw:whitespace-nowrap tw:transition-all tw:shadow-sm tw:h-[38px] tw:cursor-pointer"
                     >
                       {replying ? 'Enviando...' : 'Responder'}
                     </button>
@@ -1558,13 +1558,13 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
             <div className="tw:flex tw:justify-end tw:gap-3">
               <button
                 onClick={() => setCommentToDelete(null)}
-                className="tw:px-4 tw:py-2 tw:bg-slate-100 hover:tw:bg-slate-200 tw:border tw:border-slate-200 tw:text-slate-700 tw:rounded-lg tw:text-sm tw:font-semibold tw:transition-colors tw:cursor-pointer"
+                className="tw:px-4 tw:py-2 tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:border-slate-200 tw:text-slate-700 tw:rounded-lg tw:text-sm tw:font-semibold tw:transition-colors tw:cursor-pointer"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleDeleteCommentConfirm}
-                className="tw:px-4 tw:py-2 tw:bg-red-600 hover:tw:bg-red-700 tw:text-white tw:rounded-lg tw:text-sm tw:font-semibold tw:transition-colors tw:cursor-pointer"
+                className="tw:px-4 tw:py-2 tw:bg-red-600 tw:hover:bg-red-700 tw:text-white tw:rounded-lg tw:text-sm tw:font-semibold tw:transition-colors tw:cursor-pointer"
               >
                 Eliminar
               </button>

@@ -2218,7 +2218,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                       className={`tw:flex-1 tw:py-1.5 tw:text-[10px] tw:font-semibold tw:transition-colors ${
                         collabType === 'local'
                           ? 'tw:bg-slate-600 tw:text-white'
-                          : 'tw:bg-white tw:text-slate-600 hover:tw:bg-slate-50'
+                          : 'tw:bg-white tw:text-slate-600 tw:hover:bg-slate-50'
                       }`}
                     >
                       🌐 Red Local (LAN)
@@ -2229,7 +2229,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                       className={`tw:flex-1 tw:py-1.5 tw:text-[10px] tw:font-semibold tw:transition-colors ${
                         collabType === 'online'
                           ? 'tw:bg-slate-600 tw:text-white'
-                          : 'tw:bg-white tw:text-slate-600 hover:tw:bg-slate-50'
+                          : 'tw:bg-white tw:text-slate-600 tw:hover:bg-slate-50'
                       }`}
                     >
                       ☁️ En Línea (Internet)
@@ -2402,11 +2402,17 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                               Comparte tu IP con el equipo para que se conecten:
                             </p>
                             <div className="tw:flex tw:flex-wrap tw:gap-1 tw:mt-1">
-                              {collabIps.map((ip) => (
-                                <span key={ip} className="tw:bg-slate-200 tw:text-slate-700 tw:px-1.5 tw:py-0.5 tw:rounded tw:text-[10px] tw:font-mono">
-                                  {ip}:{collabPort}
+                              {collabIps.length > 0 ? (
+                                collabIps.map((ip) => (
+                                  <span key={ip} className="tw:bg-slate-200 tw:text-slate-700 tw:px-1.5 tw:py-0.5 tw:rounded tw:text-[10px] tw:font-mono">
+                                    {ip}:{collabPort}
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="tw:text-red-500 tw:text-[10px]">
+                                  No se detectaron IPs locales. Verifica tu conexión de red.
                                 </span>
-                              ))}
+                              )}
                             </div>
                           </div>
                         ) : (
@@ -2429,7 +2435,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                       <button
                         type="button"
                         onClick={handleStopCollab}
-                        className="tw:px-3 tw:py-1 tw:bg-red-600 hover:tw:bg-red-700 tw:text-white tw:rounded tw:font-semibold"
+                        className="tw:px-3 tw:py-1 tw:bg-red-600 tw:hover:bg-red-700 tw:text-white tw:rounded tw:font-semibold"
                       >
                         Salir
                       </button>
