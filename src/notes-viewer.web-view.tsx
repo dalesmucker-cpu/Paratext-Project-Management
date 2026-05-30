@@ -1446,7 +1446,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                               </button>
                               <button
                                 onClick={() => handleSaveEdit(selectedThread.threadId)}
-                                className="tw:px-2.5 tw:py-1 tw:bg-indigo-600 tw:hover:tw:bg-indigo-700 tw:text-white tw:rounded tw:text-xs tw:font-medium tw:transition-colors tw:cursor-pointer"
+                                className="tw:px-2.5 tw:py-1 tw:bg-slate-600 tw:hover:bg-slate-700 tw:text-white tw:rounded tw:text-xs tw:font-medium tw:transition-colors tw:cursor-pointer"
                                 disabled={savingEdit}
                               >
                                 {savingEdit ? 'Guardando...' : 'Guardar'}
@@ -1529,7 +1529,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                     <button
                       onClick={() => handleReply(selectedThread)}
                       disabled={replying || attaching || !replyText.trim() || !currentUser}
-                      className="tw:px-4 tw:py-2 tw:bg-indigo-600 tw:hover:tw:bg-indigo-700 tw:text-white tw:font-semibold tw:rounded-lg tw:text-xs tw:disabled:tw:opacity-40 tw:whitespace-nowrap tw:transition-all tw:shadow-sm tw:h-[38px] tw:cursor-pointer"
+                      className="tw:px-4 tw:py-2 tw:bg-slate-600 tw:hover:bg-slate-700 tw:text-white tw:font-semibold tw:rounded-lg tw:text-xs tw:disabled:tw:opacity-40 tw:whitespace-nowrap tw:transition-all tw:shadow-sm tw:h-[38px] tw:cursor-pointer"
                     >
                       {replying ? 'Enviando...' : 'Responder'}
                     </button>

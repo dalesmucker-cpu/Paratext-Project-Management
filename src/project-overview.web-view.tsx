@@ -2283,7 +2283,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                         type="button"
                         onClick={handleStartCollabHost}
                         disabled={collabConnecting}
-                        className="tw:w-full tw:py-1.5 tw:bg-slate-600 hover:tw:bg-slate-700 tw:text-white tw:rounded tw:font-semibold disabled:tw:opacity-50"
+                        className="tw:w-full tw:py-1.5 tw:bg-slate-600 tw:hover:bg-slate-700 tw:text-white tw:rounded tw:font-semibold disabled:tw:opacity-50"
                       >
                         {collabConnecting ? 'Iniciando...' : 'Iniciar Colaboración'}
                       </button>
@@ -2355,7 +2355,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                         type="button"
                         onClick={handleConnectCollabClient}
                         disabled={collabConnecting}
-                        className="tw:w-full tw:py-1.5 tw:bg-indigo-600 hover:tw:bg-indigo-700 tw:text-white tw:rounded tw:font-semibold disabled:tw:opacity-50"
+                        className="tw:w-full tw:py-1.5 tw:bg-slate-600 tw:hover:bg-slate-700 tw:text-white tw:rounded tw:font-semibold disabled:tw:opacity-50"
                       >
                         {collabConnecting ? 'Conectando...' : 'Conectarse'}
                       </button>
@@ -2377,7 +2377,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                                 : 'Conectado a la sala online:'}
                             </p>
                             <div className="tw:flex tw:items-center tw:flex-wrap tw:gap-2 tw:mt-1">
-                              <span className="tw:bg-indigo-100 tw:text-indigo-800 tw:px-2 tw:py-0.5 tw:rounded tw:text-xs tw:font-mono tw:font-bold">
+                              <span className="tw:bg-slate-200 tw:text-slate-700 tw:px-2 tw:py-0.5 tw:rounded tw:text-xs tw:font-mono tw:font-bold">
                                 {collabRoomId}
                               </span>
                               <span className="tw:text-[9px] tw:text-gray-400 tw:font-mono">
@@ -2458,7 +2458,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                         <button
                           type="submit"
                           disabled={!chatInput.trim()}
-                          className="tw:px-3 tw:py-1.5 tw:bg-indigo-600 hover:tw:bg-indigo-700 tw:text-white tw:font-semibold disabled:tw:opacity-50"
+                          className="tw:px-3 tw:py-1.5 tw:bg-slate-600 tw:hover:bg-slate-700 tw:text-white tw:font-semibold disabled:tw:opacity-50"
                         >
                           Enviar
                         </button>

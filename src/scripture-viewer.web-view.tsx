@@ -1829,7 +1829,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
               {!showNewNoteForm && (
                 <button
                   onClick={() => setShowNewNoteForm(true)}
-                  className="tw:w-full tw:py-2 tw:bg-indigo-600 hover:tw:bg-indigo-700 tw:text-white tw:font-semibold tw:rounded-lg tw:text-xs tw:shadow-sm tw:transition-colors tw:cursor-pointer tw:border-none"
+                  className="tw:w-full tw:py-2 tw:bg-slate-600 tw:hover:bg-slate-700 tw:text-white tw:font-semibold tw:rounded-lg tw:text-xs tw:shadow-sm tw:transition-colors tw:cursor-pointer tw:border-none"
                 >
                   ＋ Nueva nota en versículo
                 </button>
@@ -1942,7 +1942,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                     </div>
                     <button
                       onClick={handleCreateNote}
-                      className="tw:px-3 tw:py-1.5 tw:bg-indigo-600 hover:tw:bg-indigo-700 tw:text-white tw:font-semibold tw:rounded tw:text-xs shadow-sm tw:cursor-pointer tw:border-none"
+                      className="tw:px-3 tw:py-1.5 tw:bg-slate-600 tw:hover:bg-slate-700 tw:text-white tw:font-semibold tw:rounded tw:text-xs shadow-sm tw:cursor-pointer tw:border-none"
                     >
                       Crear Nota
                     </button>
@@ -2109,7 +2109,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                                 !replyTexts[thread.threadId]?.trim() ||
                                 isRecording
                               }
-                              className="tw:px-2.5 tw:py-1 tw:bg-indigo-600 hover:tw:bg-indigo-700 tw:text-white tw:font-semibold tw:rounded tw:text-[10px] disabled:tw:opacity-40 tw:transition-colors tw:cursor-pointer tw:border-none"
+                              className="tw:px-2.5 tw:py-1 tw:bg-slate-600 tw:hover:bg-slate-700 tw:text-white tw:font-semibold tw:rounded tw:text-[10px] disabled:tw:opacity-40 tw:transition-colors tw:cursor-pointer tw:border-none"
                             >
                               {replying[thread.threadId] ? '...' : 'Crear Nota'}
                             </button>
