@@ -549,19 +549,15 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
   // Listen to collaboration events to refresh notes in real-time
   useEffect(() => {
     let unsubCollab: any;
-    const listen = async () => {
-      try {
-        unsubCollab = await papi.network.subscribeNetworkEvent(
-          'paratextProjectManager.onCollabEvent',
-          (event: any) => {
-            if (event && event.type === 'note_update' && event.payload.projectId === projectId) {
-              loadNotes();
-            }
-          }
-        );
-      } catch (_) {}
-    };
-    listen();
+    try {
+      unsubCollab = papi.network.getNetworkEvent<any>(
+        'paratextProjectManager.onCollabEvent',
+      )((event: any) => {
+        if (event && event.type === 'note_update' && event.payload.projectId === projectId) {
+          loadNotes();
+        }
+      });
+    } catch (_) {}
     return () => {
       if (unsubCollab) unsubCollab();
     };

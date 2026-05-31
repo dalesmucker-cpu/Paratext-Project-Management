@@ -140,6 +140,7 @@ declare module 'papi-shared-types' {
       book: string,
       chapter: number,
       verse: number | null,
+      offset?: number | null,
     ) => Promise<string>;
     /** Navigates Scripture Viewer to verse */
     'paratextProjectManager.navigateToVerse': (

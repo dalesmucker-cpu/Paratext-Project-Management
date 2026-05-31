@@ -979,75 +979,8 @@ async function handleAction(action, args) {
 
     case 'updateVerseText': {
       const [projectId, projectDir, bookCode, chapter, verse, newText] = args;
-      let postPart = '.SFM';
-      let prePart = '';
-      const settingsPath = path.join(projectDir, 'Settings.xml');
-      if (fs.existsSync(settingsPath)) {
-        try {
-          const xml = fs.readFileSync(settingsPath, 'utf8');
-          const postMatch = /<FileNamePostPart>([^<]+)<\/FileNamePostPart>/i.exec(xml);
-          if (postMatch) postPart = postMatch[1].trim();
-          const preMatch = /<FileNamePrePart>([^<]+)<\/FileNamePrePart>/i.exec(xml);
-          if (preMatch) prePart = preMatch[1].trim();
-        } catch (_) {}
-      }
-
-      const files = fs.readdirSync(projectDir);
-      const regex = new RegExp(
-        `^${escapeRegex(prePart)}\\d*${bookCode}${escapeRegex(postPart)}$`,
-        'i',
-      );
-      const foundFile = files.find((f) => regex.test(f));
-
-      if (!foundFile) {
-        throw new Error(`Book file not found for code ${bookCode}`);
-      }
-
-      const filePath = path.join(projectDir, foundFile);
-      const fileContent = fs.readFileSync(filePath, 'utf8');
-
-      const chapterRegex = new RegExp(
-        `(\\\\c\\s+${chapter}\\b)([\\s\\S]*?)(?=\\\\c\\s+\\d+|$)`,
-        'i',
-      );
-      const chapMatch = chapterRegex.exec(fileContent);
-      if (!chapMatch) {
-        throw new Error(`Chapter ${chapter} not found in book ${bookCode}`);
-      }
-
-      const chapHeader = chapMatch[1];
-      const chapBody = chapMatch[2];
-
-      const verseRegex = new RegExp(
-        `(\\\\v\\s+${verse}\\b\\s*)([\\s\\S]*?)(?=\\\\v\\s+\\d+|$)`,
-        'i',
-      );
-      const vMatch = verseRegex.exec(chapBody);
-      if (!vMatch) {
-        throw new Error(`Verse ${verse} not found in chapter ${chapter}`);
-      }
-
-      const vHeader = vMatch[1];
-      const newline = fileContent.includes('\r\n') ? '\r\n' : '\n';
-
-      const vStartIndex = vMatch.index;
-      const vLength = vMatch[0].length;
-      const updatedChapBody =
-        chapBody.substring(0, vStartIndex) +
-        vHeader +
-        newText.trim() +
-        newline +
-        chapBody.substring(vStartIndex + vLength);
-
-      const startIndex = chapMatch.index;
-      const length = chapMatch[0].length;
-      const updatedFileContent =
-        fileContent.substring(0, startIndex) +
-        chapHeader +
-        updatedChapBody +
-        fileContent.substring(startIndex + length);
-
-      fs.writeFileSync(filePath, updatedFileContent, 'utf8');
+      if (projectDir) projectDirs.set(projectId, projectDir);
+      saveVerseLocal(projectId, bookCode, chapter, verse, newText);
       return 'ok';
     }
 
@@ -1179,14 +1112,22 @@ async function handleAction(action, args) {
                 } else if (msg.type === 'chat_message') {
                   process.send({ event: 'collab', data: msg });
                 } else if (msg.type === 'tasks_update') {
-                  saveTasksLocal(projectId, msg.payload.tasksJson);
-                  process.send({ event: 'collab', data: msg });
+                  const localMsg = localizeCollabProject(msg, projectId);
+                  saveTasksLocal(projectId, localMsg.payload.tasksJson);
+                  process.send({ event: 'collab', data: localMsg });
                 } else if (msg.type === 'note_update') {
-                  saveCollabComment(projectId, msg.payload.senderUser, msg.payload.replyData);
-                  process.send({ event: 'collab', data: msg });
+                  const localMsg = localizeCollabProject(msg, projectId);
+                  saveCollabComment(projectId, localMsg.payload.senderUser, localMsg.payload.replyData);
+                  process.send({ event: 'collab', data: localMsg });
                 } else if (msg.type === 'cursor_update') {
-                  process.send({ event: 'collab', data: msg });
+                  process.send({ event: 'collab', data: localizeCollabProject(msg, projectId) });
+                } else if (msg.type === 'verse_update') {
+                  const localMsg = localizeCollabProject(msg, projectId);
+                  saveVerseLocal(projectId, localMsg.payload.book, localMsg.payload.chapter, localMsg.payload.verse, localMsg.payload.newText);
+                  process.send({ event: 'collab', data: localMsg });
                 } else if (msg.type === 'status_update') {
+                  process.send({ event: 'collab', data: msg });
+                } else {
                   process.send({ event: 'collab', data: msg });
                 }
               } catch (err) {
@@ -1250,17 +1191,28 @@ async function handleAction(action, args) {
                       data: { type: 'chat_message', payload: { user: 'Sistema', message: `${socketUser} se ha unido a la colaboración.`, timestamp: Date.now() } }
                     });
                   } else if (msg.type === 'tasks_update') {
-                    saveTasksLocal(msg.payload.projectId, msg.payload.tasksJson);
-                    broadcastCollab(msg, socket);
-                    process.send({ event: 'collab', data: msg });
+                    const localMsg = localizeCollabProject(msg, projectId);
+                    saveTasksLocal(projectId, localMsg.payload.tasksJson);
+                    broadcastCollab(localMsg, socket);
+                    process.send({ event: 'collab', data: localMsg });
                   } else if (msg.type === 'note_update') {
-                    saveCollabComment(msg.payload.projectId, msg.payload.senderUser, msg.payload.replyData);
-                    broadcastCollab(msg, socket);
-                    process.send({ event: 'collab', data: msg });
+                    const localMsg = localizeCollabProject(msg, projectId);
+                    saveCollabComment(projectId, localMsg.payload.senderUser, localMsg.payload.replyData);
+                    broadcastCollab(localMsg, socket);
+                    process.send({ event: 'collab', data: localMsg });
                   } else if (msg.type === 'cursor_update') {
+                    const localMsg = localizeCollabProject(msg, projectId);
+                    broadcastCollab(localMsg, socket);
+                    process.send({ event: 'collab', data: localMsg });
+                  } else if (msg.type === 'chat_message') {
                     broadcastCollab(msg, socket);
                     process.send({ event: 'collab', data: msg });
-                  } else if (msg.type === 'chat_message') {
+                  } else if (msg.type === 'verse_update') {
+                    const localMsg = localizeCollabProject(msg, projectId);
+                    saveVerseLocal(projectId, localMsg.payload.book, localMsg.payload.chapter, localMsg.payload.verse, localMsg.payload.newText);
+                    broadcastCollab(localMsg, socket);
+                    process.send({ event: 'collab', data: localMsg });
+                  } else {
                     broadcastCollab(msg, socket);
                     process.send({ event: 'collab', data: msg });
                   }
@@ -1343,16 +1295,24 @@ async function handleAction(action, args) {
                   collabActiveUsers = new Set(msg.payload.users);
                   process.send({ event: 'collab', data: msg });
                 } else if (msg.type === 'tasks_update') {
-                  saveTasksLocal(msg.payload.projectId, msg.payload.tasksJson);
-                  process.send({ event: 'collab', data: msg });
+                  const localMsg = localizeCollabProject(msg, projectId);
+                  saveTasksLocal(projectId, localMsg.payload.tasksJson);
+                  process.send({ event: 'collab', data: localMsg });
                 } else if (msg.type === 'note_update') {
-                  saveCollabComment(msg.payload.projectId, msg.payload.senderUser, msg.payload.replyData);
-                  process.send({ event: 'collab', data: msg });
+                  const localMsg = localizeCollabProject(msg, projectId);
+                  saveCollabComment(projectId, localMsg.payload.senderUser, localMsg.payload.replyData);
+                  process.send({ event: 'collab', data: localMsg });
                 } else if (msg.type === 'cursor_update') {
-                  process.send({ event: 'collab', data: msg });
+                  process.send({ event: 'collab', data: localizeCollabProject(msg, projectId) });
                 } else if (msg.type === 'chat_message') {
                   process.send({ event: 'collab', data: msg });
+                } else if (msg.type === 'verse_update') {
+                  const localMsg = localizeCollabProject(msg, projectId);
+                  saveVerseLocal(projectId, localMsg.payload.book, localMsg.payload.chapter, localMsg.payload.verse, localMsg.payload.newText);
+                  process.send({ event: 'collab', data: localMsg });
                 } else if (msg.type === 'status_update') {
+                  process.send({ event: 'collab', data: msg });
+                } else {
                   process.send({ event: 'collab', data: msg });
                 }
               } catch (err) {
@@ -1403,14 +1363,22 @@ async function handleAction(action, args) {
                   collabActiveUsers = new Set(msg.payload.users);
                   process.send({ event: 'collab', data: msg });
                 } else if (msg.type === 'tasks_update') {
-                  saveTasksLocal(msg.payload.projectId, msg.payload.tasksJson);
-                  process.send({ event: 'collab', data: msg });
+                  const localMsg = localizeCollabProject(msg, projectId);
+                  saveTasksLocal(projectId, localMsg.payload.tasksJson);
+                  process.send({ event: 'collab', data: localMsg });
                 } else if (msg.type === 'note_update') {
-                  saveCollabComment(msg.payload.projectId, msg.payload.senderUser, msg.payload.replyData);
-                  process.send({ event: 'collab', data: msg });
+                  const localMsg = localizeCollabProject(msg, projectId);
+                  saveCollabComment(projectId, localMsg.payload.senderUser, localMsg.payload.replyData);
+                  process.send({ event: 'collab', data: localMsg });
                 } else if (msg.type === 'cursor_update') {
-                  process.send({ event: 'collab', data: msg });
+                  process.send({ event: 'collab', data: localizeCollabProject(msg, projectId) });
                 } else if (msg.type === 'chat_message') {
+                  process.send({ event: 'collab', data: msg });
+                } else if (msg.type === 'verse_update') {
+                  const localMsg = localizeCollabProject(msg, projectId);
+                  saveVerseLocal(projectId, localMsg.payload.book, localMsg.payload.chapter, localMsg.payload.verse, localMsg.payload.newText);
+                  process.send({ event: 'collab', data: localMsg });
+                } else {
                   process.send({ event: 'collab', data: msg });
                 }
               },
@@ -1539,6 +1507,18 @@ function broadcastCollab(msg, excludeSocket = null) {
   }
 }
 
+function localizeCollabProject(msg, localProjectId) {
+  if (!msg || !msg.payload || typeof msg.payload !== 'object') return msg;
+  if (!('projectId' in msg.payload)) return msg;
+  return {
+    ...msg,
+    payload: {
+      ...msg.payload,
+      projectId: localProjectId,
+    },
+  };
+}
+
 function setupSocketReceiver(socket, onMessage, onClose) {
   let buffer = '';
   socket.on('data', (chunk) => {
@@ -1566,6 +1546,76 @@ function setupSocketReceiver(socket, onMessage, onClose) {
   socket.on('error', (err) => {
     // console.error('collab socket error:', err);
   });
+}
+
+function saveVerseLocal(projectId, bookCode, chapter, verse, newText) {
+  const projectDir = projectDirs.get(projectId);
+  if (!projectDir) {
+    console.error(`saveVerseLocal: projectDir not found for project ${projectId}`);
+    return;
+  }
+  let postPart = '.SFM';
+  let prePart = '';
+  const settingsPath = path.join(projectDir, 'Settings.xml');
+  if (fs.existsSync(settingsPath)) {
+    try {
+      const xml = fs.readFileSync(settingsPath, 'utf8');
+      const postMatch = /<FileNamePostPart>([^<]+)<\/FileNamePostPart>/i.exec(xml);
+      if (postMatch) postPart = postMatch[1].trim();
+      const preMatch = /<FileNamePrePart>([^<]+)<\/FileNamePrePart>/i.exec(xml);
+      if (preMatch) prePart = preMatch[1].trim();
+    } catch (_) {}
+  }
+
+  const files = fs.readdirSync(projectDir);
+  const regex = new RegExp(
+    `^${escapeRegex(prePart)}\\d*${bookCode}${escapeRegex(postPart)}$`,
+    'i',
+  );
+  const foundFile = files.find((f) => regex.test(f));
+  if (!foundFile) return;
+
+  const filePath = path.join(projectDir, foundFile);
+  const fileContent = fs.readFileSync(filePath, 'utf8');
+
+  const chapterRegex = new RegExp(
+    `(\\\\c\\s+${chapter}\\b)([\\s\\S]*?)(?=\\\\c\\s+\\d+|$)`,
+    'i',
+  );
+  const chapMatch = chapterRegex.exec(fileContent);
+  if (!chapMatch) return;
+
+  const chapHeader = chapMatch[1];
+  const chapBody = chapMatch[2];
+
+  const verseRegex = new RegExp(
+    `(\\\\v\\s+${verse}\\b\\s*)([\\s\\S]*?)(?=\\\\v\\s+\\d+|$)`,
+    'i',
+  );
+  const vMatch = verseRegex.exec(chapBody);
+  if (!vMatch) return;
+
+  const vHeader = vMatch[1];
+  const newline = fileContent.includes('\r\n') ? '\r\n' : '\n';
+
+  const vStartIndex = vMatch.index;
+  const vLength = vMatch[0].length;
+  const updatedChapBody =
+    chapBody.substring(0, vStartIndex) +
+    vHeader +
+    newText.trim() +
+    newline +
+    chapBody.substring(vStartIndex + vLength);
+
+  const startIndex = chapMatch.index;
+  const length = chapMatch[0].length;
+  const updatedFileContent =
+    fileContent.substring(0, startIndex) +
+    chapHeader +
+    updatedChapBody +
+    fileContent.substring(startIndex + length);
+
+  fs.writeFileSync(filePath, updatedFileContent, 'utf8');
 }
 
 function saveTasksLocal(projectId, tasksJson) {

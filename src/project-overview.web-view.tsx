@@ -1055,31 +1055,29 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
 
   useEffect(() => {
     let unsub: any;
-    const listen = async () => {
-      try {
-        unsub = await papi.network.subscribeNetworkEvent(
-          'paratextProjectManager.onCollabEvent',
-          (event: any) => {
-            if (!event) return;
-            const { type, payload } = event;
-            if (type === 'user_list') {
-              setCollabActiveUsers(payload.users || []);
-            } else if (type === 'chat_message') {
-              setCollabChatMessages((prev) => [...prev, payload]);
-            } else if (type === 'tasks_update') {
-              silentRefresh();
-            } else if (type === 'status_update') {
-              setCollabRole(payload.role);
-              if (payload.error) {
-                setCollabErrorMsg(payload.error);
-                setCollabStatusMsg('');
-              }
-            }
+    try {
+      unsub = papi.network.getNetworkEvent<any>(
+        'paratextProjectManager.onCollabEvent',
+      )((event: any) => {
+        if (!event) return;
+        const { type, payload } = event;
+        if (type === 'user_list') {
+          setCollabActiveUsers(payload.users || []);
+        } else if (type === 'chat_message') {
+          setCollabChatMessages((prev) => [...prev, payload]);
+        } else if (type === 'tasks_update') {
+          silentRefresh();
+        } else if (type === 'status_update') {
+          setCollabRole(payload.role);
+          if (payload.error) {
+            setCollabErrorMsg(payload.error);
+            setCollabStatusMsg('');
           }
-        );
-      } catch (_) {}
-    };
-    listen();
+        }
+      });
+    } catch (err) {
+      console.warn('Error subscribing to collab event:', err);
+    }
     return () => {
       if (unsub) unsub();
     };

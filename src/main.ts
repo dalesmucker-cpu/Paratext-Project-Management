@@ -1196,9 +1196,24 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
 
   const broadcastCursorPromise = papi.commands.registerCommand(
     'paratextProjectManager.broadcastCursor',
-    async (username: string, projectId: string, book: string, chapter: number, verse: number | null): Promise<string> => {
+    async (
+      username: string,
+      projectId: string,
+      book: string,
+      chapter: number,
+      verse: number | null,
+      offset?: number | null,
+    ): Promise<string> => {
       try {
-        const payload = { user: username, projectId, book, chapter, verse };
+        const payload = {
+          user: username,
+          projectId,
+          book,
+          chapter,
+          verse,
+          offset: offset ?? null,
+          timestamp: Date.now(),
+        };
         // Emit locally first
         collabEventEmitter.emit({ type: 'cursor_update', payload });
         // Then try to broadcast via helper process
@@ -1494,6 +1509,16 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
           verse,
           newText,
         ]);
+
+        // Broadcast the update so other computers reload the verse text
+        const payload = { projectId, book: bookCode, chapter, verse, newText };
+        collabEventEmitter.emit({ type: 'verse_update', payload });
+        try {
+          await sendToNotesHelper('broadcastCollab', [{ type: 'verse_update', payload }]);
+        } catch (helperErr) {
+          logger.warn(`Failed to broadcast verse_update to helper: ${helperErr}`);
+        }
+
         return 'ok';
       } catch (e) {
         logger.warn(`updateVerseText failed: ${e}`);

@@ -1,6 +1,6 @@
 import { WebViewProps } from '@papi/core';
 import papi from '@papi/frontend';
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import type { ParatextNoteThread, ParatextComment } from './types/note.types';
 import { ScrollGroupSelector } from 'platform-bible-react';
 
@@ -420,6 +420,7 @@ interface EditableVerseProps {
   onSave: (newText: string) => Promise<void>;
   onCancel: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
+  onCursorChange?: (offset: number) => void;
 }
 
 const EditableVerse: React.FC<EditableVerseProps> = ({
@@ -428,9 +429,31 @@ const EditableVerse: React.FC<EditableVerseProps> = ({
   onSave,
   onCancel,
   onContextMenu,
+  onCursorChange,
 }) => {
   const ref = useRef<HTMLSpanElement>(null);
   const [hasSaved, setHasSaved] = useState(false);
+
+  const getCaretOffset = (element: HTMLElement) => {
+    let caretOffset = 0;
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+      try {
+        const range = sel.getRangeAt(0);
+        const preCaretRange = range.cloneRange();
+        preCaretRange.selectNodeContents(element);
+        preCaretRange.setEnd(range.endContainer, range.endOffset);
+        caretOffset = preCaretRange.toString().length;
+      } catch (_) {}
+    }
+    return caretOffset;
+  };
+
+  const handleCursorActivity = () => {
+    if (ref.current && onCursorChange) {
+      onCursorChange(getCaretOffset(ref.current));
+    }
+  };
 
   useEffect(() => {
     if (ref.current) {
@@ -448,6 +471,8 @@ const EditableVerse: React.FC<EditableVerseProps> = ({
         range.setEnd(textNode, targetOffset);
         sel?.removeAllRanges();
         sel?.addRange(range);
+
+        if (onCursorChange) onCursorChange(targetOffset);
       } catch (err) {
         // Fallback: collapse caret to the end
         try {
@@ -457,6 +482,8 @@ const EditableVerse: React.FC<EditableVerseProps> = ({
           range.collapse(false);
           sel?.removeAllRanges();
           sel?.addRange(range);
+
+          if (onCursorChange) onCursorChange(ref.current.textContent?.length || 0);
         } catch (_) {}
       }
     }
@@ -491,7 +518,13 @@ const EditableVerse: React.FC<EditableVerseProps> = ({
       spellCheck={false}
       onBlur={handleBlur}
       onKeyDown={handleKeyDown}
-      onClick={(e) => e.stopPropagation()}
+      onInput={handleCursorActivity}
+      onKeyUp={handleCursorActivity}
+      onMouseUp={handleCursorActivity}
+      onClick={(e) => {
+        e.stopPropagation();
+        handleCursorActivity();
+      }}
       onContextMenu={onContextMenu}
       className="tw:outline-none tw:bg-transparent tw:p-0 tw:m-0 tw:inline tw:border-none"
     >
@@ -524,8 +557,120 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   const [selectedVerseNum, setSelectedVerseNum] = useState<number | null>(null);
   const [notesPopupVerseNum, setNotesPopupVerseNum] = useState<number | null>(null);
   const [currentUser, setCurrentUser] = useState('Dale');
-  const [collabCursors, setCollabCursors] = useState<Record<string, { projectId: string; book: string; chapter: number; verse: number | null }>>({});
+  const [collabCursors, setCollabCursors] = useState<Record<string, { projectId: string; book: string; chapter: number; verse: number | null; offset?: number | null; timestamp?: number }>>({});
   const [teamMembers, setTeamMembers] = useState<string[]>([]);
+
+  const renderVerseTextWithCursors = (text: string, editors: { user: string; offset: number }[]) => {
+    if (editors.length === 0) return text;
+    const sorted = [...editors].sort((a, b) => a.offset - b.offset);
+    const elements: React.ReactNode[] = [];
+    let lastIndex = 0;
+    sorted.forEach((ed, idx) => {
+      const offset = Math.min(Math.max(0, ed.offset), text.length);
+      if (offset > lastIndex) {
+        elements.push(text.substring(lastIndex, offset));
+      }
+      const userHash = ed.user.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      const colors = [
+        { cursor: 'tw:bg-rose-500', bg: 'tw:bg-rose-500' },
+        { cursor: 'tw:bg-indigo-500', bg: 'tw:bg-indigo-500' },
+        { cursor: 'tw:bg-emerald-500', bg: 'tw:bg-emerald-500' },
+        { cursor: 'tw:bg-amber-500', bg: 'tw:bg-amber-500' },
+        { cursor: 'tw:bg-cyan-500', bg: 'tw:bg-cyan-500' },
+      ];
+      const color = colors[userHash % colors.length];
+      elements.push(
+        <span key={`cursor-${ed.user}-${idx}`} className="tw:relative tw:inline-block tw:w-0 tw:h-[1em] tw:align-baseline">
+          <span className={`tw:absolute tw:w-[2px] tw:h-[1.1em] tw:animate-[pulse_1.5s_infinite] ${color.cursor}`} style={{ left: 0, bottom: '0.1em', display: 'inline-block' }} />
+          <span
+            className={`tw:absolute tw:bottom-full tw:left-0 tw:mb-1 tw:whitespace-nowrap tw:text-[8px] tw:text-white tw:px-1 tw:py-0.2 tw:rounded-sm tw:opacity-90 tw:pointer-events-none ${color.bg}`}
+            style={{ transform: 'translateX(-50%)', zIndex: 50 }}
+          >
+            {ed.user}
+          </span>
+        </span>
+      );
+      lastIndex = offset;
+    });
+    if (lastIndex < text.length) {
+      elements.push(text.substring(lastIndex));
+    }
+    return <>{elements}</>;
+  };
+
+  const injectCursorsIntoElements = (
+    nodes: React.ReactNode,
+    editors: { user: string; offset: number }[],
+  ): React.ReactNode => {
+    if (editors.length === 0) return nodes;
+    const sortedEditors = [...editors].sort((a, b) => a.offset - b.offset);
+    let currentGlobalCharOffset = 0;
+    let editorIdx = 0;
+
+    const processString = (text: string): React.ReactNode => {
+      const elements: React.ReactNode[] = [];
+      let lastIndex = 0;
+      while (editorIdx < sortedEditors.length) {
+        const ed = sortedEditors[editorIdx];
+        const localOffset = ed.offset - currentGlobalCharOffset;
+        if (localOffset >= 0 && localOffset <= text.length) {
+          if (localOffset > lastIndex) {
+            elements.push(text.substring(lastIndex, localOffset));
+          }
+          const userHash = ed.user.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+          const colors = [
+            { cursor: 'tw:bg-rose-500', bg: 'tw:bg-rose-500' },
+            { cursor: 'tw:bg-indigo-500', bg: 'tw:bg-indigo-500' },
+            { cursor: 'tw:bg-emerald-500', bg: 'tw:bg-emerald-500' },
+            { cursor: 'tw:bg-amber-500', bg: 'tw:bg-amber-500' },
+            { cursor: 'tw:bg-cyan-500', bg: 'tw:bg-cyan-500' },
+          ];
+          const color = colors[userHash % colors.length];
+          elements.push(
+            <span key={`cursor-node-${ed.user}-${editorIdx}`} className="tw:relative tw:inline-block tw:w-0 tw:h-[1em] tw:align-baseline">
+              <span className={`tw:absolute tw:w-[2px] tw:h-[1.1em] tw:animate-[pulse_1.5s_infinite] ${color.cursor}`} style={{ left: 0, bottom: '0.1em', display: 'inline-block' }} />
+              <span
+                className={`tw:absolute tw:bottom-full tw:left-0 tw:mb-1 tw:whitespace-nowrap tw:text-[8px] tw:text-white tw:px-1 tw:py-0.2 tw:rounded-sm tw:opacity-90 tw:pointer-events-none ${color.bg}`}
+                style={{ transform: 'translateX(-50%)', zIndex: 50 }}
+              >
+                {ed.user}
+              </span>
+            </span>
+          );
+          lastIndex = localOffset;
+          editorIdx++;
+        } else {
+          break;
+        }
+      }
+      if (lastIndex < text.length) {
+        elements.push(text.substring(lastIndex));
+      }
+      currentGlobalCharOffset += text.length;
+      return elements.length > 1 ? <>{elements}</> : elements[0] ?? '';
+    };
+
+    const traverse = (node: React.ReactNode): React.ReactNode => {
+      if (editorIdx >= sortedEditors.length) return node;
+      if (typeof node === 'string') {
+        return processString(node);
+      }
+      if (React.isValidElement(node)) {
+        const element = node as React.ReactElement<any>;
+        if (element.props && element.props.children) {
+          const processedChildren = traverse(element.props.children);
+          return React.cloneElement(element, { ...element.props, key: element.key }, processedChildren);
+        }
+        return node;
+      }
+      if (Array.isArray(node)) {
+        return node.map((child) => traverse(child));
+      }
+      return node;
+    };
+
+    return traverse(nodes);
+  };
 
   // Focus and Selection Navigation
   const [selectedThreadIdInSidebar, setSelectedThreadIdInSidebar] = useState<string | null>(null);
@@ -544,10 +689,77 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     }, 1800);
     // Scroll the verse into view after a short delay for render
     setTimeout(() => {
-      const el = document.getElementById(`verse-${verseNum}`);
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, 150);
+      const element = document.getElementById(`verse-${verseNum}`);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 100);
   }, []);
+
+  const loadNotes = useCallback(async () => {
+    try {
+      const notesRes = await papi.commands.sendCommand(
+        'paratextProjectManager.getProjectNotes',
+        projectId,
+        currentUser,
+      );
+      const parsedNotes = JSON.parse(notesRes) as { threads: ParatextNoteThread[] };
+      setAllNotes(parsedNotes.threads || []);
+    } catch (err) {
+      console.error('Failed to load notes', err);
+    }
+  }, [projectId, currentUser]);
+
+  const loadChapter = useCallback(async (bookCode: string, chapterNum: number) => {
+    if (!bookCode) return;
+    setLoading(true);
+    try {
+      const textRes = await papi.commands.sendCommand(
+        'paratextProjectManager.getChapterText',
+        projectId,
+        bookCode,
+        chapterNum,
+      );
+      const parsedText = JSON.parse(textRes) as {
+        blocks: ChapterBlock[];
+        totalChapters: number;
+        error?: string;
+      };
+      if (parsedText.error) {
+        setError(`Error del archivo USFM: ${parsedText.error}`);
+        setChapterBlocks([]);
+      } else {
+        setChapterBlocks(parsedText.blocks);
+        setTotalChapters(parsedText.totalChapters || 1);
+        setError('');
+      }
+
+      await loadNotes();
+    } catch (err) {
+      console.error(err);
+      setError('Error al cargar texto o notas.');
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId, loadNotes]);
+
+  const handleCursorChange = useCallback(
+    (verseNum: number, offset: number) => {
+      if (!currentUser) return;
+      papi.commands
+        .sendCommand(
+          'paratextProjectManager.broadcastCursor',
+          currentUser,
+          projectId,
+          selectedBook,
+          selectedChapter,
+          verseNum,
+          offset,
+        )
+        .catch(() => {});
+    },
+    [currentUser, projectId, selectedBook, selectedChapter],
+  );
 
   // Verse editing states
   const [isEditingVerse, setIsEditingVerse] = useState(false);
@@ -711,32 +923,62 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   // Listen to collaboration events
   useEffect(() => {
     let unsubEvent: any;
-    const listen = async () => {
-      try {
-        unsubEvent = await papi.network.subscribeNetworkEvent(
-          'paratextProjectManager.onCollabEvent',
-          (event: any) => {
-            if (!event) return;
-            const { type, payload } = event;
-            if (type === 'cursor_update') {
-              setCollabCursors((prev) => ({
-                ...prev,
-                [payload.user]: payload,
-              }));
-            } else if (type === 'note_update') {
-              if (payload.projectId === projectId) {
-                loadNotes();
-              }
+    try {
+      unsubEvent = papi.network.getNetworkEvent<any>(
+        'paratextProjectManager.onCollabEvent',
+      )((event: any) => {
+        if (!event) return;
+        const { type, payload } = event;
+        if (type === 'cursor_update') {
+          if (!payload?.user || payload.user === currentUser || payload.projectId !== projectId) {
+            return;
+          }
+          setCollabCursors((prev) => {
+            const next = { ...prev };
+            if (payload.verse === null) {
+              delete next[payload.user];
+            } else {
+              next[payload.user] = { ...payload, timestamp: payload.timestamp ?? Date.now() };
             }
-          },
-        );
-      } catch (_) {}
-    };
-    listen();
+            return next;
+          });
+        } else if (type === 'note_update') {
+          if (payload.projectId === projectId) {
+            loadNotes();
+          }
+        } else if (type === 'verse_update') {
+          if (
+            payload.projectId === projectId &&
+            payload.book === selectedBook &&
+            payload.chapter === selectedChapter
+          ) {
+            loadChapter(selectedBook, selectedChapter);
+          }
+        }
+      });
+    } catch (_) {}
     return () => {
       if (unsubEvent) unsubEvent();
     };
-  }, [projectId]);
+  }, [projectId, selectedBook, selectedChapter, currentUser, loadNotes, loadChapter]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const cutoff = Date.now() - 30_000;
+      setCollabCursors((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        for (const [user, cursor] of Object.entries(next)) {
+          if ((cursor.timestamp ?? 0) < cutoff) {
+            delete next[user];
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    }, 10_000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Broadcast cursor when editing state changes
   useEffect(() => {
@@ -751,11 +993,12 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
           selectedBook,
           selectedChapter,
           verseToBroadcast,
+          isEditingVerse ? initialOffset : null,
         );
       } catch (_) {}
     };
     updateCursor();
-  }, [isEditingVerse, selectedVerseNum, selectedBook, selectedChapter, currentUser, projectId]);
+  }, [isEditingVerse, selectedVerseNum, selectedBook, selectedChapter, currentUser, projectId, initialOffset]);
 
   // Scroll to active verse element when selectedVerseNum or chapterBlocks changes
   useEffect(() => {
@@ -983,53 +1226,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     initData();
   }, [initData]);
 
-  // Load chapter text and notes
-  const loadChapter = async (bookCode: string, chapterNum: number) => {
-    if (!bookCode) return;
-    setLoading(true);
-    try {
-      const textRes = await papi.commands.sendCommand(
-        'paratextProjectManager.getChapterText',
-        projectId,
-        bookCode,
-        chapterNum,
-      );
-      const parsedText = JSON.parse(textRes) as {
-        blocks: ChapterBlock[];
-        totalChapters: number;
-        error?: string;
-      };
-      if (parsedText.error) {
-        setError(`Error del archivo USFM: ${parsedText.error}`);
-        setChapterBlocks([]);
-      } else {
-        setChapterBlocks(parsedText.blocks);
-        setTotalChapters(parsedText.totalChapters || 1);
-        setError('');
-      }
-
-      await loadNotes();
-    } catch (err) {
-      console.error(err);
-      setError('Error al cargar texto o notas.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadNotes = async () => {
-    try {
-      const notesRes = await papi.commands.sendCommand(
-        'paratextProjectManager.getProjectNotes',
-        projectId,
-        currentUser,
-      );
-      const parsedNotes = JSON.parse(notesRes) as { threads: ParatextNoteThread[] };
-      setAllNotes(parsedNotes.threads || []);
-    } catch (err) {
-      console.error('Failed to load notes', err);
-    }
-  };
+  // Cleaned up original non-callback loadChapter/loadNotes definitions since they were moved to top.
 
   useEffect(() => {
     if (selectedBook) {
@@ -1700,7 +1897,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
 
                       const isSelected = selectedVerseNum === child.number;
                       const isEditing = isEditingVerse && isSelected;
-                      const editors = Object.entries(collabCursors)
+                      const editorsWithCursors = Object.entries(collabCursors)
                         .filter(([user, cursor]) => {
                           return (
                             user !== currentUser &&
@@ -1710,7 +1907,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                             cursor.verse === child.number
                           );
                         })
-                        .map(([user]) => user);
+                        .map(([user, cursor]) => ({ user, offset: cursor.offset ?? 0 }));
 
                       return (
                         <span
@@ -1745,23 +1942,20 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                                 setSelectedVerseNum(null);
                               }}
                               onContextMenu={(e) => handleVerseContextMenu(e, child.number, child.text)}
+                              onCursorChange={(offset) => {
+                                handleCursorChange(child.number, offset);
+                              }}
                             />
                           ) : (
                             <span>
-                              {highlightText(
-                                child.text,
-                                chapterNotesByVerse[child.number] ?? [],
-                                child.number,
+                              {injectCursorsIntoElements(
+                                highlightText(
+                                  child.text,
+                                  chapterNotesByVerse[child.number] ?? [],
+                                  child.number,
+                                ),
+                                editorsWithCursors,
                               )}
-                            </span>
-                          )}
-
-                          {editors.length > 0 && (
-                            <span
-                              className="tw:inline-flex tw:items-center tw:gap-1 tw:bg-amber-100 tw:text-amber-800 tw:text-[9px] tw:px-1.5 tw:py-0.2 tw:rounded tw:ml-1 tw:select-none tw:animate-pulse tw:font-semibold"
-                              title={`Editando por: ${editors.join(', ')}`}
-                            >
-                              ✍️ {editors.join(', ')}
                             </span>
                           )}
                         </span>
