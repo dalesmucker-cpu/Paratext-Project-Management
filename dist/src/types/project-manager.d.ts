@@ -153,5 +153,7 @@ declare module 'papi-shared-types' {
     'paratextProjectManager.getLastNavigatedVerse': (
       projectId: string,
     ) => Promise<{ projectId: string; bookCode: string; chapter: number; verse: number } | null>;
+    /** Gets the update status notice if an update was recently applied */
+    'paratextProjectManager.getUpdateStatus': () => Promise<string | null>;
   }
 }

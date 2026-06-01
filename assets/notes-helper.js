@@ -1170,12 +1170,22 @@ async function handleAction(action, args) {
           try {
             collabServer = net.createServer((socket) => {
               socket.setKeepAlive(true, 15000);
+              socket.setNoDelay(true);
               let socketUser = '';
+              let lastPongAt = Date.now();
               collabSockets.push(socket);
 
               setupSocketReceiver(
                 socket,
                 (msg) => {
+                  if (msg.type === 'pong') {
+                    lastPongAt = Date.now();
+                    return;
+                  }
+                  if (msg.type === 'ping') {
+                    try { socket.write(JSON.stringify({ type: 'pong' }) + '\n'); } catch (_) {}
+                    return;
+                  }
                   console.log(`[collab] HOST received from client: ${msg.type}`);
                   if (msg.type === 'handshake') {
                     socketUser = msg.payload.username;
@@ -1248,6 +1258,23 @@ async function handleAction(action, args) {
                   }
                 }
               );
+
+              // Send periodic pings to detect dead connections
+              const pingInterval = setInterval(() => {
+                if (!socket.writable || socket.destroyed) {
+                  clearInterval(pingInterval);
+                  return;
+                }
+                // If no pong in 30s, consider the connection dead
+                if (Date.now() - lastPongAt > 30000) {
+                  console.warn(`[collab] HOST: client ${socketUser} hasn't responded to pings in 30s, closing`);
+                  try { socket.destroy(); } catch (_) {}
+                  clearInterval(pingInterval);
+                  return;
+                }
+                try { socket.write(JSON.stringify({ type: 'ping' }) + '\n'); } catch (_) {}
+              }, 10000);
+              socket.on('close', () => clearInterval(pingInterval));
             });
 
             collabServer.on('error', (err) => {
@@ -1358,12 +1385,17 @@ async function handleAction(action, args) {
           try {
             const socket = net.createConnection({ host: collabHostIp, port: collabPort }, () => {
               socket.setKeepAlive(true, 15000);
+              socket.setNoDelay(true);
               collabClientSocket = socket;
+              console.log(`[collab] CLIENT socket connected to host ${collabHostIp}:${collabPort}, writable=${socket.writable}`);
               socket.write(JSON.stringify({ type: 'handshake', payload: { username } }) + '\n');
               resolve({ status: 'ok', role: 'client' });
             });
 
+            let lastPongAt = Date.now();
+
             socket.on('error', (err) => {
+              console.error(`[collab] CLIENT socket error: ${err.message}`);
               cleanupCollab();
               reject(err);
             });
@@ -1371,6 +1403,15 @@ async function handleAction(action, args) {
             setupSocketReceiver(
               socket,
               (msg) => {
+                if (msg.type === 'ping') {
+                  lastPongAt = Date.now();
+                  try { socket.write(JSON.stringify({ type: 'pong' }) + '\n'); } catch (_) {}
+                  return;
+                }
+                if (msg.type === 'pong') {
+                  lastPongAt = Date.now();
+                  return;
+                }
                 console.log(`[collab] CLIENT received from host: ${msg.type}`);
                 if (msg.type === 'init_sync') {
                   saveTasksLocal(projectId, msg.payload.tasksJson);
@@ -1403,6 +1444,22 @@ async function handleAction(action, args) {
                 process.send({ event: 'collab', data: { type: 'status_update', payload: { role: 'none', error: 'Se perdió la conexión con el servidor.' } } });
               }
             );
+
+            // Send periodic pings; if no pong in 30s, the connection is dead
+            const pingInterval = setInterval(() => {
+              if (!socket.writable || socket.destroyed) {
+                clearInterval(pingInterval);
+                return;
+              }
+              if (Date.now() - lastPongAt > 30000) {
+                console.warn(`[collab] CLIENT: no pong from host in 30s, destroying socket`);
+                try { socket.destroy(); } catch (_) {}
+                clearInterval(pingInterval);
+                return;
+              }
+              try { socket.write(JSON.stringify({ type: 'ping' }) + '\n'); } catch (_) {}
+            }, 10000);
+            socket.on('close', () => clearInterval(pingInterval));
           } catch (e) {
             cleanupCollab();
             reject(e);
@@ -1510,6 +1567,9 @@ function broadcastCollab(msg, excludeSocket = null) {
     return;
   }
 
+  // Don't broadcast control pings
+  if (msg && msg.type === 'ping') return;
+
   const line = JSON.stringify(msg) + '\n';
   if (collabRole === 'host') {
     let sentCount = 0;
@@ -1535,18 +1595,18 @@ function broadcastCollab(msg, excludeSocket = null) {
   } else if (collabRole === 'client') {
     if (collabClientSocket && collabClientSocket.writable) {
       try {
-        collabClientSocket.write(line, (err) => {
+        const ok = collabClientSocket.write(line, (err) => {
           if (err) {
             console.error('[collab] Client socket write error:', err.message);
-            collabClientSocket.destroy();
+            try { collabClientSocket.destroy(); } catch (_) {}
           }
         });
         if (msg.type === 'cursor_update' || msg.type === 'verse_update' || msg.type === 'tasks_update' || msg.type === 'note_update') {
-          console.log(`[collab] CLIENT sent ${msg.type} to host`);
+          console.log(`[collab] CLIENT sent ${msg.type} to host (socket writable=${collabClientSocket.writable}, write OK=${ok})`);
         }
       } catch (e) {
         console.error('[collab] Client socket write exception:', e.message);
-        collabClientSocket.destroy();
+        try { collabClientSocket.destroy(); } catch (_) {}
       }
     } else {
       console.warn(`[collab] CLIENT tried to send ${msg.type} but socket is not writable (writable=${collabClientSocket?.writable}, exists=${!!collabClientSocket})`);

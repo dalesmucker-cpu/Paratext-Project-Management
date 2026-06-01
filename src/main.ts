@@ -102,6 +102,7 @@ const pendingNotesRequests = new Map<
   { resolve: (val: any) => void; reject: (err: any) => void }
 >();
 let notesRequestIdCounter = 0;
+let updateNoticeMessage: string | null = null;
 
 function sendToNotesHelper(action: string, args: any[]): Promise<any> {
   if (!notesHelperProcess) return Promise.reject(new Error('Notes helper not running'));
@@ -315,6 +316,47 @@ function runGcalHelper(
   timeoutMs?: number,
 ): Promise<string> {
   return runScript('assets/gcal-helper.js', [action, ...args], stdinData, timeoutMs);
+}
+
+// --- Automatic Updater ---
+
+async function checkAndApplyUpdates(): Promise<void> {
+  try {
+    logger.info('Project Manager: checking for updates...');
+    const resultJson = await runScript('assets/update-helper.js', [], undefined, 60_000);
+    if (!resultJson.trim()) {
+      logger.info('Project Manager: update-helper returned empty response.');
+      return;
+    }
+    const result = JSON.parse(resultJson) as {
+      status: 'updated' | 'no_update' | 'error';
+      currentVersion?: string;
+      latestVersion?: string;
+      message?: string;
+      error?: string;
+    };
+
+    if (result.status === 'updated') {
+      const msg = `Se ha instalado una nueva versión del Project Manager (v${result.latestVersion}). Por favor, reinicia Paratext Studio para aplicar los cambios.`;
+      logger.info(
+        `Project Manager: successfully updated from v${result.currentVersion} to v${result.latestVersion}.`,
+      );
+      updateNoticeMessage = msg;
+
+      if (collabEventEmitter) {
+        collabEventEmitter.emit({
+          type: 'update_available',
+          payload: { message: msg },
+        });
+      }
+    } else if (result.status === 'no_update') {
+      logger.info(`Project Manager: already up-to-date (v${result.currentVersion || 'unknown'}).`);
+    } else if (result.status === 'error') {
+      logger.warn(`Project Manager: update check failed: ${result.error}`);
+    }
+  } catch (err) {
+    logger.warn(`Project Manager: update check crashed: ${err}`);
+  }
 }
 
 // --- File-based gcal config (avoids papi.settings schema caching issues) ---
@@ -1297,6 +1339,13 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
       } catch (e) {
         return 'error';
       }
+    },
+  );
+
+  const getUpdateStatusPromise = papi.commands.registerCommand(
+    'paratextProjectManager.getUpdateStatus',
+    async (): Promise<string | null> => {
+      return updateNoticeMessage;
     },
   );
 
@@ -2657,8 +2706,14 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     await getCollabStatusPromise,
     await sendCollabChatPromise,
     await broadcastCursorPromise,
+    await getUpdateStatusPromise,
     collabEventEmitter,
   );
+
+  // Start check for updates in the background on startup
+  checkAndApplyUpdates().catch((err) => {
+    logger.warn(`Project Manager: update check failed to start: ${err}`);
+  });
 
   logger.info('Project Manager extension finished activating!');
 }

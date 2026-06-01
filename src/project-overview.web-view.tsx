@@ -663,6 +663,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [currentUser, setCurrentUser] = useState('');
+  const [updateMessage, setUpdateMessage] = useState('');
 
   // --- Collaboration state ---
   const [collabRole, setCollabRole] = useState<'host' | 'client' | 'none'>('none');
@@ -982,7 +983,12 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         setCollabStatusMsg(collabType === 'online' ? 'Sesión de colaboración online iniciada.' : 'Servidor de colaboración local iniciado.');
         await loadCollabStatus();
       } else {
-        setCollabErrorMsg(res?.error || 'Error desconocido al iniciar colaboración.');
+        const errMsg = res?.error || 'Error desconocido al iniciar colaboración.';
+        if (/EADDRINUSE|address already in use/i.test(errMsg)) {
+          setCollabErrorMsg(`${errMsg}\n\nSi el puerto ${collabPort} está ocupado, cambia el puerto o cierra la otra sesión.`);
+        } else {
+          setCollabErrorMsg(errMsg);
+        }
       }
     } catch (e: any) {
       setCollabErrorMsg(e?.message || String(e));
@@ -1117,6 +1123,8 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
             setCollabErrorMsg(payload.error);
             setCollabStatusMsg('');
           }
+        } else if (type === 'update_available') {
+          setUpdateMessage(payload.message || 'Una actualización está disponible y ha sido instalada. Por favor reinicia Paratext Studio.');
         }
       });
     } catch (err) {
@@ -1126,6 +1134,20 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       if (unsub) unsub();
     };
   }, [silentRefresh]);
+
+  useEffect(() => {
+    const checkUpdateStatus = async () => {
+      try {
+        const msg = await papi.commands.sendCommand('paratextProjectManager.getUpdateStatus');
+        if (msg) {
+          setUpdateMessage(msg as string);
+        }
+      } catch (_) {
+        /* ignore */
+      }
+    };
+    checkUpdateStatus();
+  }, []);
 
   useEffect(() => {
     loadGcalStatus();
@@ -2042,6 +2064,22 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         .print-only { display: none; }
       `}</style>
 
+      {/* Update notification banner */}
+      {updateMessage && (
+        <div className="tw:bg-gradient-to-r tw:from-emerald-500 tw:to-teal-600 tw:text-white tw:px-4 tw:py-2.5 tw:flex tw:items-center tw:justify-between tw:shadow-md tw:no-print">
+          <div className="tw:flex tw:items-center tw:gap-2">
+            <span className="tw:text-sm">✨</span>
+            <span className="tw:font-medium">{updateMessage}</span>
+          </div>
+          <button 
+            className="tw:text-xs tw:bg-white/20 tw:backdrop-blur-sm tw:text-white tw:border tw:border-white/30 tw:px-2.5 tw:py-1 tw:rounded-md tw:hover:bg-white/30 tw:transition-all"
+            onClick={() => setUpdateMessage('')}
+          >
+            Entendido
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="tw:px-3 tw:py-2 tw:bg-white tw:border-b tw:shadow-sm tw:flex tw:items-center tw:justify-between tw:no-print">
         <span className="tw:font-semibold tw:text-sm tw:text-gray-700">Resumen del Proyecto</span>
@@ -2239,8 +2277,21 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                   </div>
                 )}
                 {collabErrorMsg && (
-                  <div className="tw:bg-red-50 tw:border tw:border-red-200 tw:text-red-700 tw:p-2 tw:rounded">
+                  <div className="tw:bg-red-50 tw:border tw:border-red-200 tw:text-red-700 tw:p-2 tw:rounded tw:whitespace-pre-line">
                     {collabErrorMsg}
+                    {(collabErrorMsg.includes('timeout') ||
+                      collabErrorMsg.includes('ECONNREFUSED') ||
+                      collabErrorMsg.includes('ETIMEDOUT') ||
+                      collabErrorMsg.includes('No se pudo')) && (
+                      <div className="tw:mt-2 tw:pt-2 tw:border-t tw:border-red-200 tw:text-[11px]">
+                        💡 <strong>Si la conexión con el anfitrión falla:</strong>
+                        <ul className="tw:list-disc tw:pl-5 tw:mt-1 tw:space-y-0.5">
+                          <li>Verifica que el Firewall de Windows permite <code>paratext-project-manager</code> o el puerto <code>{collabPort}</code>.</li>
+                          <li>Confirma que ambos equipos están en la misma red.</li>
+                          <li>Prueba hacer ping a la IP del anfitrión.</li>
+                        </ul>
+                      </div>
+                    )}
                   </div>
                 )}
 

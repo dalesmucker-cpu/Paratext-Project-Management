@@ -163,7 +163,19 @@ interface EditableVerseProps {
   onCancel: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
   onCursorChange?: (offset: number) => void;
+  onUndoStateChange?: (canUndo: boolean) => void;
 }
+
+// Module-level handle to the currently active EditableVerse, so the parent
+// scripture viewer can render an "↶ Deshacer" button next to it.
+let activeEditableVerseHandle: { undo: () => void; canUndo: () => boolean } | null = null;
+export const triggerVerseUndo = () => {
+  if (activeEditableVerseHandle && activeEditableVerseHandle.canUndo()) {
+    activeEditableVerseHandle.undo();
+    return true;
+  }
+  return false;
+};
 
 const EditableVerse: React.FC<EditableVerseProps> = ({
   initialText,
@@ -172,9 +184,29 @@ const EditableVerse: React.FC<EditableVerseProps> = ({
   onCancel,
   onContextMenu,
   onCursorChange,
+  onUndoStateChange,
 }) => {
   const ref = useRef<HTMLSpanElement>(null);
   const [hasSaved, setHasSaved] = useState(false);
+  const undoStackRef = useRef<string[]>([]);
+  const lastInputValueRef = useRef<string>(initialText);
+  const [canUndo, setCanUndo] = useState(false);
+
+  // Register this EditableVerse as the active one for the global undo button.
+  useEffect(() => {
+    activeEditableVerseHandle = {
+      undo: () => handleUndo(),
+      canUndo: () => undoStackRef.current.length > 0,
+    };
+    return () => {
+      if (activeEditableVerseHandle) activeEditableVerseHandle = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (onUndoStateChange) onUndoStateChange(canUndo);
+  }, [canUndo, onUndoStateChange]);
 
   const getCaretOffset = (element: HTMLElement) => {
     let caretOffset = 0;
@@ -199,6 +231,38 @@ const EditableVerse: React.FC<EditableVerseProps> = ({
     }
   };
 
+  // Push current DOM text onto undo stack when it changes
+  const pushUndoSnapshot = (newValue: string) => {
+    const prev = lastInputValueRef.current;
+    if (prev === newValue) return;
+    undoStackRef.current.push(prev);
+    if (undoStackRef.current.length > 50) undoStackRef.current.shift();
+    lastInputValueRef.current = newValue;
+    setCanUndo(undoStackRef.current.length > 0);
+  };
+
+  const handleUndo = (e?: React.SyntheticEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
+    const prev = undoStackRef.current.pop();
+    if (prev === undefined || !ref.current) return;
+    // Restore text without re-rendering (avoid React overwriting)
+    ref.current.textContent = prev;
+    lastInputValueRef.current = prev;
+    setCanUndo(undoStackRef.current.length > 0);
+    // Restore caret to end of restored text
+    try {
+      const range = document.createRange();
+      const sel = window.getSelection();
+      const textNode = ref.current.firstChild || ref.current;
+      const length = textNode.textContent?.length || 0;
+      range.setStart(textNode, length);
+      range.setEnd(textNode, length);
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+    } catch (_) {}
+  };
+
   useEffect(() => {
     if (ref.current) {
       ref.current.focus();
@@ -210,7 +274,7 @@ const EditableVerse: React.FC<EditableVerseProps> = ({
         const sel = window.getSelection();
         const length = textNode.textContent?.length || 0;
         const targetOffset = Math.min(Math.max(0, initialOffset), length);
-        
+
         range.setStart(textNode, targetOffset);
         range.setEnd(textNode, targetOffset);
         sel?.removeAllRanges();
@@ -243,6 +307,22 @@ const EditableVerse: React.FC<EditableVerseProps> = ({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLSpanElement>) => {
+    // Ctrl+Z / Cmd+Z to undo typing within this verse
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+      if (undoStackRef.current.length > 0) {
+        handleUndo(e);
+        return;
+      }
+    }
+    // Ctrl+Y or Ctrl+Shift+Z for redo: re-apply popped value (simple)
+    if (
+      (e.ctrlKey || e.metaKey) &&
+      ((e.shiftKey && e.key.toLowerCase() === 'z') || e.key.toLowerCase() === 'y')
+    ) {
+      // No redo stack in this simple implementation
+      e.preventDefault();
+      return;
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       e.currentTarget.blur();
@@ -256,6 +336,12 @@ const EditableVerse: React.FC<EditableVerseProps> = ({
     }
   };
 
+  const handleInput = (e: React.FormEvent<HTMLSpanElement>) => {
+    const text = e.currentTarget.textContent || '';
+    pushUndoSnapshot(text);
+    handleCursorActivity();
+  };
+
   return (
     <span
       ref={ref}
@@ -264,7 +350,7 @@ const EditableVerse: React.FC<EditableVerseProps> = ({
       spellCheck={false}
       onBlur={handleBlur}
       onKeyDown={handleKeyDown}
-      onInput={handleCursorActivity}
+      onInput={handleInput}
       onKeyUp={handleCursorActivity}
       onMouseUp={handleCursorActivity}
       onClick={(e) => {
@@ -518,6 +604,11 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
 
   const lastBroadcastTimeRef = useRef<number>(0);
   const pendingBroadcastRef = useRef<NodeJS.Timeout | null>(null);
+  const isEditingVerseRef = useRef<boolean>(false);
+  const editingVerseNumRef = useRef<number | null>(null);
+  // Tracks verse updates triggered by the LOCAL user so the verse_update listener
+  // doesn't trigger a redundant loadChapter that could overwrite the edit.
+  const selfVerseUpdateRef = useRef<{ book: string; chapter: number; verse: number; ts: number } | null>(null);
 
   useEffect(() => {
     return () => {
@@ -567,6 +658,12 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   const [verseEditText, setVerseEditText] = useState('');
   const [savingVerse, setSavingVerse] = useState(false);
   const [fontSize, setFontSize] = useState(16);
+  const [verseEditorCanUndo, setVerseEditorCanUndo] = useState(false);
+
+  useEffect(() => {
+    isEditingVerseRef.current = isEditingVerse;
+    editingVerseNumRef.current = selectedVerseNum;
+  }, [isEditingVerse, selectedVerseNum]);
 
   // Text selection states for new notes
   const [selectedText, setSelectedText] = useState('');
@@ -767,6 +864,27 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
             payload.book === currentBook &&
             payload.chapter === currentChapter
           ) {
+            // CRITICAL: Do NOT reload the chapter if the user is currently editing.
+            // The EditableVerse uses contentEditable with the chapterBlocks text as initialText.
+            // Reloading chapterBlocks would cause React to re-render the DOM and
+            // ERASE the user's in-progress typing (data loss!).
+            if (isEditingVerseRef.current) {
+              console.log(`[collab] Skipped verse_update reload — user is editing verse ${editingVerseNumRef.current}`);
+              return;
+            }
+            // Also skip if this verse_update is from our OWN save (avoid double loadChapter)
+            const self = selfVerseUpdateRef.current;
+            if (
+              self &&
+              self.book === payload.book &&
+              self.chapter === payload.chapter &&
+              self.verse === payload.verse &&
+              Date.now() - self.ts < 5000
+            ) {
+              console.log(`[collab] Skipped self-triggered verse_update for ${payload.book} ${payload.chapter}:${payload.verse}`);
+              selfVerseUpdateRef.current = null;
+              return;
+            }
             loadChapterRef.current(currentBook, currentChapter);
           }
         } else if (type === 'user_changed') {
@@ -882,6 +1000,12 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     if (selectedVerseNum === null || !selectedBook) return;
     const textToSave = customText !== undefined ? customText : verseEditText;
     setSavingVerse(true);
+    selfVerseUpdateRef.current = {
+      book: selectedBook,
+      chapter: selectedChapter,
+      verse: selectedVerseNum,
+      ts: Date.now(),
+    };
     try {
       const res = await papi.commands.sendCommand(
         'paratextProjectManager.updateVerseText',
@@ -894,12 +1018,15 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
 
       if (res === 'ok') {
         setIsEditingVerse(false);
-        await loadChapter(selectedBook, selectedChapter);
+        setSelectedVerseNum(null);
+        // The verse_update event will trigger loadChapter; no need to call it explicitly
       } else {
         showErrorMessage(`Error al guardar el texto: ${res}`);
+        selfVerseUpdateRef.current = null;
       }
     } catch (err) {
       showErrorMessage(`Error al guardar el texto: ${err}`);
+      selfVerseUpdateRef.current = null;
     } finally {
       setSavingVerse(false);
     }
@@ -915,6 +1042,12 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     }
 
     setSavingVerse(true);
+    selfVerseUpdateRef.current = {
+      book: selectedBook || '',
+      chapter: selectedChapter,
+      verse: verseNum,
+      ts: Date.now(),
+    };
     try {
       const res = await papi.commands.sendCommand(
         'paratextProjectManager.updateVerseText',
@@ -928,16 +1061,18 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       if (res === 'ok') {
         setIsEditingVerse(false);
         setSelectedVerseNum(null);
-        await loadChapter(selectedBook, selectedChapter);
+        // The verse_update event will trigger loadChapter; no need to call it explicitly
       } else {
         showErrorMessage(`Error al guardar el texto: ${res}`);
         setIsEditingVerse(false);
         setSelectedVerseNum(null);
+        selfVerseUpdateRef.current = null;
       }
     } catch (err) {
       showErrorMessage(`Error al guardar el texto: ${err}`);
       setIsEditingVerse(false);
       setSelectedVerseNum(null);
+      selfVerseUpdateRef.current = null;
     } finally {
       setSavingVerse(false);
     }
@@ -1810,21 +1945,40 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
 
                           {/* Verse text content */}
                           {isEditing ? (
-                            <EditableVerse
-                              initialText={child.text}
-                              initialOffset={initialOffset}
-                              onSave={async (newText) => {
-                                await handleContentEditableSave(newText, child.number);
-                              }}
-                              onCancel={() => {
-                                setIsEditingVerse(false);
-                                setSelectedVerseNum(null);
-                              }}
-                              onContextMenu={(e) => handleVerseContextMenu(e, child.number, child.text)}
-                              onCursorChange={(offset) => {
-                                handleCursorChange(child.number, offset);
-                              }}
-                            />
+                            <>
+                              <EditableVerse
+                                initialText={child.text}
+                                initialOffset={initialOffset}
+                                onSave={async (newText) => {
+                                  await handleContentEditableSave(newText, child.number);
+                                }}
+                                onCancel={() => {
+                                  setIsEditingVerse(false);
+                                  setSelectedVerseNum(null);
+                                }}
+                                onContextMenu={(e) => handleVerseContextMenu(e, child.number, child.text)}
+                                onCursorChange={(offset) => {
+                                  handleCursorChange(child.number, offset);
+                                }}
+                                onUndoStateChange={(canUndoNow) => {
+                                  setVerseEditorCanUndo(canUndoNow);
+                                }}
+                              />
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  triggerVerseUndo();
+                                }}
+                                disabled={!verseEditorCanUndo}
+                                title="Deshacer (Ctrl+Z)"
+                                className="tw:ml-1 tw:px-1.5 tw:py-0.5 tw:text-[10px] tw:bg-slate-100 hover:tw:bg-slate-200 tw:border tw:border-slate-300 tw:rounded tw:cursor-pointer disabled:tw:opacity-40 disabled:tw:cursor-not-allowed"
+                                style={{ verticalAlign: 'middle' }}
+                              >
+                                ↶
+                              </button>
+                            </>
                           ) : (
                             <span>
                               {injectCursorsIntoElements(
