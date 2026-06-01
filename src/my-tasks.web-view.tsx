@@ -297,22 +297,7 @@ globalThis.webViewComponent = function MyTasksWebView({
     loadData();
   }, [loadData]);
 
-  // Listen to collaboration events to refresh tasks in real-time
-  useEffect(() => {
-    let unsubCollab: any;
-    try {
-      unsubCollab = papi.network.getNetworkEvent<any>(
-        'paratextProjectManager.onCollabEvent',
-      )((event: any) => {
-        if (event && event.type === 'tasks_update' && event.payload.projectId === projectId) {
-          loadData();
-        }
-      });
-    } catch (_) {}
-    return () => {
-      if (unsubCollab) unsubCollab();
-    };
-  }, [projectId, loadData]);
+
 
   // Background auto-refresh — silently picks up changes saved by other computers
   const savingRef = useRef(false);

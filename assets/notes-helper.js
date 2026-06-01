@@ -10,6 +10,18 @@ const { URL } = require('url');
 const net = require('net');
 const os = require('os');
 
+// Override process.send with a try-catch wrapped function to avoid crashes if IPC channel closes
+const originalProcessSend = process.send ? process.send.bind(process) : null;
+process.send = (message) => {
+  if (originalProcessSend) {
+    try {
+      originalProcessSend(message);
+    } catch (err) {
+      // console.warn('process.send failed:', err);
+    }
+  }
+};
+
 // Cache of projectId -> absolute projectDir
 const projectDirs = new Map();
 
@@ -1157,12 +1169,14 @@ async function handleAction(action, args) {
         return new Promise((resolve, reject) => {
           try {
             collabServer = net.createServer((socket) => {
+              socket.setKeepAlive(true, 15000);
               let socketUser = '';
               collabSockets.push(socket);
 
               setupSocketReceiver(
                 socket,
                 (msg) => {
+                  console.log(`[collab] HOST received from client: ${msg.type}`);
                   if (msg.type === 'handshake') {
                     socketUser = msg.payload.username;
                     collabActiveUsers.add(socketUser);
@@ -1343,6 +1357,7 @@ async function handleAction(action, args) {
         return new Promise((resolve, reject) => {
           try {
             const socket = net.createConnection({ host: collabHostIp, port: collabPort }, () => {
+              socket.setKeepAlive(true, 15000);
               collabClientSocket = socket;
               socket.write(JSON.stringify({ type: 'handshake', payload: { username } }) + '\n');
               resolve({ status: 'ok', role: 'client' });
@@ -1356,6 +1371,7 @@ async function handleAction(action, args) {
             setupSocketReceiver(
               socket,
               (msg) => {
+                console.log(`[collab] CLIENT received from host: ${msg.type}`);
                 if (msg.type === 'init_sync') {
                   saveTasksLocal(projectId, msg.payload.tasksJson);
                   process.send({ event: 'collab', data: { type: 'tasks_update', payload: { projectId } } });
@@ -1416,6 +1432,7 @@ async function handleAction(action, args) {
 
     case 'broadcastCollab': {
       const [msg] = args;
+      console.log(`[collab] Helper received broadcastCollab IPC: ${msg?.type} (role=${collabRole}, type=${collabType})`);
       broadcastCollab(msg);
       return 'ok';
     }
@@ -1495,15 +1512,47 @@ function broadcastCollab(msg, excludeSocket = null) {
 
   const line = JSON.stringify(msg) + '\n';
   if (collabRole === 'host') {
+    let sentCount = 0;
     for (const socket of collabSockets) {
       if (socket !== excludeSocket && socket.writable) {
-        try { socket.write(line); } catch (_) {}
+        try {
+          socket.write(line, (err) => {
+            if (err) {
+              console.error('[collab] Socket write error (host):', err.message);
+              socket.destroy();
+            }
+          });
+          sentCount++;
+        } catch (e) {
+          console.error('[collab] Socket write exception (host):', e.message);
+          socket.destroy();
+        }
       }
+    }
+    if (msg.type === 'cursor_update' || msg.type === 'verse_update' || msg.type === 'tasks_update' || msg.type === 'note_update') {
+      console.log(`[collab] HOST broadcast ${msg.type} to ${sentCount}/${collabSockets.length} client(s)`);
     }
   } else if (collabRole === 'client') {
     if (collabClientSocket && collabClientSocket.writable) {
-      try { collabClientSocket.write(line); } catch (_) {}
+      try {
+        collabClientSocket.write(line, (err) => {
+          if (err) {
+            console.error('[collab] Client socket write error:', err.message);
+            collabClientSocket.destroy();
+          }
+        });
+        if (msg.type === 'cursor_update' || msg.type === 'verse_update' || msg.type === 'tasks_update' || msg.type === 'note_update') {
+          console.log(`[collab] CLIENT sent ${msg.type} to host`);
+        }
+      } catch (e) {
+        console.error('[collab] Client socket write exception:', e.message);
+        collabClientSocket.destroy();
+      }
+    } else {
+      console.warn(`[collab] CLIENT tried to send ${msg.type} but socket is not writable (writable=${collabClientSocket?.writable}, exists=${!!collabClientSocket})`);
     }
+  } else {
+    console.warn(`[collab] broadcastCollab called with collabRole='${collabRole}' - message dropped: ${msg.type}`);
   }
 }
 
@@ -1544,7 +1593,8 @@ function setupSocketReceiver(socket, onMessage, onClose) {
   });
 
   socket.on('error', (err) => {
-    // console.error('collab socket error:', err);
+    console.error('collab socket error:', err);
+    socket.destroy();
   });
 }
 

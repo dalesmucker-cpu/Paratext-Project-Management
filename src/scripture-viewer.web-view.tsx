@@ -4,267 +4,9 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import type { ParatextNoteThread, ParatextComment } from './types/note.types';
 import { ScrollGroupSelector } from 'platform-bible-react';
 
-// Hardcoded default lists
-const BIBLE_BOOKS = [
-  'GEN',
-  'EXO',
-  'LEV',
-  'NUM',
-  'DEU',
-  'JOS',
-  'JDG',
-  'RUT',
-  '1SA',
-  '2SA',
-  '1KI',
-  '2KI',
-  '1CH',
-  '2CH',
-  'EZR',
-  'NEH',
-  'EST',
-  'JOB',
-  'PSA',
-  'PRO',
-  'ECC',
-  'SNG',
-  'ISA',
-  'JER',
-  'LAM',
-  'EZK',
-  'DAN',
-  'HOS',
-  'JOL',
-  'AMO',
-  'OBA',
-  'JON',
-  'MIC',
-  'NAM',
-  'HAB',
-  'ZEP',
-  'HAG',
-  'ZEC',
-  'MAL',
-  'MAT',
-  'MRK',
-  'LUK',
-  'JHN',
-  'ACT',
-  'ROM',
-  '1CO',
-  '2CO',
-  'GAL',
-  'EPH',
-  'PHP',
-  'COL',
-  '1TH',
-  '2TH',
-  '1TI',
-  '2TI',
-  'TIT',
-  'PHM',
-  'HEB',
-  'JAS',
-  '1PE',
-  '2PE',
-  '1JN',
-  '2JN',
-  '3JN',
-  'JUD',
-  'REV',
-];
+import { BIBLE_BOOKS } from './types/shared.constants';
 
-function AudioPlayer({ projectId, filename }: { projectId: string; filename: string }) {
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    const loadAudio = async () => {
-      setLoading(true);
-      setError(false);
-      try {
-        const res = await papi.commands.sendCommand(
-          'paratextProjectManager.getAudioNote',
-          projectId,
-          filename,
-        );
-        if (active) {
-          if (res.startsWith('data:audio/') || res.startsWith('data:application/octet-stream')) {
-            setAudioUrl(res);
-          } else {
-            console.error('Failed to load audio:', res);
-            setError(true);
-          }
-        }
-      } catch (e) {
-        console.error('Failed to load audio:', e);
-        if (active) setError(true);
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
-    loadAudio();
-    return () => {
-      active = false;
-    };
-  }, [projectId, filename]);
-
-  if (loading)
-    return (
-      <span className="tw:inline-flex tw:items-center tw:text-[10px] tw:text-slate-500 tw:gap-1 tw:my-1">
-        ⏳ Cargando nota de voz...
-      </span>
-    );
-  if (error)
-    return (
-      <span className="tw:inline-flex tw:items-center tw:text-[10px] tw:text-red-500 tw:gap-1 tw:my-1">
-        ⚠️ Error al cargar nota de voz
-      </span>
-    );
-
-  return (
-    <div className="tw:my-1.5 tw:p-1.5 tw:bg-slate-50 tw:border tw:border-slate-200 tw:rounded tw:flex tw:items-center tw:gap-2 tw:max-w-xs">
-      <span className="tw:text-[11px] tw:flex-shrink-0">🎙️ Voz:</span>
-      {audioUrl ? (
-        <audio
-          src={audioUrl}
-          controls
-          className="tw:h-6 tw:w-44 tw:outline-none"
-          style={{ maxHeight: '24px' }}
-        />
-      ) : null}
-    </div>
-  );
-}
-
-function AttachmentViewer({ projectId, filename }: { projectId: string; filename: string }) {
-  const [dataUrl, setDataUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(false);
-
-  const ext = filename.split('.').pop()?.toLowerCase() || '';
-  const isImage = ['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(ext);
-
-  useEffect(() => {
-    if (!isImage) return;
-    let active = true;
-    const loadAttachment = async () => {
-      setLoading(true);
-      setError(false);
-      try {
-        const res = await papi.commands.sendCommand(
-          'paratextProjectManager.getAttachment',
-          projectId,
-          filename,
-        );
-        if (active) {
-          if (res.startsWith('data:')) {
-            setDataUrl(res);
-          } else {
-            console.error('Failed to load attachment:', res);
-            setError(true);
-          }
-        }
-      } catch (e) {
-        console.error('Failed to load attachment:', e);
-        if (active) setError(true);
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
-    loadAttachment();
-    return () => {
-      active = false;
-    };
-  }, [projectId, filename, isImage]);
-
-  const handleOpen = async () => {
-    try {
-      const res = await papi.commands.sendCommand(
-        'paratextProjectManager.openAttachment',
-        projectId,
-        filename,
-      );
-      if (res !== 'ok') alert(`Error al abrir archivo: ${res}`);
-    } catch (e) {
-      alert(`No se pudo abrir el archivo: ${e}`);
-    }
-  };
-
-  if (isImage) {
-    if (loading)
-      return (
-        <span className="tw:inline-flex tw:items-center tw:text-[10px] tw:text-slate-500 tw:gap-1 tw:my-1">
-          ⏳ Cargando imagen...
-        </span>
-      );
-    if (error)
-      return (
-        <span className="tw:inline-flex tw:items-center tw:text-[10px] tw:text-red-500 tw:gap-1 tw:my-1">
-          ⚠️ Error al cargar imagen
-        </span>
-      );
-    return (
-      <div className="tw:my-1.5 tw:max-w-xs tw:cursor-pointer tw:group" onClick={handleOpen}>
-        {dataUrl ? (
-          <div className="tw:relative tw:overflow-hidden tw:rounded tw:border tw:border-slate-200 tw:bg-slate-50 tw:transition tw:hover:shadow-md">
-            <img
-              src={dataUrl}
-              alt={filename}
-              className="tw:max-h-40 tw:w-auto tw:tw:object-cover tw:max-w-full"
-            />
-            <div className="tw:absolute tw:inset-0 tw:bg-black/10 tw:opacity-0 tw:group-tw:hover:opacity-100 tw:transition tw:flex tw:items-center tw:justify-center tw:text-white tw:text-[10px] tw:font-semibold tw:backdrop-blur-[1px]">
-              🔎 Abrir archivo
-            </div>
-          </div>
-        ) : null}
-      </div>
-    );
-  }
-
-  let fileIcon = '📄';
-  let cardColor = 'tw:bg-slate-50 tw:border-slate-200 tw:hover:bg-slate-100';
-  if (ext === 'pdf') {
-    fileIcon = '📕';
-    cardColor = 'tw:bg-red-50/50 tw:border-red-200 tw:hover:bg-red-50';
-  } else if (['doc', 'docx'].includes(ext)) {
-    fileIcon = '📘';
-    cardColor = 'tw:bg-blue-50/50 tw:border-blue-200 tw:hover:bg-blue-50';
-  } else if (['xls', 'xlsx'].includes(ext)) {
-    fileIcon = '📗';
-    cardColor = 'tw:bg-emerald-50/50 tw:border-emerald-200 tw:hover:bg-emerald-55';
-  } else if (ext === 'txt') {
-    fileIcon = '📝';
-    cardColor = 'tw:bg-amber-50/50 tw:border-amber-200 tw:hover:bg-amber-50';
-  }
-
-  const cleanDisplayName = filename.replace(/^att_\d+_/, '');
-
-  return (
-    <div
-      className={`tw:my-1.5 tw:p-2 tw:border tw:rounded tw:flex tw:items-center tw:justify-between tw:gap-3 tw:max-w-xs tw:transition tw:shadow-sm ${cardColor}`}
-    >
-      <div className="tw:flex tw:items-center tw:gap-2 tw:overflow-hidden">
-        <span className="tw:text-lg tw:flex-shrink-0">{fileIcon}</span>
-        <span
-          className="tw:text-[11px] tw:font-medium tw:text-slate-700 tw:truncate"
-          title={cleanDisplayName}
-        >
-          {cleanDisplayName}
-        </span>
-      </div>
-      <button
-        type="button"
-        onClick={handleOpen}
-        className="tw:px-2.5 tw:py-1 tw:bg-white tw:hover:bg-slate-50 tw:border tw:border-slate-300 tw:rounded tw:text-[10px] tw:font-semibold tw:text-slate-700 tw:shadow-sm tw:transition tw:whitespace-nowrap tw:cursor-pointer"
-      >
-        Abrir
-      </button>
-    </div>
-  );
-}
+import { AudioPlayer, AttachmentViewer } from './components/note-media-components';
 
 function renderTextWithLinks(text: string, baseKey: string): React.ReactNode[] | string {
   const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
@@ -444,7 +186,9 @@ const EditableVerse: React.FC<EditableVerseProps> = ({
         preCaretRange.selectNodeContents(element);
         preCaretRange.setEnd(range.endContainer, range.endOffset);
         caretOffset = preCaretRange.toString().length;
-      } catch (_) {}
+      } catch (e) {
+        console.error('Failed to compute caret offset:', e);
+      }
     }
     return caretOffset;
   };
@@ -484,7 +228,9 @@ const EditableVerse: React.FC<EditableVerseProps> = ({
           sel?.addRange(range);
 
           if (onCursorChange) onCursorChange(ref.current.textContent?.length || 0);
-        } catch (_) {}
+        } catch (e) {
+          console.error('Failed to restore cursor position:', e);
+        }
       }
     }
   }, [initialOffset]);
@@ -551,14 +297,79 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   const [chapterBlocks, setChapterBlocks] = useState<ChapterBlock[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const errorTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const showErrorMessage = useCallback((msg: string) => {
+    console.error(msg);
+    setError(msg);
+    if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+    errorTimerRef.current = setTimeout(() => setError(''), 6000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+    };
+  }, []);
 
   // Note integration states
   const [allNotes, setAllNotes] = useState<ParatextNoteThread[]>([]);
   const [selectedVerseNum, setSelectedVerseNum] = useState<number | null>(null);
   const [notesPopupVerseNum, setNotesPopupVerseNum] = useState<number | null>(null);
-  const [currentUser, setCurrentUser] = useState('Dale');
+  const [currentUser, setCurrentUser] = useState('');
   const [collabCursors, setCollabCursors] = useState<Record<string, { projectId: string; book: string; chapter: number; verse: number | null; offset?: number | null; timestamp?: number }>>({});
   const [teamMembers, setTeamMembers] = useState<string[]>([]);
+
+  const getCursorColors = (user: string) => {
+    const userHash = user.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const palette = [
+      { bar: '#f43f5e', label: '#f43f5e', highlight: 'rgba(244, 63, 94, 0.15)' },
+      { bar: '#6366f1', label: '#6366f1', highlight: 'rgba(99, 102, 241, 0.15)' },
+      { bar: '#10b981', label: '#10b981', highlight: 'rgba(16, 185, 129, 0.15)' },
+      { bar: '#f59e0b', label: '#f59e0b', highlight: 'rgba(245, 158, 11, 0.15)' },
+      { bar: '#06b6d4', label: '#06b6d4', highlight: 'rgba(6, 182, 212, 0.15)' },
+    ];
+    return palette[userHash % palette.length];
+  };
+
+  const renderCursorBar = (user: string, idx: number | string) => {
+    const c = getCursorColors(user);
+    return (
+      <span
+        key={`cursor-${user}-${idx}`}
+        className="tw:relative tw:inline-block tw:align-baseline tw:text-[0]"
+        style={{ width: '0px', height: '1.2em', lineHeight: '1.2em', marginLeft: '-1px' }}
+      >
+        <span
+          className="tw:absolute tw:animate-[cursorBlink_1.1s_ease-in-out_infinite]"
+          style={{
+            left: 0,
+            bottom: 0,
+            width: '2px',
+            height: '1.15em',
+            backgroundColor: c.bar,
+            borderRadius: '1px',
+            display: 'inline-block',
+          }}
+        />
+        <span
+          className="tw:absolute tw:whitespace-nowrap tw:rounded tw:text-white tw:text-[10px] tw:font-semibold tw:pointer-events-none"
+          style={{
+            left: '-2px',
+            bottom: 'calc(1.15em + 2px)',
+            backgroundColor: c.label,
+            padding: '1px 4px',
+            lineHeight: '1.2',
+            letterSpacing: '0.02em',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.15)',
+            zIndex: 10,
+          }}
+        >
+          {user}
+        </span>
+      </span>
+    );
+  };
 
   const renderVerseTextWithCursors = (text: string, editors: { user: string; offset: number }[]) => {
     if (editors.length === 0) return text;
@@ -570,26 +381,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       if (offset > lastIndex) {
         elements.push(text.substring(lastIndex, offset));
       }
-      const userHash = ed.user.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      const colors = [
-        { cursor: 'tw:bg-rose-500', bg: 'tw:bg-rose-500' },
-        { cursor: 'tw:bg-indigo-500', bg: 'tw:bg-indigo-500' },
-        { cursor: 'tw:bg-emerald-500', bg: 'tw:bg-emerald-500' },
-        { cursor: 'tw:bg-amber-500', bg: 'tw:bg-amber-500' },
-        { cursor: 'tw:bg-cyan-500', bg: 'tw:bg-cyan-500' },
-      ];
-      const color = colors[userHash % colors.length];
-      elements.push(
-        <span key={`cursor-${ed.user}-${idx}`} className="tw:relative tw:inline-block tw:w-0 tw:h-[1em] tw:align-baseline">
-          <span className={`tw:absolute tw:w-[2px] tw:h-[1.1em] tw:animate-[pulse_1.5s_infinite] ${color.cursor}`} style={{ left: 0, bottom: '0.1em', display: 'inline-block' }} />
-          <span
-            className={`tw:absolute tw:bottom-full tw:left-0 tw:mb-1 tw:whitespace-nowrap tw:text-[8px] tw:text-white tw:px-1 tw:py-0.2 tw:rounded-sm tw:opacity-90 tw:pointer-events-none ${color.bg}`}
-            style={{ transform: 'translateX(-50%)', zIndex: 50 }}
-          >
-            {ed.user}
-          </span>
-        </span>
-      );
+      elements.push(renderCursorBar(ed.user, idx));
       lastIndex = offset;
     });
     if (lastIndex < text.length) {
@@ -617,26 +409,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
           if (localOffset > lastIndex) {
             elements.push(text.substring(lastIndex, localOffset));
           }
-          const userHash = ed.user.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-          const colors = [
-            { cursor: 'tw:bg-rose-500', bg: 'tw:bg-rose-500' },
-            { cursor: 'tw:bg-indigo-500', bg: 'tw:bg-indigo-500' },
-            { cursor: 'tw:bg-emerald-500', bg: 'tw:bg-emerald-500' },
-            { cursor: 'tw:bg-amber-500', bg: 'tw:bg-amber-500' },
-            { cursor: 'tw:bg-cyan-500', bg: 'tw:bg-cyan-500' },
-          ];
-          const color = colors[userHash % colors.length];
-          elements.push(
-            <span key={`cursor-node-${ed.user}-${editorIdx}`} className="tw:relative tw:inline-block tw:w-0 tw:h-[1em] tw:align-baseline">
-              <span className={`tw:absolute tw:w-[2px] tw:h-[1.1em] tw:animate-[pulse_1.5s_infinite] ${color.cursor}`} style={{ left: 0, bottom: '0.1em', display: 'inline-block' }} />
-              <span
-                className={`tw:absolute tw:bottom-full tw:left-0 tw:mb-1 tw:whitespace-nowrap tw:text-[8px] tw:text-white tw:px-1 tw:py-0.2 tw:rounded-sm tw:opacity-90 tw:pointer-events-none ${color.bg}`}
-                style={{ transform: 'translateX(-50%)', zIndex: 50 }}
-              >
-                {ed.user}
-              </span>
-            </span>
-          );
+          elements.push(renderCursorBar(ed.user, editorIdx));
           lastIndex = localOffset;
           editorIdx++;
         } else {
@@ -743,20 +516,48 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     }
   }, [projectId, loadNotes]);
 
+  const lastBroadcastTimeRef = useRef<number>(0);
+  const pendingBroadcastRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (pendingBroadcastRef.current) clearTimeout(pendingBroadcastRef.current);
+    };
+  }, []);
+
   const handleCursorChange = useCallback(
     (verseNum: number, offset: number) => {
       if (!currentUser) return;
-      papi.commands
-        .sendCommand(
-          'paratextProjectManager.broadcastCursor',
-          currentUser,
-          projectId,
-          selectedBook,
-          selectedChapter,
-          verseNum,
-          offset,
-        )
-        .catch(() => {});
+      const now = Date.now();
+      const throttleMs = 200;
+
+      const performBroadcast = () => {
+        lastBroadcastTimeRef.current = Date.now();
+        if (pendingBroadcastRef.current) {
+          clearTimeout(pendingBroadcastRef.current);
+          pendingBroadcastRef.current = null;
+        }
+        papi.commands
+          .sendCommand(
+            'paratextProjectManager.broadcastCursor',
+            currentUser,
+            projectId,
+            selectedBook,
+            selectedChapter,
+            verseNum,
+            offset,
+          )
+          .catch((e) => {
+            console.error('Failed to broadcast cursor:', e);
+          });
+      };
+
+      if (now - lastBroadcastTimeRef.current >= throttleMs) {
+        performBroadcast();
+      } else {
+        if (pendingBroadcastRef.current) clearTimeout(pendingBroadcastRef.current);
+        pendingBroadcastRef.current = setTimeout(performBroadcast, throttleMs);
+      }
     },
     [currentUser, projectId, selectedBook, selectedChapter],
   );
@@ -920,6 +721,15 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     [scrollGroupId, setScrRef],
   );
 
+  const currentUserRef = useRef(currentUser);
+  currentUserRef.current = currentUser;
+  const projectIdRef = useRef(projectId);
+  projectIdRef.current = projectId;
+  const loadChapterRef = useRef(loadChapter);
+  loadChapterRef.current = loadChapter;
+  const loadNotesRef = useRef(loadNotes);
+  loadNotesRef.current = loadNotes;
+
   // Listen to collaboration events
   useEffect(() => {
     let unsubEvent: any;
@@ -929,8 +739,13 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       )((event: any) => {
         if (!event) return;
         const { type, payload } = event;
+        const currentProjId = projectIdRef.current;
+        const currentUsr = currentUserRef.current;
+        const currentBook = selectedBookRef.current;
+        const currentChapter = selectedChapterRef.current;
+
         if (type === 'cursor_update') {
-          if (!payload?.user || payload.user === currentUser || payload.projectId !== projectId) {
+          if (!payload?.user || payload.user === currentUsr || payload.projectId !== currentProjId) {
             return;
           }
           setCollabCursors((prev) => {
@@ -943,24 +758,30 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
             return next;
           });
         } else if (type === 'note_update') {
-          if (payload.projectId === projectId) {
-            loadNotes();
+          if (payload.projectId === currentProjId) {
+            loadNotesRef.current();
           }
         } else if (type === 'verse_update') {
           if (
-            payload.projectId === projectId &&
-            payload.book === selectedBook &&
-            payload.chapter === selectedChapter
+            payload.projectId === currentProjId &&
+            payload.book === currentBook &&
+            payload.chapter === currentChapter
           ) {
-            loadChapter(selectedBook, selectedChapter);
+            loadChapterRef.current(currentBook, currentChapter);
+          }
+        } else if (type === 'user_changed') {
+          if (payload.username) {
+            setCurrentUser(payload.username);
           }
         }
       });
-    } catch (_) {}
+    } catch (e) {
+      console.error('Failed to subscribe to collab event:', e);
+    }
     return () => {
       if (unsubEvent) unsubEvent();
     };
-  }, [projectId, selectedBook, selectedChapter, currentUser, loadNotes, loadChapter]);
+  }, [projectId]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -995,7 +816,9 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
           verseToBroadcast,
           isEditingVerse ? initialOffset : null,
         );
-      } catch (_) {}
+      } catch (e) {
+        console.error('Failed to broadcast cursor position:', e);
+      }
     };
     updateCursor();
   }, [isEditingVerse, selectedVerseNum, selectedBook, selectedChapter, currentUser, projectId, initialOffset]);
@@ -1073,10 +896,10 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
         setIsEditingVerse(false);
         await loadChapter(selectedBook, selectedChapter);
       } else {
-        alert(`Error al guardar el texto: ${res}`);
+        showErrorMessage(`Error al guardar el texto: ${res}`);
       }
     } catch (err) {
-      alert(`Error al guardar el texto: ${err}`);
+      showErrorMessage(`Error al guardar el texto: ${err}`);
     } finally {
       setSavingVerse(false);
     }
@@ -1107,12 +930,12 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
         setSelectedVerseNum(null);
         await loadChapter(selectedBook, selectedChapter);
       } else {
-        alert(`Error al guardar el texto: ${res}`);
+        showErrorMessage(`Error al guardar el texto: ${res}`);
         setIsEditingVerse(false);
         setSelectedVerseNum(null);
       }
     } catch (err) {
-      alert(`Error al guardar el texto: ${err}`);
+      showErrorMessage(`Error al guardar el texto: ${err}`);
       setIsEditingVerse(false);
       setSelectedVerseNum(null);
     } finally {
@@ -1168,12 +991,17 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     setLoading(true);
     setError('');
     try {
-      const [uRes, tmRes, bRes] = await Promise.all([
+      const [uRes, tmRes, bRes, collabRes] = await Promise.all([
         papi.commands.sendCommand('paratextProjectManager.getCurrentUser'),
         papi.commands.sendCommand('paratextProjectManager.getTeamMembers'),
         papi.commands.sendCommand('paratextProjectManager.getProjectBooks', projectId),
+        papi.commands.sendCommand('paratextProjectManager.getCollabStatus'),
       ]);
-      if (uRes) setCurrentUser(uRes);
+      if (uRes) {
+        setCurrentUser(uRes);
+      } else if (collabRes && collabRes.username) {
+        setCurrentUser(collabRes.username);
+      }
       if (tmRes) setTeamMembers(JSON.parse(tmRes as string) as string[]);
 
       const bookList = JSON.parse(bRes as string) as BookInfo[];
@@ -1344,10 +1172,10 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                 if (res === 'ok') {
                   await loadNotes();
                 } else {
-                  alert(`Error al enviar respuesta de audio: ${res}`);
+                  showErrorMessage(`Error al enviar respuesta de audio: ${res}`);
                 }
               } else {
-                alert(`Error al guardar audio: ${saveRes?.error || 'Unknown error'}`);
+                showErrorMessage(`Error al guardar audio: ${saveRes?.error || 'Unknown error'}`);
               }
             } catch (err) {
               console.error(err);
@@ -1367,7 +1195,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
         setRecordDuration((d) => d + 1);
       }, 1000);
     } catch (e) {
-      alert(`No se pudo acceder al micrófono: ${e}`);
+      showErrorMessage(`No se pudo acceder al micrófono: ${e}`);
     }
   };
 
@@ -1468,13 +1296,13 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
             if (res === 'ok') {
               await loadNotes();
             } else {
-              alert(`Error al enviar adjunto: ${res}`);
+              showErrorMessage(`Error al enviar adjunto: ${res}`);
             }
           } else {
-            alert(`Error al guardar archivo adjunto: ${saveRes?.error || 'Unknown error'}`);
+            showErrorMessage(`Error al guardar archivo adjunto: ${saveRes?.error || 'Unknown error'}`);
           }
         } catch (err) {
-          alert(`Error al guardar adjunto: ${err}`);
+          showErrorMessage(`Error al guardar adjunto: ${err}`);
         } finally {
           setReplyAttaching((prev) => ({ ...prev, [threadId]: false }));
           setActiveReplyThreadId(null);
@@ -1482,7 +1310,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
         }
       };
     } catch (err) {
-      alert(`Error al leer archivo: ${err}`);
+      showErrorMessage(`Error al leer archivo: ${err}`);
       setReplyAttaching((prev) => ({ ...prev, [threadId]: false }));
       setActiveReplyThreadId(null);
     }
@@ -1535,10 +1363,10 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
         setReplyTexts((prev) => ({ ...prev, [thread.threadId]: '' }));
         await loadNotes();
       } else {
-        alert(`Error al enviar respuesta: ${res}`);
+        showErrorMessage(`Error al enviar respuesta: ${res}`);
       }
     } catch (err) {
-      alert(`Error al enviar respuesta: ${err}`);
+      showErrorMessage(`Error al enviar respuesta: ${err}`);
     } finally {
       setReplying((prev) => ({ ...prev, [thread.threadId]: false }));
     }
@@ -1729,10 +1557,10 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
         resetForms();
         await loadNotes();
       } else {
-        alert(`Error al crear la nota: ${res}`);
+        showErrorMessage(`Error al crear la nota: ${res}`);
       }
     } catch (err) {
-      alert(`Error al crear la nota: ${err}`);
+      showErrorMessage(`Error al crear la nota: ${err}`);
     } finally {
       setLoading(false);
     }
@@ -1818,6 +1646,43 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
           </div>
 
           <div className="tw:flex tw:items-center tw:gap-2">
+            {/* User picker */}
+            {currentUser ? (
+              <span
+                className="tw:text-xs tw:font-semibold tw:text-slate-700 tw:bg-slate-100 tw:border tw:px-2 tw:py-1 tw:rounded tw:cursor-pointer hover:tw:bg-slate-200 tw:transition-colors tw:flex tw:items-center tw:gap-1"
+                onClick={() => setCurrentUser('')}
+                title="Haga clic para cambiar de usuario"
+              >
+                👤 {currentUser}
+              </span>
+            ) : (
+              <div className="tw:flex tw:items-center tw:gap-1 tw:bg-amber-50 tw:border tw:border-amber-200 tw:px-2 tw:py-1 tw:rounded">
+                <span className="tw:text-amber-800 tw:font-medium tw:text-[10px]">
+                  ⚠️ ¿Quién eres?
+                </span>
+                <select
+                  className="tw:border tw:rounded tw:px-1.5 tw:py-0.5 tw:bg-white tw:text-[10px] focus:tw:outline-none"
+                  value={currentUser}
+                  onChange={async (e) => {
+                    const val = e.target.value;
+                    if (val) {
+                      setCurrentUser(val);
+                      try {
+                        await papi.commands.sendCommand('paratextProjectManager.setCurrentUser', val);
+                      } catch (_) {}
+                    }
+                  }}
+                >
+                  <option value="">Seleccionar...</option>
+                  {teamMembers.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* Scroll Group Selector */}
             {useWebViewScrollGroupScrRef && (
               <div className="tw:inline-flex tw:items-center tw:scale-90">
@@ -1909,6 +1774,19 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                         })
                         .map(([user, cursor]) => ({ user, offset: cursor.offset ?? 0 }));
 
+                      const otherEditingUsers = Object.entries(collabCursors).filter(
+                        ([user, cursor]) =>
+                          user !== currentUser &&
+                          cursor.projectId === projectId &&
+                          cursor.book === selectedBook &&
+                          cursor.chapter === selectedChapter &&
+                          cursor.verse === child.number,
+                      );
+                      const otherEditor = otherEditingUsers[0];
+                      const otherEditorHighlight = otherEditor
+                        ? getCursorColors(otherEditor[0]).highlight
+                        : null;
+
                       return (
                         <span
                           key={cIdx}
@@ -1916,6 +1794,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                           onClick={() => handleVerseClick(child.number, child.text)}
                           onContextMenu={(e) => handleVerseContextMenu(e, child.number, child.text)}
                           className="tw:relative tw:inline tw:rounded tw:transition-all tw:py-0.5 tw:cursor-text"
+                          style={otherEditorHighlight ? { backgroundColor: otherEditorHighlight, padding: '2px 4px', borderRadius: '4px' } : undefined}
                         >
                           {/* Verse number tag */}
                           <sup

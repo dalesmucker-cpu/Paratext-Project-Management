@@ -96,6 +96,7 @@ let execToken: ExecutionToken;
 let notesHelperProcess: ChildProcess | undefined;
 let collabEventEmitter: any;
 let lastNavigatedVerse: { projectId: string; bookCode: string; chapter: number; verse: number } | null = null;
+let localCollabRole: 'host' | 'client' | 'none' = 'none';
 const pendingNotesRequests = new Map<
   string,
   { resolve: (val: any) => void; reject: (err: any) => void }
@@ -106,10 +107,26 @@ function sendToNotesHelper(action: string, args: any[]): Promise<any> {
   if (!notesHelperProcess) return Promise.reject(new Error('Notes helper not running'));
   const id = String(notesRequestIdCounter++);
   return new Promise((resolve, reject) => {
-    pendingNotesRequests.set(id, { resolve, reject });
+    const timeoutId = setTimeout(() => {
+      pendingNotesRequests.delete(id);
+      reject(new Error(`Notes helper request timeout: action ${action}`));
+    }, 5000);
+
+    pendingNotesRequests.set(id, {
+      resolve: (val) => {
+        clearTimeout(timeoutId);
+        resolve(val);
+      },
+      reject: (err) => {
+        clearTimeout(timeoutId);
+        reject(err);
+      },
+    });
+
     try {
       notesHelperProcess!.send({ id, action, args });
     } catch (e) {
+      clearTimeout(timeoutId);
       pendingNotesRequests.delete(id);
       reject(e);
     }
@@ -126,6 +143,9 @@ function startNotesHelper(createProcess: ElevatedPrivileges['createProcess']): v
         if (collabEventEmitter) {
           collabEventEmitter.emit(message.data);
         }
+        if (message.data && message.data.type === 'status_update' && message.data.payload) {
+          localCollabRole = message.data.payload.role || 'none';
+        }
         return;
       }
       const { id, result, error } = message;
@@ -137,6 +157,18 @@ function startNotesHelper(createProcess: ElevatedPrivileges['createProcess']): v
       }
     });
 
+    if (notesHelperProcess.stdout) {
+      notesHelperProcess.stdout.on('data', (chunk: Buffer) => {
+        logger.info(`Notes Helper: ${chunk.toString('utf8').trim()}`);
+      });
+    }
+
+    if (notesHelperProcess.stderr) {
+      notesHelperProcess.stderr.on('data', (chunk: Buffer) => {
+        logger.warn(`Notes Helper Error: ${chunk.toString('utf8').trim()}`);
+      });
+    }
+
     notesHelperProcess.on('error', (err) => {
       logger.warn(`Notes helper error: ${err}`);
     });
@@ -144,6 +176,7 @@ function startNotesHelper(createProcess: ElevatedPrivileges['createProcess']): v
     notesHelperProcess.on('close', (code) => {
       logger.info(`Notes helper exited with code ${code}`);
       notesHelperProcess = undefined;
+      localCollabRole = 'none';
       for (const pending of pendingNotesRequests.values()) {
         pending.reject(new Error('Notes helper terminated'));
       }
@@ -697,7 +730,9 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
       if (notesHelperProcess) {
         try {
           notesHelperProcess.kill();
-        } catch (_) {}
+        } catch (e) {
+          logger.warn(`Failed to kill notes helper process: ${e}`);
+        }
         notesHelperProcess = undefined;
       }
     },
@@ -963,15 +998,21 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
       })();
 
       // --- Broadcast via LAN Collaboration if active ---
-      try {
-        const status = await sendToNotesHelper('getCollabStatus', []);
-        if (status && status.role !== 'none') {
+      if (localCollabRole !== 'none') {
+        try {
           await sendToNotesHelper('broadcastCollab', [{
             type: 'tasks_update',
             payload: { projectId, tasksJson }
           }]);
+        } catch (e) {
+          logger.warn(`Failed to broadcast tasks_update via collab: ${e}`);
         }
-      } catch (_) {}
+      }
+
+      // Also emit locally so other open web views on the same machine refresh
+      if (collabEventEmitter) {
+        collabEventEmitter.emit({ type: 'tasks_update', payload: { projectId } });
+      }
 
       return 'ok';
     },
@@ -1010,6 +1051,9 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         config.currentUser = userName;
         await runFileHelper('write', PM_USER_CONFIG_PATH, JSON.stringify(config, null, 2));
         logger.info(`Project Manager: currentUser set to "${userName}"`);
+        if (collabEventEmitter) {
+          collabEventEmitter.emit({ type: 'user_changed', payload: { username: userName } });
+        }
         return 'ok';
       } catch (e) {
         logger.warn(`setCurrentUser failed: ${e}`);
@@ -1099,7 +1143,12 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     ): Promise<any> => {
       try {
         const projectDir = await resolveProjectDir(projectId);
-        return await sendToNotesHelper('startCollabHost', [
+        try {
+          await papi.commands.sendCommand('paratextProjectManager.setCurrentUser', username);
+        } catch (uErr) {
+          logger.warn(`Failed to auto-save currentUser on startCollabHost: ${uErr}`);
+        }
+        const result = await sendToNotesHelper('startCollabHost', [
           portOrRoomId,
           username,
           projectId,
@@ -1107,6 +1156,10 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
           collabType || 'local',
           serverUrl || '',
         ]);
+        if (result && result.status === 'ok') {
+          localCollabRole = 'host';
+        }
+        return result;
       } catch (e: any) {
         logger.warn(`startCollabHost failed: ${e}`);
         return { status: 'error', error: e.message || String(e) };
@@ -1126,7 +1179,12 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     ): Promise<any> => {
       try {
         const projectDir = await resolveProjectDir(projectId);
-        return await sendToNotesHelper('connectCollabClient', [
+        try {
+          await papi.commands.sendCommand('paratextProjectManager.setCurrentUser', username);
+        } catch (uErr) {
+          logger.warn(`Failed to auto-save currentUser on connectCollabClient: ${uErr}`);
+        }
+        const result = await sendToNotesHelper('connectCollabClient', [
           ipOrRoomId,
           portOrNull,
           username,
@@ -1135,6 +1193,10 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
           collabType || 'local',
           serverUrl || '',
         ]);
+        if (result && result.status === 'ok') {
+          localCollabRole = 'client';
+        }
+        return result;
       } catch (e: any) {
         logger.warn(`connectCollabClient failed: ${e}`);
         return { status: 'error', error: e.message || String(e) };
@@ -1146,8 +1208,11 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     'paratextProjectManager.stopCollab',
     async (): Promise<string> => {
       try {
-        return await sendToNotesHelper('stopCollab', []);
+        const result = await sendToNotesHelper('stopCollab', []);
+        localCollabRole = 'none';
+        return result;
       } catch (e) {
+        localCollabRole = 'none';
         return 'error';
       }
     },
@@ -1157,10 +1222,14 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     'paratextProjectManager.getCollabStatus',
     async (): Promise<any> => {
       try {
-        return await sendToNotesHelper('getCollabStatus', []);
+        const status = await sendToNotesHelper('getCollabStatus', []);
+        if (status && status.role) {
+          localCollabRole = status.role;
+        }
+        return status;
       } catch (e) {
         return {
-          role: 'none',
+          role: localCollabRole,
           type: 'local',
           username: '',
           port: 49885,
@@ -1216,11 +1285,13 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         };
         // Emit locally first
         collabEventEmitter.emit({ type: 'cursor_update', payload });
-        // Then try to broadcast via helper process
-        try {
-          await sendToNotesHelper('broadcastCollab', [{ type: 'cursor_update', payload }]);
-        } catch (helperErr) {
-          logger.warn(`Failed to broadcast cursor update to helper: ${helperErr}`);
+        // Then try to broadcast via helper process if active
+        if (localCollabRole !== 'none') {
+          try {
+            await sendToNotesHelper('broadcastCollab', [{ type: 'cursor_update', payload }]);
+          } catch (helperErr) {
+            logger.warn(`Failed to broadcast cursor update to helper: ${helperErr}`);
+          }
         }
         return 'ok';
       } catch (e) {
@@ -1365,6 +1436,22 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
           threadId,
           commentDate,
         ]);
+
+        // --- Broadcast via LAN Collaboration if active ---
+        if (localCollabRole !== 'none') {
+          try {
+            await sendToNotesHelper('broadcastCollab', [{
+              type: 'note_update',
+              payload: {
+                projectId,
+                senderUser: authorName,
+              }
+            }]);
+          } catch (e) {
+            logger.warn(`Failed to broadcast note_update via collab for deletion: ${e}`);
+          }
+        }
+
         return 'ok';
       } catch (e) {
         logger.warn(`deleteProjectNote failed: ${e}`);
@@ -1409,9 +1496,8 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         }
 
         // --- Broadcast via LAN Collaboration if active ---
-        try {
-          const status = await sendToNotesHelper('getCollabStatus', []);
-          if (status && status.role !== 'none') {
+        if (localCollabRole !== 'none') {
+          try {
             await sendToNotesHelper('broadcastCollab', [{
               type: 'note_update',
               payload: {
@@ -1420,8 +1506,10 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
                 replyData
               }
             }]);
+          } catch (e) {
+            logger.warn(`Failed to broadcast note_update via collab: ${e}`);
           }
-        } catch (_) {}
+        }
 
         return 'ok';
       } catch (e) {
@@ -1510,13 +1598,15 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
           newText,
         ]);
 
-        // Broadcast the update so other computers reload the verse text
+        // Broadcast the update so other computers reload the verse text if collab is active
         const payload = { projectId, book: bookCode, chapter, verse, newText };
         collabEventEmitter.emit({ type: 'verse_update', payload });
-        try {
-          await sendToNotesHelper('broadcastCollab', [{ type: 'verse_update', payload }]);
-        } catch (helperErr) {
-          logger.warn(`Failed to broadcast verse_update to helper: ${helperErr}`);
+        if (localCollabRole !== 'none') {
+          try {
+            await sendToNotesHelper('broadcastCollab', [{ type: 'verse_update', payload }]);
+          } catch (helperErr) {
+            logger.warn(`Failed to broadcast verse_update to helper: ${helperErr}`);
+          }
         }
 
         return 'ok';

@@ -684,8 +684,15 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
   useEffect(() => {
     if (!collabRoomId && projectId) {
       const cleanId = projectId.replace(/[^a-zA-Z0-9]/g, '').substring(0, 6).toUpperCase();
-      const randNum = Math.floor(1000 + Math.random() * 9000);
-      setCollabRoomId(`PM-${cleanId || 'ROOM'}-${randNum}`);
+      // Generate a stronger random suffix (8 hex chars = 32 bits of entropy)
+      const arr = new Uint8Array(4);
+      if (typeof globalThis.crypto !== 'undefined' && globalThis.crypto.getRandomValues) {
+        globalThis.crypto.getRandomValues(arr);
+      } else {
+        for (let i = 0; i < arr.length; i++) arr[i] = Math.floor(Math.random() * 256);
+      }
+      const randHex = Array.from(arr, (b) => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+      setCollabRoomId(`PM-${cleanId || 'ROOM'}-${randHex}`);
     }
   }, [projectId, collabRoomId]);
 
@@ -711,6 +718,8 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
 
   // --- Drive task sync state ---
   const driveAuthPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const logTimeSuccessRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const teamMessageRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [driveStatus, setDriveStatus] = useState<DriveStatus>({
     connected: false,
     hasCredentials: false,
@@ -718,6 +727,14 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
     fileCount: 0,
   });
   const [showDriveSection, setShowDriveSection] = useState(false);
+
+  // Cleanup fire-and-forget timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (logTimeSuccessRef.current) clearTimeout(logTimeSuccessRef.current);
+      if (teamMessageRef.current) clearTimeout(teamMessageRef.current);
+    };
+  }, []);
   const [showDriveSetup, setShowDriveSetup] = useState(false);
   const [showDriveImport, setShowDriveImport] = useState(false);
   const [driveClientId, setDriveClientId] = useState('');
@@ -935,7 +952,9 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         if (status.serverUrl) setCollabServerUrl(status.serverUrl);
         if (status.username) setCollabUsername(status.username);
       }
-    } catch (_) {}
+    } catch (e) {
+      console.error('Failed to load collab status:', e);
+    }
   }, []);
 
   const handleStartCollabHost = async () => {
@@ -1030,17 +1049,42 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       setCollabChatMessages([]);
       setCollabStatusMsg('');
       setCollabErrorMsg('');
-    } catch (_) {}
+    } catch (e) {
+      console.error('Failed to stop collab:', e);
+    }
   };
 
-  const handleSendChat = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSendChat = async (e?: React.FormEvent | React.KeyboardEvent) => {
+    if (e) e.preventDefault();
     if (!chatInput.trim()) return;
     try {
       const sender = collabUsername || currentUser || 'Usuario';
       await papi.commands.sendCommand('paratextProjectManager.sendCollabChat', sender, chatInput.trim());
       setChatInput('');
     } catch (_) {}
+  };
+
+  const handleAddMember = async () => {
+    const name = teamInput.trim();
+    if (!name || teamMembers.includes(name)) return;
+    const updated = [...teamMembers, name];
+    setTeamSaving(true);
+    setTeamMessage('');
+    try {
+      await papi.commands.sendCommand(
+        'paratextProjectManager.setTeamMembers',
+        JSON.stringify(updated),
+      );
+      setTeamMembers(updated);
+      setTeamInput('');
+      setTeamMessage('Guardado ✓');
+      if (teamMessageRef.current) clearTimeout(teamMessageRef.current);
+      teamMessageRef.current = setTimeout(() => setTeamMessage(''), 3000);
+    } catch (e) {
+      setTeamMessage(`Error: ${e}`);
+    } finally {
+      setTeamSaving(false);
+    }
   };
 
   useEffect(() => {
@@ -1285,7 +1329,9 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       .then((u) => {
         if (u && typeof u === 'string' && u.length > 0) setLogTimeUser(u as string);
       })
-      .catch(() => {});
+      .catch((e) => {
+        console.error('Failed to get current user:', e);
+      });
   }, []);
 
   // Shared polling logic: call after gcalConnect or gcalReconnect returns { status: 'started' }
@@ -1330,12 +1376,17 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
           } else {
             // still pending — check again in 2s
             setTimeout(() => {
-              poll().catch(() => {});
+              poll().catch((e) => {
+                console.error('GCal auth poll failed:', e);
+              });
             }, 2000);
           }
-        } catch (_) {
+        } catch (e) {
+          console.error('GCal auth poll error:', e);
           setTimeout(() => {
-            poll().catch(() => {});
+            poll().catch((pollErr) => {
+              console.error('GCal auth retry poll failed:', pollErr);
+            });
           }, 2000);
         }
       };
@@ -1651,7 +1702,8 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         setLogTimeNote('');
         setLogTimeCustomLabel('');
         setLogTimeSuccess('✓ Horas registradas');
-        setTimeout(() => setLogTimeSuccess(''), 5000);
+        if (logTimeSuccessRef.current) clearTimeout(logTimeSuccessRef.current);
+        logTimeSuccessRef.current = setTimeout(() => setLogTimeSuccess(''), 5000);
         papi.commands
           .sendCommand(
             'paratextProjectManager.gcalSyncTimeEntry',
@@ -1702,7 +1754,8 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       setLogTimeHours('1');
       setLogTimeNote('');
       setLogTimeSuccess('✓ Horas registradas');
-      setTimeout(() => setLogTimeSuccess(''), 5000);
+      if (logTimeSuccessRef.current) clearTimeout(logTimeSuccessRef.current);
+      logTimeSuccessRef.current = setTimeout(() => setLogTimeSuccess(''), 5000);
 
       // Async GCal sync — fire-and-forget; update success message on result
       if (gcalStatus.connected) {
@@ -2111,7 +2164,8 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                             );
                             setTeamMembers(updated);
                             setTeamMessage('Guardado ✓');
-                            setTimeout(() => setTeamMessage(''), 3000);
+                            if (teamMessageRef.current) clearTimeout(teamMessageRef.current);
+                            teamMessageRef.current = setTimeout(() => setTeamMessage(''), 3000);
                           } catch (e) {
                             setTeamMessage(`Error: ${e}`);
                           } finally {
@@ -2124,47 +2178,29 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                     </span>
                   ))}
                 </div>
-                {/* Add new member */}
-                <form
-                  className="tw:flex tw:gap-2"
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    const name = teamInput.trim();
-                    if (!name || teamMembers.includes(name)) return;
-                    const updated = [...teamMembers, name];
-                    setTeamSaving(true);
-                    setTeamMessage('');
-                    try {
-                      await papi.commands.sendCommand(
-                        'paratextProjectManager.setTeamMembers',
-                        JSON.stringify(updated),
-                      );
-                      setTeamMembers(updated);
-                      setTeamInput('');
-                      setTeamMessage('Guardado ✓');
-                      setTimeout(() => setTeamMessage(''), 3000);
-                    } catch (e) {
-                      setTeamMessage(`Error: ${e}`);
-                    } finally {
-                      setTeamSaving(false);
-                    }
-                  }}
-                >
+                <div className="tw:flex tw:gap-2">
                   <input
                     className="tw:flex-1 tw:border tw:rounded tw:px-2 tw:py-1 tw:text-xs"
                     placeholder="Nombre del nuevo miembro…"
                     value={teamInput}
                     onChange={(e) => setTeamInput(e.target.value)}
                     disabled={teamSaving}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddMember();
+                      }
+                    }}
                   />
                   <button
-                    type="submit"
+                    type="button"
+                    onClick={handleAddMember}
                     className="tw:px-3 tw:py-1 tw:bg-slate-600 tw:text-white tw:text-xs tw:rounded tw:hover:bg-slate-700 tw:disabled:opacity-50"
                     disabled={teamSaving || !teamInput.trim()}
                   >
                     + Agregar
                   </button>
-                </form>
+                </div>
                 {teamMessage && (
                   <p
                     className={`tw:text-xs ${teamMessage.startsWith('tw:Error') ? 'tw:text-red-600' : 'tw:text-green-600'}`}
@@ -2463,21 +2499,28 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                           ))
                         )}
                       </div>
-                      <form onSubmit={handleSendChat} className="tw:flex tw:border-t">
+                      <div className="tw:flex tw:border-t">
                         <input
                           className="tw:flex-1 tw:px-2 tw:py-1.5 tw:text-xs tw:outline-none"
                           placeholder="Escribe un mensaje para el equipo…"
                           value={chatInput}
                           onChange={(e) => setChatInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleSendChat();
+                            }
+                          }}
                         />
                         <button
-                          type="submit"
+                          type="button"
+                          onClick={() => handleSendChat()}
                           disabled={!chatInput.trim()}
                           className="tw:px-3 tw:py-1.5 tw:bg-slate-600 tw:hover:bg-slate-700 tw:text-white tw:font-semibold disabled:tw:opacity-50"
                         >
                           Enviar
                         </button>
-                      </form>
+                      </div>
                     </div>
                   </div>
                 )}

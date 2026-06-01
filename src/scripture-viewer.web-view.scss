@@ -30,3 +30,14 @@ body,
   border-radius: 4px;
   padding: 1px 4px;
 }
+
+@keyframes cursorBlink {
+  0%, 100% {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scaleY(0.92);
+  }
+}
