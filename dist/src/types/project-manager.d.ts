@@ -126,6 +126,8 @@ declare module 'papi-shared-types' {
     ) => Promise<any>;
     /** Stops the collaboration session */
     'paratextProjectManager.stopCollab': () => Promise<string>;
+    /** Manually retries a connection using the last saved parameters */
+    'paratextProjectManager.reconnectCollab': () => Promise<any>;
     /** Gets the current collaboration status */
     'paratextProjectManager.getCollabStatus': () => Promise<any>;
     /** Sends a collaboration chat message */

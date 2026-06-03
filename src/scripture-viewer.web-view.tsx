@@ -358,7 +358,22 @@ const EditableVerse: React.FC<EditableVerseProps> = ({
         handleCursorActivity();
       }}
       onContextMenu={onContextMenu}
-      className="tw:outline-none tw:bg-transparent tw:p-0 tw:m-0 tw:inline tw:border-none"
+      className="tw:outline-none tw:bg-transparent tw:p-0 tw:m-0 tw:border-none"
+      style={{
+        outline: 'none',
+        textDecoration: 'none',
+        // Use inline display for normal verses so we don't shift surrounding text.
+        // For empty verses, use inline-block so the cursor has a visible target area.
+        display: initialText.trim() === '' ? 'inline-block' : 'inline',
+        ...(initialText.trim() === ''
+          ? {
+              minWidth: '80px',
+              minHeight: '1.1em',
+              verticalAlign: 'baseline',
+              borderBottom: '2px solid #6366f1',
+            }
+          : {}),
+      }}
     >
       {initialText}
     </span>
@@ -378,6 +393,13 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   const [scrRef, setScrRef, scrollGroupId, setScrollGroupId] = useWebViewScrollGroupScrRef
     ? useWebViewScrollGroupScrRef()
     : [undefined, undefined, undefined, undefined];
+
+  // Keep a ref to the latest scrRef so initData can read it without scrRef
+  // being in its dependency array (scrRef changes on every navigation event,
+  // which would cause initData to re-run and could momentarily show the
+  // "No Scripture books found" error while the helper is re-fetching).
+  const scrRefRef = useRef(scrRef);
+  scrRefRef.current = scrRef;
 
   // Content states
   const [chapterBlocks, setChapterBlocks] = useState<ChapterBlock[]>([]);
@@ -593,7 +615,10 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
         setError('');
       }
 
-      await loadNotes();
+      // Load notes asynchronously to speed up chapter switching
+      loadNotes().catch((err) => {
+        console.error('Failed to load notes in background:', err);
+      });
     } catch (err) {
       console.error(err);
       setError('Error al cargar texto o notas.');
@@ -1059,9 +1084,28 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       );
 
       if (res === 'ok') {
+        // Optimistically update chapterBlocks so the UI immediately shows the
+        // saved text. Without this, the verse_update event is blocked by
+        // selfVerseUpdateRef and the view snaps back to the old text.
+        setChapterBlocks((prev) =>
+          prev.map((block) => {
+            if (block.type === 'paragraph' || block.type === 'poetry') {
+              return {
+                ...block,
+                children: block.children.map((child) => {
+                  if (child.type === 'verse' && child.number === verseNum) {
+                    return { ...child, text: newText };
+                  }
+                  return child;
+                }),
+              };
+            }
+            return block;
+          }),
+        );
         setIsEditingVerse(false);
         setSelectedVerseNum(null);
-        // The verse_update event will trigger loadChapter; no need to call it explicitly
+        // verse_update broadcast will trigger loadChapter on remote machines
       } else {
         showErrorMessage(`Error al guardar el texto: ${res}`);
         setIsEditingVerse(false);
@@ -1158,10 +1202,10 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
               verseNum: lastNav.verse,
             });
           }
-        } else if (scrRef && scrRef.book) {
-          setSelectedBook(scrRef.book);
-          setSelectedChapter(scrRef.chapterNum);
-          pendingVerseRef.current = scrRef.verseNum;
+        } else if (scrRefRef.current && scrRefRef.current.book) {
+          setSelectedBook(scrRefRef.current.book);
+          setSelectedChapter(scrRefRef.current.chapterNum);
+          pendingVerseRef.current = scrRefRef.current.verseNum;
         } else {
           const defaultBook = bookList.find((b) => b.code === 'RUT') || bookList[0];
           setSelectedBook(defaultBook.code);
@@ -1183,7 +1227,11 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     } finally {
       setLoading(false);
     }
-  }, [projectId, scrRef, scrollGroupId, setScrRef]);
+  // Note: scrRef is intentionally NOT in the dep array — it changes on every
+  // navigation event (new object reference) and would cause initData to re-run
+  // constantly. We read it via scrRefRef.current instead.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, scrollGroupId, setScrRef]);
 
   useEffect(() => {
     initData();
@@ -1844,6 +1892,21 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
             >
               A+
             </button>
+            {isEditingVerse && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  triggerVerseUndo();
+                }}
+                disabled={!verseEditorCanUndo}
+                title="Deshacer (Ctrl+Z)"
+                className="tw:px-2.5 tw:py-1 tw:bg-amber-50 tw:hover:bg-amber-100 tw:border tw:border-amber-300 tw:text-amber-800 tw:rounded tw:text-xs tw:font-semibold tw:cursor-pointer disabled:tw:opacity-40 disabled:tw:cursor-not-allowed tw:flex tw:items-center tw:gap-1 tw:transition-all"
+              >
+                ↶ Deshacer
+              </button>
+            )}
             <button
               onClick={() => loadChapter(selectedBook, selectedChapter)}
               className="tw:px-3 tw:py-1 tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:border-slate-200 tw:text-slate-700 tw:rounded tw:text-xs tw:font-semibold tw:cursor-pointer"
@@ -1922,6 +1985,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                         ? getCursorColors(otherEditor[0]).highlight
                         : null;
 
+                      const isEmpty = !child.text || child.text.trim().length === 0;
                       return (
                         <span
                           key={cIdx}
@@ -1929,7 +1993,18 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                           onClick={() => handleVerseClick(child.number, child.text)}
                           onContextMenu={(e) => handleVerseContextMenu(e, child.number, child.text)}
                           className="tw:relative tw:inline tw:rounded tw:transition-all tw:py-0.5 tw:cursor-text"
-                          style={otherEditorHighlight ? { backgroundColor: otherEditorHighlight, padding: '2px 4px', borderRadius: '4px' } : undefined}
+                          style={{
+                            ...otherEditorHighlight ? { backgroundColor: otherEditorHighlight, padding: '2px 4px', borderRadius: '4px' } : {},
+                            // Show the dashed placeholder only when not actively editing
+                            ...(isEmpty && !isEditing ? {
+                              minWidth: '32px',
+                              display: 'inline-block',
+                              height: '1.2em',
+                              verticalAlign: 'middle',
+                              borderBottom: '1px dashed #94a3b8',
+                              marginRight: '4px',
+                            } : {}),
+                          }}
                         >
                           {/* Verse number tag */}
                           <sup
@@ -1945,40 +2020,24 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
 
                           {/* Verse text content */}
                           {isEditing ? (
-                            <>
-                              <EditableVerse
-                                initialText={child.text}
-                                initialOffset={initialOffset}
-                                onSave={async (newText) => {
-                                  await handleContentEditableSave(newText, child.number);
-                                }}
-                                onCancel={() => {
-                                  setIsEditingVerse(false);
-                                  setSelectedVerseNum(null);
-                                }}
-                                onContextMenu={(e) => handleVerseContextMenu(e, child.number, child.text)}
-                                onCursorChange={(offset) => {
-                                  handleCursorChange(child.number, offset);
-                                }}
-                                onUndoStateChange={(canUndoNow) => {
-                                  setVerseEditorCanUndo(canUndoNow);
-                                }}
-                              />
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  triggerVerseUndo();
-                                }}
-                                disabled={!verseEditorCanUndo}
-                                title="Deshacer (Ctrl+Z)"
-                                className="tw:ml-1 tw:px-1.5 tw:py-0.5 tw:text-[10px] tw:bg-slate-100 hover:tw:bg-slate-200 tw:border tw:border-slate-300 tw:rounded tw:cursor-pointer disabled:tw:opacity-40 disabled:tw:cursor-not-allowed"
-                                style={{ verticalAlign: 'middle' }}
-                              >
-                                ↶
-                              </button>
-                            </>
+                            <EditableVerse
+                              initialText={child.text}
+                              initialOffset={initialOffset}
+                              onSave={async (newText) => {
+                                await handleContentEditableSave(newText, child.number);
+                              }}
+                              onCancel={() => {
+                                setIsEditingVerse(false);
+                                setSelectedVerseNum(null);
+                              }}
+                              onContextMenu={(e) => handleVerseContextMenu(e, child.number, child.text)}
+                              onCursorChange={(offset) => {
+                                handleCursorChange(child.number, offset);
+                              }}
+                              onUndoStateChange={(canUndoNow) => {
+                                setVerseEditorCanUndo(canUndoNow);
+                              }}
+                            />
                           ) : (
                             <span>
                               {injectCursorsIntoElements(

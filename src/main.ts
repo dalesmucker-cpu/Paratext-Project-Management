@@ -104,14 +104,14 @@ const pendingNotesRequests = new Map<
 let notesRequestIdCounter = 0;
 let updateNoticeMessage: string | null = null;
 
-function sendToNotesHelper(action: string, args: any[]): Promise<any> {
+function sendToNotesHelper(action: string, args: any[], timeoutMs = 15000): Promise<any> {
   if (!notesHelperProcess) return Promise.reject(new Error('Notes helper not running'));
   const id = String(notesRequestIdCounter++);
   return new Promise((resolve, reject) => {
     const timeoutId = setTimeout(() => {
       pendingNotesRequests.delete(id);
       reject(new Error(`Notes helper request timeout: action ${action}`));
-    }, 5000);
+    }, timeoutMs);
 
     pendingNotesRequests.set(id, {
       resolve: (val) => {
@@ -134,10 +134,17 @@ function sendToNotesHelper(action: string, args: any[]): Promise<any> {
   });
 }
 
+let helperStartAttempts = 0;
+
 function startNotesHelper(createProcess: ElevatedPrivileges['createProcess']): void {
   if (notesHelperProcess) return;
+  if (helperStartAttempts > 5) {
+    logger.error('Project Manager: Failed to start Notes helper after 5 attempts.');
+    return;
+  }
   try {
-    notesHelperProcess = createProcess.fork(execToken, 'assets/notes-helper.js', [], { silent: true });
+    const currentProcess = createProcess.fork(execToken, 'assets/notes-helper.js', [], { silent: true });
+    notesHelperProcess = currentProcess;
 
     notesHelperProcess.on('message', (message: any) => {
       if (message.event === 'collab') {
@@ -176,13 +183,43 @@ function startNotesHelper(createProcess: ElevatedPrivileges['createProcess']): v
 
     notesHelperProcess.on('close', (code) => {
       logger.info(`Notes helper exited with code ${code}`);
-      notesHelperProcess = undefined;
+      if (notesHelperProcess === currentProcess) {
+        notesHelperProcess = undefined;
+      }
       localCollabRole = 'none';
       for (const pending of pendingNotesRequests.values()) {
         pending.reject(new Error('Notes helper terminated'));
       }
       pendingNotesRequests.clear();
     });
+
+    // Verify the child process is responsive
+    const verifyResponsive = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      if (notesHelperProcess !== currentProcess) return;
+
+      try {
+        const res = await sendToNotesHelper('ping', [], 1500);
+        if (res === 'pong') {
+          logger.info('Project Manager: Notes helper is responsive and ready.');
+          helperStartAttempts = 0; // Reset count on success
+          return;
+        }
+      } catch (e) {
+        logger.warn(`Project Manager: Notes helper ping check failed on attempt ${helperStartAttempts}: ${e}`);
+      }
+
+      // If we got here, it's unresponsive
+      if (notesHelperProcess === currentProcess) {
+        logger.error('Project Manager: Notes helper is unresponsive on startup. Restarting...');
+        try {
+          currentProcess.kill();
+        } catch (_) {}
+        notesHelperProcess = undefined;
+        startNotesHelper(createProcess);
+      }
+    };
+    verifyResponsive();
   } catch (e) {
     logger.warn(`Failed to start Notes helper: ${e}`);
   }
@@ -878,96 +915,65 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         logger.warn(`getTasks local read failed for "${projectId}": ${e}`);
       }
 
-      // --- If local file is cached, return immediately and sync Drive in background ---
-      if (localContent) {
-        (async () => {
-          try {
-            const token = await getValidDriveToken();
-            if (token) {
-              const driveConfig = await readTasksDriveConfig();
-              let fileId = driveConfig.fileIds[projectId];
+      // --- Trigger background Drive sync to prevent blocking the UI ---
+      (async () => {
+        try {
+          const token = await getValidDriveToken();
+          if (token) {
+            const driveConfig = await readTasksDriveConfig();
+            let fileId = driveConfig.fileIds[projectId];
 
-              if (!fileId) {
-                const safeName = projectId.replace(/[^a-zA-Z0-9-]/g, '_');
-                const fileName = `paratext-tasks-${safeName}.json`;
-                try {
-                  const searchResult = JSON.parse(
-                    await runGcalHelper('drive-search', [token, fileName], undefined, 10_000),
-                  ) as { fileId: string | null };
-                  if (searchResult.fileId) {
-                    fileId = searchResult.fileId;
-                    const updatedIds = { ...driveConfig.fileIds, [projectId]: fileId };
-                    await writeTasksDriveConfig({ fileIds: updatedIds });
-                  }
-                } catch (searchErr) {
-                  logger.warn(`Drive file search failed for "${projectId}": ${searchErr}`);
+            if (!fileId) {
+              const safeName = projectId.replace(/[^a-zA-Z0-9-]/g, '_');
+              const fileName = `paratext-tasks-${safeName}.json`;
+              try {
+                const searchResult = JSON.parse(
+                  await runGcalHelper('drive-search', [token, fileName], undefined, 10_000),
+                ) as { fileId: string | null };
+                if (searchResult.fileId) {
+                  fileId = searchResult.fileId;
+                  const updatedIds = { ...driveConfig.fileIds, [projectId]: fileId };
+                  await writeTasksDriveConfig({ fileIds: updatedIds });
                 }
+              } catch (searchErr) {
+                logger.warn(`Drive file search failed for "${projectId}": ${searchErr}`);
               }
+            }
 
-              if (fileId) {
-                const driveContent = await runGcalHelper(
-                  'drive-read',
-                  [token, fileId],
-                  undefined,
-                  15_000,
-                );
-                JSON.parse(driveContent); // validate
-                const merged = mergeTaskStores(localContent!, driveContent);
+            if (fileId) {
+              const driveContent = await runGcalHelper(
+                'drive-read',
+                [token, fileId],
+                undefined,
+                15_000,
+              );
+              JSON.parse(driveContent); // validate
+              if (localContent) {
+                const merged = mergeTaskStores(localContent, driveContent);
                 if (merged !== localContent && tasksPath) {
                   await runFileHelper('write', tasksPath, merged);
                   logger.info(`Project Manager: getTasks background merged local+Drive for "${projectId}"`);
+                  if (collabEventEmitter) {
+                    collabEventEmitter.emit({ type: 'tasks_update', payload: { projectId } });
+                  }
+                }
+              } else {
+                if (tasksPath) {
+                  await runFileHelper('write', tasksPath, driveContent);
+                  logger.info(`Project Manager: getTasks background synced Drive only (no local file before) for "${projectId}"`);
+                  if (collabEventEmitter) {
+                    collabEventEmitter.emit({ type: 'tasks_update', payload: { projectId } });
+                  }
                 }
               }
             }
-          } catch (driveErr) {
-            logger.warn(`Background Drive getTasks failed: ${driveErr}`);
           }
-        })();
-
-        return localContent;
-      }
-
-      // --- First-time run (no local content) -> must wait for Drive sync ---
-      try {
-        const token = await getValidDriveToken();
-        if (token) {
-          const driveConfig = await readTasksDriveConfig();
-          let fileId = driveConfig.fileIds[projectId];
-
-          if (!fileId) {
-            const safeName = projectId.replace(/[^a-zA-Z0-9-]/g, '_');
-            const fileName = `paratext-tasks-${safeName}.json`;
-            try {
-              const searchResult = JSON.parse(
-                await runGcalHelper('drive-search', [token, fileName], undefined, 10_000),
-              ) as { fileId: string | null };
-              if (searchResult.fileId) {
-                fileId = searchResult.fileId;
-                const updatedIds = { ...driveConfig.fileIds, [projectId]: fileId };
-                await writeTasksDriveConfig({ fileIds: updatedIds });
-              }
-            } catch (searchErr) {
-              logger.warn(`Drive file search failed for "${projectId}": ${searchErr}`);
-            }
-          }
-
-          if (fileId) {
-            const driveContent = await runGcalHelper(
-              'drive-read',
-              [token, fileId],
-              undefined,
-              15_000,
-            );
-            JSON.parse(driveContent); // validate
-            logger.info(`Project Manager: getTasks from Drive only (no local file yet) for "${projectId}"`);
-            return driveContent;
-          }
+        } catch (driveErr) {
+          logger.warn(`Background Drive sync failed in getTasks: ${driveErr}`);
         }
-      } catch (driveErr) {
-        logger.warn(`Drive getTasks failed: ${driveErr}`);
-      }
+      })();
 
-      return empty;
+      return localContent || empty;
     },
   );
 
@@ -1256,6 +1262,17 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
       } catch (e) {
         localCollabRole = 'none';
         return 'error';
+      }
+    },
+  );
+
+  const reconnectCollabPromise = papi.commands.registerCommand(
+    'paratextProjectManager.reconnectCollab',
+    async (): Promise<any> => {
+      try {
+        return await sendToNotesHelper('reconnectCollab', []);
+      } catch (e: any) {
+        return { status: 'error', error: e.message || String(e) };
       }
     },
   );
@@ -2049,9 +2066,10 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     async (): Promise<string> => {
       try {
         const config = await readGcalConfig();
-        const accessToken = await getValidAccessToken();
+        // A user is connected if they have completed OAuth (i.e. they have a refreshToken).
+        // Returning config.refreshToken check instantly avoids blocking status load on slow/offline token refresh.
         return JSON.stringify({
-          connected: !!accessToken,
+          connected: !!config.refreshToken,
           email: config.userEmail,
           calendarId: config.calendarId,
           lastSync: config.lastSync,
@@ -2703,6 +2721,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     await startCollabHostPromise,
     await connectCollabClientPromise,
     await stopCollabPromise,
+    await reconnectCollabPromise,
     await getCollabStatusPromise,
     await sendCollabChatPromise,
     await broadcastCursorPromise,
@@ -2720,5 +2739,13 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
 
 export async function deactivate(): Promise<boolean> {
   logger.info('Project Manager extension is deactivating!');
+  if (notesHelperProcess) {
+    try {
+      notesHelperProcess.kill();
+    } catch (e) {
+      logger.warn(`Failed to kill notes helper process on deactivate: ${e}`);
+    }
+    notesHelperProcess = undefined;
+  }
   return true;
 }

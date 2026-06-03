@@ -10,6 +10,8 @@ const { URL } = require('url');
 const net = require('net');
 const os = require('os');
 
+console.log('[helper] notes-helper process starting...');
+
 // Override process.send with a try-catch wrapped function to avoid crashes if IPC channel closes
 const originalProcessSend = process.send ? process.send.bind(process) : null;
 process.send = (message) => {
@@ -110,13 +112,34 @@ function parseVerseRef(ref) {
   return { book, chapter, verse };
 }
 
+const tagRegexes = {
+  SelectedText: /<SelectedText>([\s\S]*?)<\/SelectedText>/i,
+  StartPosition: /<StartPosition>([\s\S]*?)<\/StartPosition>/i,
+  ContextBefore: /<ContextBefore>([\s\S]*?)<\/ContextBefore>/i,
+  ContextAfter: /<ContextAfter>([\s\S]*?)<\/ContextAfter>/i,
+  Status: /<Status>([\s\S]*?)<\/Status>/i,
+  Type: /<Type>([\s\S]*?)<\/Type>/i,
+  Verse: /<Verse>([\s\S]*?)<\/Verse>/i,
+  ReplyToUser: /<ReplyToUser>([\s\S]*?)<\/ReplyToUser>/i,
+  HideInTextWindow: /<HideInTextWindow>([\s\S]*?)<\/HideInTextWindow>/i,
+  AssignedUser: /<AssignedUser>([\s\S]*?)<\/AssignedUser>/i,
+  Contents: /<Contents>([\s\S]*?)<\/Contents>/i,
+};
+
 function parseNotesXml(filePath) {
-  const comments = [];
   try {
     const xml = fs.readFileSync(filePath, 'utf8');
+    return parseNotesXmlContent(xml, path.basename(filePath));
+  } catch (e) {
+    return [];
+  }
+}
+
+function parseNotesXmlContent(xml, filename) {
+  const comments = [];
+  try {
     const commentRegex = /<Comment\b([^>]*?)>([\s\S]*?)<\/Comment>/gi;
     let match;
-    const filename = path.basename(filePath);
 
     while ((match = commentRegex.exec(xml)) !== null) {
       const attrsStr = match[1];
@@ -135,7 +158,8 @@ function parseNotesXml(filePath) {
       const date = dateMatch ? dateMatch[1] : '';
 
       const getTag = (tag) => {
-        const regex = new RegExp(`<${tag}>([\\s\\S]*?)<\/${tag}>`, 'i');
+        const regex = tagRegexes[tag];
+        if (!regex) return '';
         const m = regex.exec(body);
         return m ? m[1] : '';
       };
@@ -173,7 +197,7 @@ function parseNotesXml(filePath) {
       });
     }
   } catch (e) {
-    // console.warn('parseNotesXml failed:', e);
+    // console.warn('parseNotesXmlContent failed:', e);
   }
   return comments;
 }
@@ -603,11 +627,15 @@ function startLocalAudioServer() {
       }
     });
 
+    localAudioServer.on('error', (err) => {
+      console.error('[helper] Audio HTTP server error:', err.message || err);
+    });
+
     localAudioServer.listen(49876, '127.0.0.1', () => {
-      // console.log('Notes helper: local HTTP server running on port 49876');
+      console.log('[helper] Audio HTTP server listening on port 49876');
     });
   } catch (e) {
-    // console.error('Failed to start HTTP server:', e);
+    console.error('[helper] Failed to start HTTP server:', e.message || e);
   }
 }
 
@@ -615,6 +643,10 @@ function startLocalAudioServer() {
 
 async function handleAction(action, args) {
   switch (action) {
+    case 'ping': {
+      return 'pong';
+    }
+
     case 'registerProjectDir': {
       const [projectId, projectDir] = args;
       projectDirs.set(projectId, projectDir);
@@ -625,35 +657,45 @@ async function handleAction(action, args) {
       const [projectId, projectDir, currentUser, readLogPath] = args;
       projectDirs.set(projectId, projectDir); // ensure registered
 
-      const files = fs.readdirSync(projectDir);
+      const files = await fs.promises.readdir(projectDir);
       const notesFiles = files.filter((f) => f.startsWith('Notes_') && f.endsWith('.xml'));
 
       const allComments = [];
       const authorsSet = new Set();
 
-      for (const file of notesFiles) {
+      const readPromises = notesFiles.map(async (file) => {
         const filePath = path.join(projectDir, file);
         const author = file.slice(6, -4);
         authorsSet.add(author);
 
         try {
-          const stat = fs.statSync(filePath);
+          const stat = await fs.promises.stat(filePath);
           const cached = notesCache.get(filePath);
           if (cached && cached.mtimeMs === stat.mtimeMs) {
-            allComments.push(...cached.comments);
+            return cached.comments;
           } else {
-            const comments = parseNotesXml(filePath);
+            const xml = await fs.promises.readFile(filePath, 'utf8');
+            const comments = parseNotesXmlContent(xml, file);
             notesCache.set(filePath, {
               mtimeMs: stat.mtimeMs,
               comments,
             });
-            allComments.push(...comments);
+            return comments;
           }
         } catch (e) {
           // Fallback on error
-          const comments = parseNotesXml(filePath);
-          allComments.push(...comments);
+          try {
+            const xml = await fs.promises.readFile(filePath, 'utf8');
+            return parseNotesXmlContent(xml, file);
+          } catch (_) {
+            return [];
+          }
         }
+      });
+
+      const commentsArrays = await Promise.all(readPromises);
+      for (const comments of commentsArrays) {
+        allComments.push(...comments);
       }
 
       // Group comments by Thread ID
@@ -669,8 +711,9 @@ async function handleAction(action, args) {
       // Load read log
       let readLog = {};
       try {
-        if (fs.existsSync(readLogPath)) {
-          readLog = JSON.parse(fs.readFileSync(readLogPath, 'utf8'));
+        const exists = await fs.promises.access(readLogPath).then(() => true).catch(() => false);
+        if (exists) {
+          readLog = JSON.parse(await fs.promises.readFile(readLogPath, 'utf8'));
         }
       } catch (_) {}
 
@@ -797,6 +840,7 @@ async function handleAction(action, args) {
 
       fileXml = fileXml.replace(commentRegex, updatedBlock);
       fs.writeFileSync(filePath, fileXml, 'utf8');
+      notesCache.delete(filePath);
       return 'ok';
     }
 
@@ -824,6 +868,7 @@ async function handleAction(action, args) {
 
       fileXml = fileXml.replace(commentRegex, '\n');
       fs.writeFileSync(filePath, fileXml, 'utf8');
+      notesCache.delete(filePath);
       return 'ok';
     }
 
@@ -883,6 +928,7 @@ async function handleAction(action, args) {
 
       fileXml = fileXml.slice(0, closingTagIndex) + newCommentXml + fileXml.slice(closingTagIndex);
       fs.writeFileSync(filePath, fileXml, 'utf8');
+      notesCache.delete(filePath);
 
       return { status: 'ok', fullName };
     }
@@ -893,20 +939,16 @@ async function handleAction(action, args) {
       let postPart = '.SFM';
       let prePart = '';
       const settingsPath = path.join(projectDir, 'Settings.xml');
-      if (fs.existsSync(settingsPath)) {
-        try {
-          const xml = fs.readFileSync(settingsPath, 'utf8');
-          const postMatch = /<FileNamePostPart>([^<]+)<\/FileNamePostPart>/i.exec(xml);
-          if (postMatch) postPart = postMatch[1].trim();
-          const preMatch = /<FileNamePrePart>([^<]+)<\/FileNamePrePart>/i.exec(xml);
-          if (preMatch) prePart = preMatch[1].trim();
-        } catch (_) {}
-      }
+      try {
+        const xml = await fs.promises.readFile(settingsPath, 'utf8');
+        const postMatch = /<FileNamePostPart>([^<]+)<\/FileNamePostPart>/i.exec(xml);
+        if (postMatch) postPart = postMatch[1].trim();
+        const preMatch = /<FileNamePrePart>([^<]+)<\/FileNamePrePart>/i.exec(xml);
+        if (preMatch) prePart = preMatch[1].trim();
+      } catch (_) {}
 
-      const files = fs.readdirSync(projectDir);
-      const books = [];
-
-      for (const code of BIBLE_BOOK_CODES) {
+      const files = await fs.promises.readdir(projectDir);
+      const bookPromises = BIBLE_BOOK_CODES.map(async (code) => {
         const regex = new RegExp(
           `^${escapeRegex(prePart)}\\d*${code}${escapeRegex(postPart)}$`,
           'i',
@@ -917,10 +959,10 @@ async function handleAction(action, args) {
           let bookName = BIBLE_BOOK_NAMES_ES[code] || code;
           try {
             const filePath = path.join(projectDir, foundFile);
-            const fd = fs.openSync(filePath, 'r');
+            const fd = await fs.promises.open(filePath, 'r');
             const buffer = Buffer.alloc(1024);
-            const bytesRead = fs.readSync(fd, buffer, 0, 1024, 0);
-            fs.closeSync(fd);
+            const { bytesRead } = await fd.read(buffer, 0, 1024, 0);
+            await fd.close();
             const headText = buffer.toString('utf8', 0, bytesRead);
 
             let parsedName = '';
@@ -938,9 +980,12 @@ async function handleAction(action, args) {
             /* ignore header read error */
           }
 
-          books.push({ code, name: bookName, fileName: foundFile });
+          return { code, name: bookName, fileName: foundFile };
         }
-      }
+        return null;
+      });
+
+      const books = (await Promise.all(bookPromises)).filter(Boolean);
       return books;
     }
 
@@ -949,17 +994,15 @@ async function handleAction(action, args) {
       let postPart = '.SFM';
       let prePart = '';
       const settingsPath = path.join(projectDir, 'Settings.xml');
-      if (fs.existsSync(settingsPath)) {
-        try {
-          const xml = fs.readFileSync(settingsPath, 'utf8');
-          const postMatch = /<FileNamePostPart>([^<]+)<\/FileNamePostPart>/i.exec(xml);
-          if (postMatch) postPart = postMatch[1].trim();
-          const preMatch = /<FileNamePrePart>([^<]+)<\/FileNamePrePart>/i.exec(xml);
-          if (preMatch) prePart = preMatch[1].trim();
-        } catch (_) {}
-      }
+      try {
+        const xml = await fs.promises.readFile(settingsPath, 'utf8');
+        const postMatch = /<FileNamePostPart>([^<]+)<\/FileNamePostPart>/i.exec(xml);
+        if (postMatch) postPart = postMatch[1].trim();
+        const preMatch = /<FileNamePrePart>([^<]+)<\/FileNamePrePart>/i.exec(xml);
+        if (preMatch) prePart = preMatch[1].trim();
+      } catch (_) {}
 
-      const files = fs.readdirSync(projectDir);
+      const files = await fs.promises.readdir(projectDir);
       const regex = new RegExp(
         `^${escapeRegex(prePart)}\\d*${bookCode}${escapeRegex(postPart)}$`,
         'i',
@@ -971,10 +1014,10 @@ async function handleAction(action, args) {
       }
 
       const filePath = path.join(projectDir, foundFile);
-      const fileContent = fs.readFileSync(filePath, 'utf8');
+      const fileContent = await fs.promises.readFile(filePath, 'utf8');
 
       const chapterRegex = new RegExp(
-        `\\\\c\\s+${chapter}\\b([\\s\\S]*?)(?:\\\\c\\s+\\d+|\\$)`,
+        `\\\\c\\s+${chapter}\\b([\\s\\S]*?)(?=\\\\c\\s+\\d+|$)`,
         'i',
       );
       const match = chapterRegex.exec(fileContent);
@@ -1169,7 +1212,7 @@ async function handleAction(action, args) {
         return new Promise((resolve, reject) => {
           try {
             collabServer = net.createServer((socket) => {
-              socket.setKeepAlive(true, 15000);
+              socket.setKeepAlive(true, 10000);
               socket.setNoDelay(true);
               let socketUser = '';
               let lastPongAt = Date.now();
@@ -1178,6 +1221,7 @@ async function handleAction(action, args) {
               setupSocketReceiver(
                 socket,
                 (msg) => {
+                  hasAliveLanSocket();
                   if (msg.type === 'pong') {
                     lastPongAt = Date.now();
                     return;
@@ -1188,6 +1232,10 @@ async function handleAction(action, args) {
                   }
                   console.log(`[collab] HOST received from client: ${msg.type}`);
                   if (msg.type === 'handshake') {
+                    // Handshake marks the connection as fully established.
+                    // Reset lastPongAt so the connection doesn't get killed
+                    // by the 15s timeout before any pings flow.
+                    lastPongAt = Date.now();
                     socketUser = msg.payload.username;
                     collabActiveUsers.add(socketUser);
 
@@ -1265,15 +1313,15 @@ async function handleAction(action, args) {
                   clearInterval(pingInterval);
                   return;
                 }
-                // If no pong in 30s, consider the connection dead
-                if (Date.now() - lastPongAt > 30000) {
-                  console.warn(`[collab] HOST: client ${socketUser} hasn't responded to pings in 30s, closing`);
+                // If no pong in 15s, consider the connection dead
+                if (Date.now() - lastPongAt > 15000) {
+                  console.warn(`[collab] HOST: client ${socketUser} hasn't responded to pings in 15s, closing`);
                   try { socket.destroy(); } catch (_) {}
                   clearInterval(pingInterval);
                   return;
                 }
                 try { socket.write(JSON.stringify({ type: 'ping' }) + '\n'); } catch (_) {}
-              }, 10000);
+              }, 5000);
               socket.on('close', () => clearInterval(pingInterval));
             });
 
@@ -1297,7 +1345,10 @@ async function handleAction(action, args) {
       const [ipOrRoomId, portOrNull, username, projectId, projectDir, collabTypeArg, serverUrlArg] = args;
       if (projectDir) projectDirs.set(projectId, projectDir);
 
-      cleanupCollab();
+      // If we're in an auto-reconnect, the state is already clean and we
+      // don't want a duplicate status_update going to main.ts.
+      const inAutoReconnect = isReconnecting || (reconnectParams && collabRole === 'none');
+      cleanupCollab(inAutoReconnect);
 
       collabRole = 'client';
       collabType = collabTypeArg || 'local';
@@ -1382,33 +1433,69 @@ async function handleAction(action, args) {
         collabActiveUsers = new Set();
 
         return new Promise((resolve, reject) => {
+          let connected = false;
+          let lastPongAt = Date.now();
           try {
             const socket = net.createConnection({ host: collabHostIp, port: collabPort }, () => {
-              socket.setKeepAlive(true, 15000);
+              connected = true;
+              lastPongAt = Date.now();
+              socket.setKeepAlive(true, 10000);
               socket.setNoDelay(true);
               collabClientSocket = socket;
               console.log(`[collab] CLIENT socket connected to host ${collabHostIp}:${collabPort}, writable=${socket.writable}`);
               socket.write(JSON.stringify({ type: 'handshake', payload: { username } }) + '\n');
+              // Remember params for auto-reconnect BEFORE resolving.
+              rememberClientConnection({
+                ipOrRoomId,
+                port: portOrNull,
+                username,
+                projectId,
+                projectDir,
+                type: 'local',
+                serverUrl: '',
+              });
+
+              // Notify main.ts and webview of successful connection
+              try {
+                process.send({
+                  event: 'collab',
+                  data: {
+                    type: 'status_update',
+                    payload: { role: 'client' },
+                  },
+                });
+              } catch (_) {}
+
               resolve({ status: 'ok', role: 'client' });
             });
 
-            let lastPongAt = Date.now();
-
             socket.on('error', (err) => {
               console.error(`[collab] CLIENT socket error: ${err.message}`);
-              cleanupCollab();
-              reject(err);
+              // Don't reject here if we're already connected — let the close
+              // handler run the cleanup and the auto-reconnect schedule. We
+              // only reject the initial connection promise.
+              if (!connected) {
+                cleanupCollab();
+                reject(err);
+              } else {
+                try { socket.destroy(); } catch (_) {}
+              }
             });
 
             setupSocketReceiver(
               socket,
               (msg) => {
+                hasAliveLanSocket();
                 if (msg.type === 'ping') {
-                  lastPongAt = Date.now();
+                  // Respond to host pings with a pong but do NOT reset lastPongAt.
+                  // lastPongAt tracks whether the HOST is responding to OUR pings.
+                  // Resetting it here would mask a dead one-way connection where
+                  // the host sends pings but never responds to client pings.
                   try { socket.write(JSON.stringify({ type: 'pong' }) + '\n'); } catch (_) {}
                   return;
                 }
                 if (msg.type === 'pong') {
+                  // Host responded to our ping — connection is alive
                   lastPongAt = Date.now();
                   return;
                 }
@@ -1440,25 +1527,41 @@ async function handleAction(action, args) {
                 }
               },
               () => {
-                cleanupCollab();
-                process.send({ event: 'collab', data: { type: 'status_update', payload: { role: 'none', error: 'Se perdió la conexión con el servidor.' } } });
+                // Connection dropped. Clean up and (if the user has not
+                // explicitly stopped) try to reconnect automatically.
+                const wasReconnecting = isReconnecting;
+                const willReconnect = !!reconnectParams && !wasReconnecting;
+                // Pass silent=true when we will immediately schedule a reconnect
+                // so cleanupCollab doesn't send a status_update{role:'none'} that
+                // causes the UI to briefly flash the disconnected banner before
+                // the reconnecting banner appears from scheduleReconnect().
+                cleanupCollab(willReconnect);
+                if (willReconnect) {
+                  console.log(`[collab] CLIENT connection lost — scheduling auto-reconnect`);
+                  scheduleReconnect();
+                } else {
+                  process.send({
+                    event: 'collab',
+                    data: { type: 'status_update', payload: { role: 'none', error: 'Se perdió la conexión con el servidor.' } },
+                  });
+                }
               }
             );
 
-            // Send periodic pings; if no pong in 30s, the connection is dead
+            // Send periodic pings; if no pong in 15s, the connection is dead
             const pingInterval = setInterval(() => {
               if (!socket.writable || socket.destroyed) {
                 clearInterval(pingInterval);
                 return;
               }
-              if (Date.now() - lastPongAt > 30000) {
-                console.warn(`[collab] CLIENT: no pong from host in 30s, destroying socket`);
+              if (Date.now() - lastPongAt > 15000) {
+                console.warn(`[collab] CLIENT: no pong from host in 15s, destroying socket`);
                 try { socket.destroy(); } catch (_) {}
                 clearInterval(pingInterval);
                 return;
               }
               try { socket.write(JSON.stringify({ type: 'ping' }) + '\n'); } catch (_) {}
-            }, 10000);
+            }, 5000);
             socket.on('close', () => clearInterval(pingInterval));
           } catch (e) {
             cleanupCollab();
@@ -1469,11 +1572,38 @@ async function handleAction(action, args) {
     }
 
     case 'stopCollab': {
+      clearReconnectParams();
       cleanupCollab();
       return 'ok';
     }
 
+    case 'reconnectCollab': {
+      // Manually trigger a reconnect attempt using the most recent
+      // connection parameters. Resets the backoff counter so it tries
+      // immediately.
+      if (!reconnectParams) {
+        return { status: 'error', error: 'No hay parámetros de reconexión guardados.' };
+      }
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      isReconnecting = false;
+      reconnectAttempts = 0;
+      attemptReconnect();
+      return { status: 'ok', message: 'Reconectando...' };
+    }
+
+    case 'getReconnectStatus': {
+      return {
+        reconnecting: isReconnecting,
+        attempts: reconnectAttempts,
+        hasParams: !!reconnectParams,
+      };
+    }
+
     case 'getCollabStatus': {
+      hasAliveLanSocket();
       return {
         role: collabRole,
         type: collabType,
@@ -1483,12 +1613,16 @@ async function handleAction(action, args) {
         roomId: collabRoomId,
         serverUrl: collabServerUrl,
         activeUsers: Array.from(collabActiveUsers),
-        ips: getLocalIps()
+        ips: getLocalIps(),
+        reconnecting: isReconnecting,
+        reconnectAttempts: reconnectAttempts,
+        hasReconnectParams: !!reconnectParams,
       };
     }
 
     case 'broadcastCollab': {
       const [msg] = args;
+      hasAliveLanSocket();
       console.log(`[collab] Helper received broadcastCollab IPC: ${msg?.type} (role=${collabRole}, type=${collabType})`);
       broadcastCollab(msg);
       return 'ok';
@@ -1513,6 +1647,14 @@ let collabRoomId = '';
 let collabServerUrl = '';
 let collabActiveUsers = new Set(); // active usernames online
 
+// Auto-reconnect state (client-side only). When the connection drops we
+// remember the parameters used to connect and try again with exponential
+// backoff so the user does not have to manually reconnect on every blip.
+let reconnectParams = null; // { ipOrRoomId, port, username, projectId, projectDir, type, serverUrl }
+let reconnectAttempts = 0;
+let reconnectTimer = null;
+let isReconnecting = false;
+
 function getLocalIps() {
   const interfaces = os.networkInterfaces();
   const addresses = [];
@@ -1530,7 +1672,99 @@ function getLocalIps() {
   return addresses;
 }
 
-function cleanupCollab() {
+// --- Auto-reconnect helpers (client side) ---
+
+// Save the parameters of a successful client connection so we can re-use
+// them when the connection drops. Called from connectCollabClient after the
+// socket is established and the handshake has been sent.
+function rememberClientConnection(params) {
+  reconnectParams = { ...params };
+  reconnectAttempts = 0;
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  isReconnecting = false;
+}
+
+function clearReconnectParams() {
+  reconnectParams = null;
+  reconnectAttempts = 0;
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  isReconnecting = false;
+}
+
+function scheduleReconnect() {
+  if (!reconnectParams) return;
+  if (isReconnecting) return;
+  if (reconnectParams.type === 'online') {
+    // Only auto-reconnect for local LAN; online relay reconnection needs
+    // explicit user action because the handshake semantics differ.
+    return;
+  }
+  // Exponential backoff: 2s, 4s, 8s, 16s, 30s (cap)
+  const delays = [2000, 4000, 8000, 16000, 30000];
+  const delay = delays[Math.min(reconnectAttempts, delays.length - 1)];
+  reconnectAttempts++;
+  isReconnecting = true;
+  console.log(`[collab] Auto-reconnect attempt #${reconnectAttempts} in ${delay}ms to ${reconnectParams.ipOrRoomId}:${reconnectParams.port}`);
+  try {
+    process.send({
+      event: 'collab',
+      data: {
+        type: 'status_update',
+        payload: { role: 'none', reconnecting: true, attempt: reconnectAttempts, delayMs: delay },
+      },
+    });
+  } catch (_) {}
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    isReconnecting = false;
+    attemptReconnect();
+  }, delay);
+}
+
+async function attemptReconnect() {
+  if (!reconnectParams) return;
+  const params = reconnectParams;
+  console.log(`[collab] Auto-reconnect: connecting to ${params.ipOrRoomId}:${params.port} (attempt #${reconnectAttempts})`);
+  try {
+    const result = await handleAction('connectCollabClient', [
+      params.ipOrRoomId,
+      params.port,
+      params.username,
+      params.projectId,
+      params.projectDir,
+      params.type || 'local',
+      params.serverUrl || '',
+    ]);
+    if (result && result.status === 'ok') {
+      console.log(`[collab] Auto-reconnect succeeded`);
+      reconnectAttempts = 0;
+      isReconnecting = false;
+      // process.send 'ok' to main.ts is already done by handleAction.
+    } else {
+      console.warn(`[collab] Auto-reconnect returned non-ok: ${JSON.stringify(result)}`);
+      scheduleReconnect();
+    }
+  } catch (err) {
+    console.warn(`[collab] Auto-reconnect failed: ${err.message || err}`);
+    scheduleReconnect();
+  }
+}
+
+function cleanupCollab(silent = false) {
+  // Cancel any pending auto-reconnect so we don't fight with the user
+  // when they explicitly stop the session.
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  isReconnecting = false;
+
   if (collabServer) {
     try { collabServer.close(); } catch (_) {}
     collabServer = null;
@@ -1550,14 +1784,84 @@ function cleanupCollab() {
     collabWs = null;
   }
 
+  const wasHost = collabRole === 'host';
+  const wasClient = collabRole === 'client';
+  const prevType = collabType;
   collabRole = 'none';
   collabType = 'local';
   collabActiveUsers = new Set();
   collabRoomId = '';
   collabServerUrl = '';
+
+  if (silent) return;
+
+  // Always notify main.ts of the role change. Without this, a silent
+  // cleanupCollab (e.g., from a socket error) leaves main.ts thinking the
+  // user is still connected, and subsequent broadcasts are dropped.
+  try {
+    process.send({
+      event: 'collab',
+      data: {
+        type: 'status_update',
+        payload: {
+          role: 'none',
+          previousRole: wasHost ? 'host' : wasClient ? 'client' : 'none',
+          previousType: prevType,
+        },
+      },
+    });
+  } catch (_) {}
+}
+
+// Returns true if there is at least one writable socket that can receive
+// LAN broadcasts, regardless of the collabRole state. This is a defensive
+// check for the case where main.ts believes the user is connected but the
+// helper's collabRole was reset to 'none' (e.g., from a previous cleanup
+// that did not propagate a status_update). The fix prevents silently
+// dropping messages that the user thinks are being broadcast.
+function hasAliveLanSocket() {
+  if (collabRole === 'host') {
+    return collabSockets.some((s) => s && s.writable && !s.destroyed);
+  }
+  if (collabRole === 'client') {
+    return !!(collabClientSocket && collabClientSocket.writable && !collabClientSocket.destroyed);
+  }
+  // collabRole is 'none' — but the socket may still be alive from a prior
+  // connection. Check anyway so we don't drop messages.
+  if (collabClientSocket && collabClientSocket.writable && !collabClientSocket.destroyed) {
+    // Self-heal: bring the role back in sync with reality.
+    console.log('[collab] collabRole was none but client socket is alive — repairing state');
+    collabRole = 'client';
+    try {
+      process.send({
+        event: 'collab',
+        data: {
+          type: 'status_update',
+          payload: { role: 'client' },
+        },
+      });
+    } catch (_) {}
+    return true;
+  }
+  if (collabSockets.some((s) => s && s.writable && !s.destroyed)) {
+    console.log('[collab] collabRole was none but host sockets are alive — repairing state');
+    collabRole = 'host';
+    try {
+      process.send({
+        event: 'collab',
+        data: {
+          type: 'status_update',
+          payload: { role: 'host' },
+        },
+      });
+    } catch (_) {}
+    return true;
+  }
+  return false;
 }
 
 function broadcastCollab(msg, excludeSocket = null) {
+  hasAliveLanSocket();
   if (collabType === 'online') {
     if (collabWs && collabWs.readyState === 1) { // 1 is OPEN
       try {
@@ -1571,48 +1875,52 @@ function broadcastCollab(msg, excludeSocket = null) {
   if (msg && msg.type === 'ping') return;
 
   const line = JSON.stringify(msg) + '\n';
-  if (collabRole === 'host') {
+  if (collabRole === 'host' || (collabRole === 'none' && collabSockets.length > 0)) {
     let sentCount = 0;
+    let skipped = 0;
     for (const socket of collabSockets) {
-      if (socket !== excludeSocket && socket.writable) {
+      if (socket !== excludeSocket && socket.writable && !socket.destroyed) {
         try {
           socket.write(line, (err) => {
             if (err) {
               console.error('[collab] Socket write error (host):', err.message);
-              socket.destroy();
+              try { socket.destroy(); } catch (_) {}
             }
           });
           sentCount++;
         } catch (e) {
           console.error('[collab] Socket write exception (host):', e.message);
-          socket.destroy();
+          try { socket.destroy(); } catch (_) {}
         }
+      } else {
+        skipped++;
       }
     }
     if (msg.type === 'cursor_update' || msg.type === 'verse_update' || msg.type === 'tasks_update' || msg.type === 'note_update') {
-      console.log(`[collab] HOST broadcast ${msg.type} to ${sentCount}/${collabSockets.length} client(s)`);
+      console.log(`[collab] HOST broadcast ${msg.type} to ${sentCount}/${collabSockets.length} client(s) (skipped ${skipped} dead)`);
     }
-  } else if (collabRole === 'client') {
-    if (collabClientSocket && collabClientSocket.writable) {
+  } else if (collabRole === 'client' || (collabRole === 'none' && collabClientSocket)) {
+    const socket = collabClientSocket;
+    if (socket && socket.writable && !socket.destroyed) {
       try {
-        const ok = collabClientSocket.write(line, (err) => {
+        const ok = socket.write(line, (err) => {
           if (err) {
             console.error('[collab] Client socket write error:', err.message);
-            try { collabClientSocket.destroy(); } catch (_) {}
+            try { socket.destroy(); } catch (_) {}
           }
         });
-        if (msg.type === 'cursor_update' || msg.type === 'verse_update' || msg.type === 'tasks_update' || msg.type === 'note_update') {
-          console.log(`[collab] CLIENT sent ${msg.type} to host (socket writable=${collabClientSocket.writable}, write OK=${ok})`);
+        if (msg.type === 'cursor_update' || msg.type === 'verse_update' || msg.type === 'tasks_update' || msg.type === 'note_update' || msg.type === 'chat_message' || msg.type === 'note_update') {
+          console.log(`[collab] CLIENT sent ${msg.type} to host (writable=${socket.writable}, write OK=${ok})`);
         }
       } catch (e) {
         console.error('[collab] Client socket write exception:', e.message);
-        try { collabClientSocket.destroy(); } catch (_) {}
+        try { socket.destroy(); } catch (_) {}
       }
     } else {
-      console.warn(`[collab] CLIENT tried to send ${msg.type} but socket is not writable (writable=${collabClientSocket?.writable}, exists=${!!collabClientSocket})`);
+      console.warn(`[collab] CLIENT tried to send ${msg.type} but socket is not writable (writable=${socket?.writable}, destroyed=${socket?.destroyed}, exists=${!!socket})`);
     }
   } else {
-    console.warn(`[collab] broadcastCollab called with collabRole='${collabRole}' - message dropped: ${msg.type}`);
+    console.warn(`[collab] broadcastCollab called with collabRole='${collabRole}' and no live socket — message dropped: ${msg.type}`);
   }
 }
 
@@ -1706,7 +2014,20 @@ function saveVerseLocal(projectId, bookCode, chapter, verse, newText) {
   if (!vMatch) return;
 
   const vHeader = vMatch[1];
+  const vBody = vMatch[2];
   const newline = fileContent.includes('\r\n') ? '\r\n' : '\n';
+
+  // Find the first block marker to split off trailing structural markup
+  const blockMarkerRegex = /[\r\n]+\\(p|m|q|s|b|li|lh|lim|tr|tc|cl|im|ip|is|iot|io|d|r|nb)[a-z0-9]*\b/i;
+  const blockMatch = blockMarkerRegex.exec(vBody);
+
+  let actualVerseText = vBody;
+  let trailingBlockMarkers = '';
+  if (blockMatch) {
+    const splitIndex = blockMatch.index;
+    actualVerseText = vBody.substring(0, splitIndex);
+    trailingBlockMarkers = vBody.substring(splitIndex);
+  }
 
   const vStartIndex = vMatch.index;
   const vLength = vMatch[0].length;
@@ -1714,7 +2035,8 @@ function saveVerseLocal(projectId, bookCode, chapter, verse, newText) {
     chapBody.substring(0, vStartIndex) +
     vHeader +
     newText.trim() +
-    newline +
+    (trailingBlockMarkers ? '' : newline) +
+    trailingBlockMarkers +
     chapBody.substring(vStartIndex + vLength);
 
   const startIndex = chapMatch.index;
@@ -1855,10 +2177,17 @@ startLocalAudioServer();
 // Listen to parent IPC messages
 process.on('message', async (message) => {
   const { id, action, args } = message;
+  if (action !== 'ping') {
+    console.log(`[helper] IPC received: action=${action} id=${id}`);
+  }
   try {
     const result = await handleAction(action, args);
     process.send({ id, result });
+    if (action !== 'ping') {
+      console.log(`[helper] IPC response sent: action=${action} id=${id} success=true`);
+    }
   } catch (err) {
+    console.error(`[helper] IPC error: action=${action} id=${id} error=${err.message}`);
     process.send({ id, error: err.message });
   }
 });

@@ -1060,6 +1060,25 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
     }
   };
 
+  const [reconnecting, setReconnecting] = useState(false);
+  const [reconnectAttempts, setReconnectAttempts] = useState(0);
+  const [hasEverConnected, setHasEverConnected] = useState(false);
+
+  const handleReconnectCollab = async () => {
+    setCollabErrorMsg('');
+    setCollabStatusMsg('Intentando reconectar...');
+    try {
+      const res: any = await papi.commands.sendCommand('paratextProjectManager.reconnectCollab');
+      if (res && res.status === 'ok') {
+        setCollabStatusMsg(res.message || 'Reconectando...');
+      } else {
+        setCollabErrorMsg(res?.error || 'No se pudo iniciar la reconexión.');
+      }
+    } catch (e: any) {
+      setCollabErrorMsg(e?.message || String(e));
+    }
+  };
+
   const handleSendChat = async (e?: React.FormEvent | React.KeyboardEvent) => {
     if (e) e.preventDefault();
     if (!chatInput.trim()) return;
@@ -1118,13 +1137,27 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         } else if (type === 'tasks_update') {
           silentRefresh();
         } else if (type === 'status_update') {
-          setCollabRole(payload.role);
-          if (payload.error) {
+          if (payload.role) {
+            setCollabRole(payload.role);
+            // If we just connected, clear the reconnect banner
+            if (payload.role !== 'none') {
+              setReconnecting(false);
+              setReconnectAttempts(0);
+              setHasEverConnected(true);
+            }
+          }
+          if (payload.reconnecting) {
+            setReconnecting(true);
+            setReconnectAttempts(payload.attempt || 0);
+            setCollabStatusMsg(
+              `Reconectando al anfitrión (intento #${payload.attempt || 1}, en ${Math.round((payload.delayMs || 0) / 1000)}s)...`
+            );
+            setCollabErrorMsg('');
+          } else if (payload.error) {
             setCollabErrorMsg(payload.error);
             setCollabStatusMsg('');
+            setReconnecting(false);
           }
-        } else if (type === 'update_available') {
-          setUpdateMessage(payload.message || 'Una actualización está disponible y ha sido instalada. Por favor reinicia Paratext Studio.');
         }
       });
     } catch (err) {
@@ -2525,6 +2558,34 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                         Salir
                       </button>
                     </div>
+
+                    {/* Reconnecting banner */}
+                    {reconnecting && (
+                      <div className="tw:bg-amber-50 tw:border tw:border-amber-300 tw:text-amber-800 tw:p-2 tw:rounded tw:text-xs tw:flex tw:justify-between tw:items-center">
+                        <span>🔄 Reconectando... (intento #{reconnectAttempts})</span>
+                        <button
+                          type="button"
+                          onClick={handleReconnectCollab}
+                          className="tw:ml-2 tw:px-2 tw:py-0.5 tw:bg-amber-200 hover:tw:bg-amber-300 tw:rounded tw:text-[10px] tw:font-semibold"
+                        >
+                          Reintentar ahora
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Disconnected banner with reconnect */}
+                    {collabRole === 'none' && !reconnecting && hasEverConnected && (
+                      <div className="tw:bg-orange-50 tw:border tw:border-orange-300 tw:text-orange-800 tw:p-2 tw:rounded tw:text-xs tw:flex tw:justify-between tw:items-center">
+                        <span>⚠️ Sesión desconectada</span>
+                        <button
+                          type="button"
+                          onClick={handleReconnectCollab}
+                          className="tw:ml-2 tw:px-2 tw:py-0.5 tw:bg-orange-200 hover:tw:bg-orange-300 tw:rounded tw:text-[10px] tw:font-semibold"
+                        >
+                          🔌 Reconectar
+                        </button>
+                      </div>
+                    )}
 
                     {/* Group Chat */}
                     <div className="tw:border tw:rounded tw:bg-white">
