@@ -1035,8 +1035,12 @@ async function handleAction(action, args) {
     case 'updateVerseText': {
       const [projectId, projectDir, bookCode, chapter, verse, newText] = args;
       if (projectDir) projectDirs.set(projectId, projectDir);
-      saveVerseLocal(projectId, bookCode, chapter, verse, newText);
-      return 'ok';
+      try {
+        saveVerseLocal(projectId, bookCode, chapter, verse, newText);
+        return { status: 'ok' };
+      } catch (saveErr) {
+        return { status: 'error', error: saveErr.message || String(saveErr) };
+      }
     }
 
     case 'saveLocalAudioNote': {
@@ -1178,7 +1182,11 @@ async function handleAction(action, args) {
                   process.send({ event: 'collab', data: localizeCollabProject(msg, projectId) });
                 } else if (msg.type === 'verse_update') {
                   const localMsg = localizeCollabProject(msg, projectId);
-                  saveVerseLocal(projectId, localMsg.payload.book, localMsg.payload.chapter, localMsg.payload.verse, localMsg.payload.newText);
+                  try {
+                    saveVerseLocal(projectId, localMsg.payload.book, localMsg.payload.chapter, localMsg.payload.verse, localMsg.payload.newText);
+                  } catch (svErr) {
+                    console.error(`[collab] HOST (online) saveVerseLocal failed: ${svErr.message}`);
+                  }
                   process.send({ event: 'collab', data: localMsg });
                 } else if (msg.type === 'status_update') {
                   process.send({ event: 'collab', data: msg });
@@ -1281,7 +1289,11 @@ async function handleAction(action, args) {
                     process.send({ event: 'collab', data: msg });
                   } else if (msg.type === 'verse_update') {
                     const localMsg = localizeCollabProject(msg, projectId);
-                    saveVerseLocal(projectId, localMsg.payload.book, localMsg.payload.chapter, localMsg.payload.verse, localMsg.payload.newText);
+                    try {
+                      saveVerseLocal(projectId, localMsg.payload.book, localMsg.payload.chapter, localMsg.payload.verse, localMsg.payload.newText);
+                    } catch (svErr) {
+                      console.error(`[collab] HOST saveVerseLocal from client failed: ${svErr.message}`);
+                    }
                     broadcastCollab(localMsg, socket);
                     process.send({ event: 'collab', data: localMsg });
                   } else {
@@ -1400,7 +1412,11 @@ async function handleAction(action, args) {
                   process.send({ event: 'collab', data: msg });
                 } else if (msg.type === 'verse_update') {
                   const localMsg = localizeCollabProject(msg, projectId);
-                  saveVerseLocal(projectId, localMsg.payload.book, localMsg.payload.chapter, localMsg.payload.verse, localMsg.payload.newText);
+                  try {
+                    saveVerseLocal(projectId, localMsg.payload.book, localMsg.payload.chapter, localMsg.payload.verse, localMsg.payload.newText);
+                  } catch (svErr) {
+                    console.error(`[collab] CLIENT saveVerseLocal from host failed: ${svErr.message}`);
+                  }
                   process.send({ event: 'collab', data: localMsg });
                 } else if (msg.type === 'status_update') {
                   process.send({ event: 'collab', data: msg });
@@ -1520,7 +1536,11 @@ async function handleAction(action, args) {
                   process.send({ event: 'collab', data: msg });
                 } else if (msg.type === 'verse_update') {
                   const localMsg = localizeCollabProject(msg, projectId);
-                  saveVerseLocal(projectId, localMsg.payload.book, localMsg.payload.chapter, localMsg.payload.verse, localMsg.payload.newText);
+                  try {
+                    saveVerseLocal(projectId, localMsg.payload.book, localMsg.payload.chapter, localMsg.payload.verse, localMsg.payload.newText);
+                  } catch (svErr) {
+                    console.error(`[collab] saveVerseLocal (online) failed: ${svErr.message}`);
+                  }
                   process.send({ event: 'collab', data: localMsg });
                 } else {
                   process.send({ event: 'collab', data: msg });
@@ -1966,11 +1986,190 @@ function setupSocketReceiver(socket, onMessage, onClose) {
   });
 }
 
+// Strip USFM markers from a string to get the visible/cleaned text.
+// This mirrors what parseUsfmChapter does so we can match user edits
+// against the original cleaned text.
+function stripUsfmForCompare(text) {
+  return (text || '')
+    .replace(/\\x\s+[\s\S]*?\\x\*/g, '')
+    .replace(/\\f\s+(\S+)\s+(?:\\fr\s+[^\\]+)?\\ft\s+([\s\S]*?)\\f\*/g, '')
+    .replace(/\\[a-z]+\*?/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Apply the user's edit (which is on the cleaned text) to the original
+// raw USFM text so we preserve italics/footnotes/character markers.
+// Strategy: split raw into (plain, marker) tokens, then for each plain
+// token, replace it with the corresponding slice of the user's new
+// cleaned text. Markers are kept intact.
+function applyEditToRawUsfm(originalRaw, originalCleaned, newCleaned) {
+  if (!originalRaw) return newCleaned;
+  if (originalCleaned === newCleaned) return originalRaw;
+
+  // Tokenize originalRaw into an array of segments:
+  //   { kind: 'text', value: '...' }   — plain text
+  //   { kind: 'mark', value: '...' }   — USFM marker (e.g. \it, \f ... \f*, [FN:...])
+  const segments = [];
+  let i = 0;
+  let plainBuf = '';
+  const flushPlain = () => {
+    if (plainBuf.length > 0) {
+      segments.push({ kind: 'text', value: plainBuf });
+      plainBuf = '';
+    }
+  };
+  // Helper: collect the next USFM marker starting at i
+  const collectMarker = (startI) => {
+    // Inline char marker: \x (where x is one or more letters, optional *)
+    //   or self-closing like \*
+    // Footnote block: \f ... \f*
+    // Or anything starting with backslash
+    if (originalRaw[startI] !== '\\') return null;
+    // Read marker name (letters)
+    let j = startI + 1;
+    while (j < originalRaw.length && /[a-z*+]/.test(originalRaw[j])) j++;
+    let name = originalRaw.substring(startI, j);
+    // Paired markers that need their full content captured
+    if (name === '\\f' || name === '\\x' || name === '\\fe') {
+      // Find the closing \f*, \x*, \fe* — must respect nesting loosely
+      // Paratext footnotes don't nest the same marker, so a simple scan works
+      const closer = name + '*';
+      const closeIdx = originalRaw.indexOf(closer, j);
+      if (closeIdx !== -1) {
+        return originalRaw.substring(startI, closeIdx + closer.length);
+      }
+      return originalRaw.substring(startI); // unmatched — take rest
+    }
+    // Self-closing marker (\*, \wj*, etc.) — already ended with * above
+    if (name.endsWith('*') || name.endsWith('+')) {
+      return name;
+    }
+    // Inline char marker (\it, \bd, etc.) — captures content up to the
+    // matching closing marker. Use a simple heuristic: read until next
+    // backslash, then check if it's the closer \it* etc.
+    const closerName = name + '*';
+    // Look ahead: find the next \... that equals the closer
+    let k = j;
+    let foundClose = -1;
+    while (k < originalRaw.length) {
+      const backIdx = originalRaw.indexOf('\\', k);
+      if (backIdx === -1) break;
+      // Read candidate name
+      let m = backIdx + 1;
+      while (m < originalRaw.length && /[a-z*+]/.test(originalRaw[m])) m++;
+      const candidate = originalRaw.substring(backIdx, m);
+      if (candidate === closerName) {
+        foundClose = backIdx;
+        break;
+      }
+      // Nested marker — keep scanning (don't capture as our closer)
+      k = m;
+    }
+    if (foundClose !== -1) {
+      return originalRaw.substring(startI, foundClose + closerName.length);
+    }
+    return name;
+  };
+
+  while (i < originalRaw.length) {
+    const ch = originalRaw[i];
+    if (ch === '\\') {
+      flushPlain();
+      const marker = collectMarker(i);
+      if (marker) {
+        segments.push({ kind: 'mark', value: marker });
+        i += marker.length;
+        continue;
+      }
+    }
+    // Also capture the [FN:...] placeholder that parseUsfmChapter produces
+    if (ch === '[' && originalRaw.substring(i, i + 4) === '[FN:') {
+      flushPlain();
+      const endIdx = originalRaw.indexOf(']', i);
+      if (endIdx !== -1) {
+        segments.push({ kind: 'mark', value: originalRaw.substring(i, endIdx + 1) });
+        i = endIdx + 1;
+        continue;
+      }
+    }
+    plainBuf += ch;
+    i++;
+  }
+  flushPlain();
+
+  // Build cleaned text from segments (markers become empty strings, text
+  // segments are concatenated with their original whitespace preserved).
+  // We compare against the originalCleaned provided by the caller.
+  const rebuiltCleaned = segments
+    .map((s) => (s.kind === 'text' ? s.value : ''))
+    .join('')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // If the rebuilt cleaned text doesn't match the original, fall back to
+  // the new cleaned text (best effort — formatting will be lost).
+  if (rebuiltCleaned !== originalCleaned.replace(/\s+/g, ' ').trim()) {
+    return newCleaned;
+  }
+
+  // Walk segments and assign each text segment a slice of newCleaned.
+  // We compute the cumulative cleaned length at segment boundaries and
+  // map the differences.
+  const textSegments = segments
+    .map((s, idx) => ({ ...s, idx }))
+    .filter((s) => s.kind === 'text');
+
+  if (textSegments.length === 0) {
+    return newCleaned + (originalRaw ? ' ' + originalRaw : '');
+  }
+
+  // Compute the length of each text segment's contribution to the
+  // original cleaned text (whitespace normalized).
+  const textCleanedLengths = textSegments.map((s) => {
+    return s.value.replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '').length;
+  });
+
+  // Walk newCleaned and assign characters to text segments in order.
+  let newCleanedPos = 0;
+  const resultParts = [];
+  for (let ti = 0; ti < textSegments.length; ti++) {
+    const seg = textSegments[ti];
+    let take;
+    if (ti < textSegments.length - 1) {
+      // Take exactly the original cleaned-length of this segment
+      take = textCleanedLengths[ti];
+    } else {
+      // Last segment takes everything remaining
+      take = newCleaned.length - newCleanedPos;
+    }
+    const slice = newCleaned.substring(newCleanedPos, newCleanedPos + take);
+    newCleanedPos += take;
+    resultParts.push({ idx: seg.idx, value: slice });
+  }
+
+  // If we didn't consume all of newCleaned, append the remainder to the
+  // last text segment.
+  if (newCleanedPos < newCleaned.length && resultParts.length > 0) {
+    const last = resultParts[resultParts.length - 1];
+    last.value += newCleaned.substring(newCleanedPos);
+  }
+
+  // Reassemble segments, replacing text values with their assigned slices.
+  const resultMap = new Map(resultParts.map((p) => [p.idx, p.value]));
+  const finalRaw = segments
+    .map((s, idx) => (s.kind === 'text' ? resultMap.get(idx) || '' : s.value))
+    .join('');
+
+  return finalRaw;
+}
+
 function saveVerseLocal(projectId, bookCode, chapter, verse, newText) {
   const projectDir = projectDirs.get(projectId);
   if (!projectDir) {
-    console.error(`saveVerseLocal: projectDir not found for project ${projectId}`);
-    return;
+    const err = `projectDir not found for project ${projectId}`;
+    console.error(`[collab] saveVerseLocal: ${err}`);
+    throw new Error(err);
   }
   let postPart = '.SFM';
   let prePart = '';
@@ -1991,7 +2190,11 @@ function saveVerseLocal(projectId, bookCode, chapter, verse, newText) {
     'i',
   );
   const foundFile = files.find((f) => regex.test(f));
-  if (!foundFile) return;
+  if (!foundFile) {
+    const err = `Book file not found for code ${bookCode} in ${projectDir}`;
+    console.error(`[collab] saveVerseLocal: ${err}`);
+    throw new Error(err);
+  }
 
   const filePath = path.join(projectDir, foundFile);
   const fileContent = fs.readFileSync(filePath, 'utf8');
@@ -2001,7 +2204,11 @@ function saveVerseLocal(projectId, bookCode, chapter, verse, newText) {
     'i',
   );
   const chapMatch = chapterRegex.exec(fileContent);
-  if (!chapMatch) return;
+  if (!chapMatch) {
+    const err = `Chapter ${chapter} not found in ${foundFile}`;
+    console.error(`[collab] saveVerseLocal: ${err}`);
+    throw new Error(err);
+  }
 
   const chapHeader = chapMatch[1];
   const chapBody = chapMatch[2];
@@ -2011,7 +2218,11 @@ function saveVerseLocal(projectId, bookCode, chapter, verse, newText) {
     'i',
   );
   const vMatch = verseRegex.exec(chapBody);
-  if (!vMatch) return;
+  if (!vMatch) {
+    const err = `Verse ${verse} not found in chapter ${chapter} of ${foundFile}`;
+    console.error(`[collab] saveVerseLocal: ${err}`);
+    throw new Error(err);
+  }
 
   const vHeader = vMatch[1];
   const vBody = vMatch[2];
@@ -2021,12 +2232,27 @@ function saveVerseLocal(projectId, bookCode, chapter, verse, newText) {
   const blockMarkerRegex = /[\r\n]+\\(p|m|q|s|b|li|lh|lim|tr|tc|cl|im|ip|is|iot|io|d|r|nb)[a-z0-9]*\b/i;
   const blockMatch = blockMarkerRegex.exec(vBody);
 
-  let actualVerseText = vBody;
   let trailingBlockMarkers = '';
+  let actualVerseText = vBody;
   if (blockMatch) {
     const splitIndex = blockMatch.index;
     actualVerseText = vBody.substring(0, splitIndex);
     trailingBlockMarkers = vBody.substring(splitIndex);
+  }
+
+  // Try to preserve USFM markers if the new text is the edited cleaned
+  // version of the original raw text.
+  let verseReplacement = newText;
+  if (newText && !newText.startsWith('\\') && actualVerseText) {
+    const originalCleaned = stripUsfmForCompare(actualVerseText);
+    const newCleaned = (newText || '').replace(/\s+/g, ' ').trim();
+    if (originalCleaned && newCleaned) {
+      verseReplacement = applyEditToRawUsfm(
+        actualVerseText,
+        originalCleaned,
+        newCleaned,
+      );
+    }
   }
 
   const vStartIndex = vMatch.index;
@@ -2034,7 +2260,7 @@ function saveVerseLocal(projectId, bookCode, chapter, verse, newText) {
   const updatedChapBody =
     chapBody.substring(0, vStartIndex) +
     vHeader +
-    newText.trim() +
+    verseReplacement.trimEnd() +
     (trailingBlockMarkers ? '' : newline) +
     trailingBlockMarkers +
     chapBody.substring(vStartIndex + vLength);
@@ -2047,7 +2273,28 @@ function saveVerseLocal(projectId, bookCode, chapter, verse, newText) {
     updatedChapBody +
     fileContent.substring(startIndex + length);
 
-  fs.writeFileSync(filePath, updatedFileContent, 'utf8');
+  // Atomic write: write to temp file, then rename. This prevents the file
+  // from being partially written if the process is killed mid-write.
+  const tmpPath = filePath + '.tmp-verse-' + Date.now();
+  fs.writeFileSync(tmpPath, updatedFileContent, 'utf8');
+  fs.renameSync(tmpPath, filePath);
+
+  // Verify the write by reading back the verse.
+  try {
+    const verify = fs.readFileSync(filePath, 'utf8');
+    if (verify !== updatedFileContent) {
+      const err = `Verification failed: file content differs after write (${verify.length} vs ${updatedFileContent.length} bytes)`;
+      console.error(`[collab] saveVerseLocal: ${err}`);
+      throw new Error(err);
+    }
+  } catch (vErr) {
+    if (vErr && vErr.message && vErr.message.startsWith('Verification failed')) throw vErr;
+    console.warn(`[collab] saveVerseLocal: post-write verification read failed: ${vErr.message}`);
+  }
+
+  console.log(
+    `[collab] saveVerseLocal: wrote ${bookCode} ${chapter}:${verse} to ${foundFile} (${updatedFileContent.length} bytes)`,
+  );
 }
 
 function saveTasksLocal(projectId, tasksJson) {

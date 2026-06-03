@@ -1655,14 +1655,23 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
       try {
         const projectDir = await resolveProjectDir(projectId);
         await sendToNotesHelper('registerProjectDir', [projectId, projectDir]);
-        await sendToNotesHelper('updateVerseText', [
+        const saveResult = (await sendToNotesHelper('updateVerseText', [
           projectId,
           projectDir,
           bookCode,
           chapter,
           verse,
           newText,
-        ]);
+        ])) as { status: string; error?: string } | string;
+
+        if (
+          typeof saveResult === 'object' &&
+          saveResult &&
+          saveResult.status === 'error'
+        ) {
+          logger.warn(`updateVerseText save failed: ${saveResult.error}`);
+          return `error: ${saveResult.error}`;
+        }
 
         // Broadcast the update so other computers reload the verse text if collab is active
         const payload = { projectId, book: bookCode, chapter, verse, newText };

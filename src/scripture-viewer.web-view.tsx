@@ -168,10 +168,23 @@ interface EditableVerseProps {
 
 // Module-level handle to the currently active EditableVerse, so the parent
 // scripture viewer can render an "↶ Deshacer" button next to it.
-let activeEditableVerseHandle: { undo: () => void; canUndo: () => boolean } | null = null;
+let activeEditableVerseHandle: {
+  undo: () => void;
+  canUndo: () => boolean;
+  cancel: () => void;
+} | null = null;
+
 export const triggerVerseUndo = () => {
   if (activeEditableVerseHandle && activeEditableVerseHandle.canUndo()) {
     activeEditableVerseHandle.undo();
+    return true;
+  }
+  return false;
+};
+
+export const triggerVerseCancel = () => {
+  if (activeEditableVerseHandle) {
+    activeEditableVerseHandle.cancel();
     return true;
   }
   return false;
@@ -192,11 +205,18 @@ const EditableVerse: React.FC<EditableVerseProps> = ({
   const lastInputValueRef = useRef<string>(initialText);
   const [canUndo, setCanUndo] = useState(false);
 
-  // Register this EditableVerse as the active one for the global undo button.
+  // Register this EditableVerse as the active one for the global undo/cancel buttons.
   useEffect(() => {
     activeEditableVerseHandle = {
       undo: () => handleUndo(),
       canUndo: () => undoStackRef.current.length > 0,
+      cancel: () => {
+        setHasSaved(true);
+        if (ref.current) {
+          ref.current.textContent = initialText;
+        }
+        onCancel();
+      },
     };
     return () => {
       if (activeEditableVerseHandle) activeEditableVerseHandle = null;
@@ -814,6 +834,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   // Helper to navigate to a new reference and explicitly push it to the scroll group
   const navigateToReference = useCallback(
     (bookCode: string, chapterNum: number, verseNum: number = 1) => {
+      setIsEditingVerse(false);
       setSelectedBook(bookCode);
       setSelectedChapter(chapterNum);
       setSelectedVerseNum(verseNum);
@@ -1004,13 +1025,13 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
 
   // Caret focus and selection are handled natively by EditableVerse on mount.
 
-  // Helper to extract raw text of selected verse from chapterBlocks
-  const getSelectedVerseText = () => {
-    if (selectedVerseNum === null) return '';
+  // Helper to extract raw text of any verse from chapterBlocks
+  const getVerseText = (verseNum: number | null) => {
+    if (verseNum === null) return '';
     for (const block of chapterBlocks) {
       if (block.type === 'paragraph' || block.type === 'poetry') {
         for (const child of block.children) {
-          if (child.type === 'verse' && child.number === selectedVerseNum) {
+          if (child.type === 'verse' && child.number === verseNum) {
             return child.text;
           }
         }
@@ -1018,6 +1039,8 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     }
     return '';
   };
+
+  const getSelectedVerseText = () => getVerseText(selectedVerseNum);
 
   const hasFormattingMarkup = verseEditText.includes('[FN:') || verseEditText.includes('\\');
 
@@ -1058,15 +1081,19 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   };
 
   const handleContentEditableSave = async (newText: string, verseNum: number) => {
-    const originalText = getSelectedVerseText();
+    const originalText = getVerseText(verseNum);
 
     if (newText.trim() === originalText.trim()) {
-      setIsEditingVerse(false);
-      setSelectedVerseNum(null);
+      if (selectedVerseNum === verseNum) {
+        setIsEditingVerse(false);
+        setSelectedVerseNum(null);
+      }
       return;
     }
 
-    setSavingVerse(true);
+    if (selectedVerseNum === verseNum) {
+      setSavingVerse(true);
+    }
     selfVerseUpdateRef.current = {
       book: selectedBook || '',
       chapter: selectedChapter,
@@ -1103,22 +1130,30 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
             return block;
           }),
         );
-        setIsEditingVerse(false);
-        setSelectedVerseNum(null);
+        if (selectedVerseNum === verseNum) {
+          setIsEditingVerse(false);
+          setSelectedVerseNum(null);
+        }
         // verse_update broadcast will trigger loadChapter on remote machines
       } else {
         showErrorMessage(`Error al guardar el texto: ${res}`);
-        setIsEditingVerse(false);
-        setSelectedVerseNum(null);
+        if (selectedVerseNum === verseNum) {
+          setIsEditingVerse(false);
+          setSelectedVerseNum(null);
+        }
         selfVerseUpdateRef.current = null;
       }
     } catch (err) {
       showErrorMessage(`Error al guardar el texto: ${err}`);
-      setIsEditingVerse(false);
-      setSelectedVerseNum(null);
+      if (selectedVerseNum === verseNum) {
+        setIsEditingVerse(false);
+        setSelectedVerseNum(null);
+      }
       selfVerseUpdateRef.current = null;
     } finally {
-      setSavingVerse(false);
+      if (selectedVerseNum === verseNum) {
+        setSavingVerse(false);
+      }
     }
   };
 
@@ -1879,6 +1914,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
 
             {/* Font size adjustment */}
             <button
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => setFontSize((f) => Math.max(12, f - 2))}
               className="tw:px-2.5 tw:py-1 tw:bg-slate-50 tw:hover:bg-slate-100 tw:border tw:rounded tw:text-xs tw:cursor-pointer"
               title="Disminuir tamaño de letra"
@@ -1886,6 +1922,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
               A-
             </button>
             <button
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => setFontSize((f) => Math.min(30, f + 2))}
               className="tw:px-2.5 tw:py-1 tw:bg-slate-50 tw:hover:bg-slate-100 tw:border tw:rounded tw:text-xs tw:cursor-pointer"
               title="Aumentar tamaño de letra"
@@ -1893,19 +1930,62 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
               A+
             </button>
             {isEditingVerse && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  triggerVerseUndo();
-                }}
-                disabled={!verseEditorCanUndo}
-                title="Deshacer (Ctrl+Z)"
-                className="tw:px-2.5 tw:py-1 tw:bg-amber-50 tw:hover:bg-amber-100 tw:border tw:border-amber-300 tw:text-amber-800 tw:rounded tw:text-xs tw:font-semibold tw:cursor-pointer disabled:tw:opacity-40 disabled:tw:cursor-not-allowed tw:flex tw:items-center tw:gap-1 tw:transition-all"
-              >
-                ↶ Deshacer
-              </button>
+              <>
+                <button
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onClick={async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const activeEditable = document.querySelector(
+                      `#verse-${selectedVerseNum} [contenteditable="true"]`,
+                    ) as HTMLElement | null;
+                    if (activeEditable) {
+                      activeEditable.blur();
+                    }
+                  }}
+                  className="tw:px-2.5 tw:py-1 tw:bg-green-50 tw:hover:bg-green-100 tw:border tw:border-green-300 tw:text-green-800 tw:rounded tw:text-xs tw:font-semibold tw:cursor-pointer tw:flex tw:items-center tw:gap-1 tw:transition-all"
+                  title="Guardar cambios (Enter)"
+                >
+                  💾 Guardar
+                </button>
+                <button
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    triggerVerseCancel();
+                  }}
+                  className="tw:px-2.5 tw:py-1 tw:bg-red-50 tw:hover:bg-red-100 tw:border tw:border-red-300 tw:text-red-800 tw:rounded tw:text-xs tw:font-semibold tw:cursor-pointer tw:flex tw:items-center tw:gap-1 tw:transition-all"
+                  title="Cancelar cambios (Esc)"
+                >
+                  ❌ Cancelar
+                </button>
+                <button
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    triggerVerseUndo();
+                  }}
+                  disabled={!verseEditorCanUndo}
+                  title="Deshacer (Ctrl+Z)"
+                  className="tw:px-2.5 tw:py-1 tw:bg-amber-50 tw:hover:bg-amber-100 tw:border tw:border-amber-300 tw:text-amber-800 tw:rounded tw:text-xs tw:font-semibold tw:cursor-pointer disabled:tw:opacity-40 disabled:tw:cursor-not-allowed tw:flex tw:items-center tw:gap-1 tw:transition-all"
+                >
+                  ↶ Deshacer
+                </button>
+              </>
             )}
             <button
               onClick={() => loadChapter(selectedBook, selectedChapter)}
