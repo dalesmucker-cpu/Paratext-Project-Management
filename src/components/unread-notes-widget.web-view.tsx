@@ -439,7 +439,27 @@ export default function UnreadNotesWidget({
       }
       setThreads(parsed.threads || []);
     } catch (e) {
-      setError(`Error al cargar notas: ${e}`);
+      // Auto-retry once after 3s — handles papi timeouts after long idle
+      try {
+        await new Promise((r) => setTimeout(r, 3000));
+        const res = await papi.commands.sendCommand(
+          'paratextProjectManager.getProjectNotes',
+          projectId,
+          currentUser,
+        );
+        const parsed = JSON.parse(res) as {
+          threads: ParatextNoteThread[];
+          authors: string[];
+          error?: string;
+        };
+        if (parsed.error) {
+          setError(parsed.error);
+          return;
+        }
+        setThreads(parsed.threads || []);
+      } catch (retryErr) {
+        setError(`Error al cargar notas: ${retryErr}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -454,6 +474,41 @@ export default function UnreadNotesWidget({
       loadNotes();
     }
   }, [projectId, currentUser, loadNotes]);
+
+  // Listen to collaboration events
+  useEffect(() => {
+    let unsub: any;
+    try {
+      unsub = papi.network.getNetworkEvent<any>(
+        'paratextProjectManager.onCollabEvent',
+      )((event: any) => {
+        if (!event) return;
+        const { type, payload } = event;
+        if (type === 'note_update' && payload.projectId === projectId) {
+          loadNotes();
+        }
+      });
+    } catch (err) {
+      console.warn('Error subscribing to collab event in unread-notes-widget:', err);
+    }
+    return () => {
+      if (unsub) unsub();
+    };
+  }, [projectId, loadNotes]);
+
+  // Refresh on visibility change but no more than once every 2 minutes
+  const lastRefreshRef = useRef(0);
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (Date.now() - lastRefreshRef.current > 120_000) {
+        lastRefreshRef.current = Date.now();
+        loadNotes();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [loadNotes]);
 
   // Helper: check if a name matches currentUser
   const isMe = (name: string) => {

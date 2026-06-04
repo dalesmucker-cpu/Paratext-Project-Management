@@ -287,7 +287,23 @@ globalThis.webViewComponent = function MyTasksWebView({
       if (userResult) persistCurrentUser(userResult);
       if (membersResult) setTeamMembers(JSON.parse(membersResult as string) as string[]);
     } catch (e) {
-      setError(`Error al cargar: ${e}`);
+      // Auto-retry once after 3s — handles papi timeouts after long idle
+      try {
+        await new Promise((r) => setTimeout(r, 3000));
+        const [tasksResult, userResult, membersResult] = await Promise.all([
+          papi.commands.sendCommand('paratextProjectManager.getTasks', projectId),
+          papi.commands.sendCommand('paratextProjectManager.getCurrentUser'),
+          papi.commands.sendCommand('paratextProjectManager.getTeamMembers'),
+        ]);
+        const store = JSON.parse(tasksResult) as TaskStore;
+        setTasks(store.tasks ?? []);
+        setDeletedTaskIds(store.deletedTaskIds ?? []);
+        setStageConfig(store.stageConfig ?? {});
+        if (userResult) persistCurrentUser(userResult);
+        if (membersResult) setTeamMembers(JSON.parse(membersResult as string) as string[]);
+      } catch (retryErr) {
+        setError(`Error al cargar: ${retryErr}`);
+      }
     } finally {
       setLoading(false);
     }

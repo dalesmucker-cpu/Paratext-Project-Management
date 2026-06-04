@@ -94,6 +94,7 @@ let processApi: NonNullable<ElevatedPrivileges['createProcess']> | undefined;
 let execToken: ExecutionToken;
 
 let notesHelperProcess: ChildProcess | undefined;
+let isDeactivating = false;
 let collabEventEmitter: any;
 let lastNavigatedVerse: { projectId: string; bookCode: string; chapter: number; verse: number } | null = null;
 let localCollabRole: 'host' | 'client' | 'none' = 'none';
@@ -191,6 +192,15 @@ function startNotesHelper(createProcess: ElevatedPrivileges['createProcess']): v
         pending.reject(new Error('Notes helper terminated'));
       }
       pendingNotesRequests.clear();
+
+      // Restart helper at runtime if not deactivating
+      if (!isDeactivating && execToken) {
+        helperStartAttempts++;
+        logger.info(`Restarting Notes helper (attempt ${helperStartAttempts}/5)...`);
+        setTimeout(() => {
+          startNotesHelper(createProcess);
+        }, 2000);
+      }
     });
 
     // Verify the child process is responsive
@@ -299,6 +309,18 @@ function runScript(
     let stdout = '';
     let stderr = '';
 
+    let timeoutId: NodeJS.Timeout | undefined;
+    if (timeoutMs) {
+      timeoutId = setTimeout(() => {
+        try {
+          child.kill();
+        } catch (_) {
+          /* ignore */
+        }
+        reject(new Error(`Script timed out after ${Math.round(timeoutMs / 1000)}s`));
+      }, timeoutMs);
+    }
+
     if (child.stdout) {
       child.stdout.on('data', (chunk: Buffer) => {
         stdout += chunk.toString('utf8');
@@ -311,29 +333,22 @@ function runScript(
     }
 
     child.on('close', (code: number | undefined) => {
+      if (timeoutId) clearTimeout(timeoutId);
       if (code && code !== 0) {
         reject(new Error(`${scriptPath} failed: ${stderr}`));
       } else {
         resolve(stdout);
       }
     });
-    child.on('error', (err: Error) => reject(err));
+    child.on('error', (err: Error) => {
+      if (timeoutId) clearTimeout(timeoutId);
+      reject(err);
+    });
 
     if (stdinData !== undefined && child.stdin) {
       child.stdin.write(stdinData, 'utf8', () => {
         child.stdin.end();
       });
-    }
-
-    if (timeoutMs) {
-      setTimeout(() => {
-        try {
-          child.kill();
-        } catch (_) {
-          /* ignore */
-        }
-        reject(new Error(`Script timed out after ${Math.round(timeoutMs / 1000)}s`));
-      }, timeoutMs);
     }
   });
 }
@@ -1350,6 +1365,45 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
             await sendToNotesHelper('broadcastCollab', [{ type: 'cursor_update', payload }]);
           } catch (helperErr) {
             logger.warn(`Failed to broadcast cursor update to helper: ${helperErr}`);
+          }
+        }
+        return 'ok';
+      } catch (e) {
+        return 'error';
+      }
+    },
+  );
+
+  // Broadcast an in-progress (unsaved) verse edit so collaborators see keystrokes in real time.
+  // Distinct from verse_update: this is a transient typing event, not a save.
+  const broadcastVerseEditPromise = papi.commands.registerCommand(
+    'paratextProjectManager.broadcastVerseEdit',
+    async (
+      username: string,
+      projectId: string,
+      book: string,
+      chapter: number,
+      verse: number,
+      newText: string,
+    ): Promise<string> => {
+      try {
+        const payload = {
+          user: username,
+          projectId,
+          book,
+          chapter,
+          verse,
+          newText,
+          timestamp: Date.now(),
+        };
+        // Emit locally first so other webviews on this machine update immediately
+        collabEventEmitter.emit({ type: 'verse_edit', payload });
+        // Then try to broadcast via helper process if active
+        if (localCollabRole !== 'none') {
+          try {
+            await sendToNotesHelper('broadcastCollab', [{ type: 'verse_edit', payload }]);
+          } catch (helperErr) {
+            logger.warn(`Failed to broadcast verse_edit to helper: ${helperErr}`);
           }
         }
         return 'ok';
@@ -2734,6 +2788,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     await getCollabStatusPromise,
     await sendCollabChatPromise,
     await broadcastCursorPromise,
+    await broadcastVerseEditPromise,
     await getUpdateStatusPromise,
     collabEventEmitter,
   );
@@ -2748,6 +2803,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
 
 export async function deactivate(): Promise<boolean> {
   logger.info('Project Manager extension is deactivating!');
+  isDeactivating = true;
   if (notesHelperProcess) {
     try {
       notesHelperProcess.kill();

@@ -1,7 +1,7 @@
 import { WebViewProps } from '@papi/core';
 import papi from '@papi/frontend';
 import { useDialogCallback } from '@papi/frontend/react';
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, type ChangeEvent } from 'react';
 import type {
   ProjectTask,
   TranslationStage,
@@ -33,6 +33,7 @@ function EditTaskModal({
   teamMembers,
   onClose,
   onSave,
+  onLiveChange,
 }: {
   task: ProjectTask;
   stageConfig: Record<string, StageConfig>;
@@ -40,6 +41,8 @@ function EditTaskModal({
   teamMembers: string[];
   onClose: () => void;
   onSave: (updated: ProjectTask) => void;
+  /** Called with the current draft whenever any field changes (debounced, for real-time LAN sync) */
+  onLiveChange?: (draft: ProjectTask) => void;
 }) {
   const [book, setBook] = useState(task.book);
   const [chapter, setChapter] = useState(String(task.chapter));
@@ -54,27 +57,102 @@ function EditTaskModal({
     task.loggedHours !== undefined ? String(task.loggedHours) : '',
   );
 
+  // Debounce timer ref for live broadcasting (600 ms after last change)
+  const liveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Build the current draft from local state values
+  const buildDraft = useCallback(
+    (
+      b: string,
+      ch: string,
+      st: string,
+      asgn: string[],
+      n: string,
+      dl: string,
+      eh: string,
+      lh: string,
+    ): ProjectTask => ({
+      ...task,
+      book: b,
+      chapter: parseInt(ch) || 1,
+      stage: st,
+      assignedTo: asgn,
+      notes: n,
+      updatedAt: new Date().toISOString(),
+      deadline: dl || undefined,
+      estimatedHours: eh !== '' ? parseFloat(eh) : undefined,
+      loggedHours: lh !== '' ? parseFloat(lh) : undefined,
+    }),
+    [task],
+  );
+
+  /** Schedules a live-sync broadcast after a short debounce */
+  const scheduleLive = useCallback(
+    (
+      b: string,
+      ch: string,
+      st: string,
+      asgn: string[],
+      n: string,
+      dl: string,
+      eh: string,
+      lh: string,
+    ) => {
+      if (!onLiveChange) return;
+      if (liveDebounceRef.current) clearTimeout(liveDebounceRef.current);
+      liveDebounceRef.current = setTimeout(() => {
+        onLiveChange(buildDraft(b, ch, st, asgn, n, dl, eh, lh));
+      }, 600);
+    },
+    [onLiveChange, buildDraft],
+  );
+
+  // Clean up debounce timer on unmount
+  useEffect(() => () => { if (liveDebounceRef.current) clearTimeout(liveDebounceRef.current); }, []);
+
   const toggleAssignee = (name: string) => {
-    setAssignees((prev) =>
-      prev.includes(name) ? prev.filter((a) => a !== name) : [...prev, name],
-    );
+    const next = assignees.includes(name)
+      ? assignees.filter((a) => a !== name)
+      : [...assignees, name];
+    setAssignees(next);
+    scheduleLive(book, chapter, stage, next, notes, deadline, estimatedHours, loggedHours);
+  };
+
+  const handleBookChange = (e: ChangeEvent<HTMLSelectElement>) => {
+    setBook(e.target.value);
+    scheduleLive(e.target.value, chapter, stage, assignees, notes, deadline, estimatedHours, loggedHours);
+  };
+  const handleChapterChange = (e: ChangeEvent<HTMLInputElement>) => {
+    setChapter(e.target.value);
+    scheduleLive(book, e.target.value, stage, assignees, notes, deadline, estimatedHours, loggedHours);
+  };
+  const handleStageChange = (e: ChangeEvent<HTMLSelectElement>) => {
+    setStage(e.target.value);
+    scheduleLive(book, chapter, e.target.value, assignees, notes, deadline, estimatedHours, loggedHours);
+  };
+  const handleNotesChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
+    setNotes(e.target.value);
+    scheduleLive(book, chapter, stage, assignees, e.target.value, deadline, estimatedHours, loggedHours);
+  };
+  const handleDeadlineChange = (e: ChangeEvent<HTMLInputElement>) => {
+    setDeadline(e.target.value);
+    scheduleLive(book, chapter, stage, assignees, notes, e.target.value, estimatedHours, loggedHours);
+  };
+  const handleEstimatedHoursChange = (e: ChangeEvent<HTMLInputElement>) => {
+    setEstimatedHours(e.target.value);
+    scheduleLive(book, chapter, stage, assignees, notes, deadline, e.target.value, loggedHours);
+  };
+  const handleLoggedHoursChange = (e: ChangeEvent<HTMLInputElement>) => {
+    setLoggedHours(e.target.value);
+    scheduleLive(book, chapter, stage, assignees, notes, deadline, estimatedHours, e.target.value);
   };
 
   const handleSave = () => {
-    const now = new Date().toISOString();
-    const updated: ProjectTask = {
-      ...task,
-      book,
-      chapter: parseInt(chapter) || 1,
-      stage,
-      assignedTo: assignees,
-      notes,
-      updatedAt: now,
-      deadline: deadline || undefined,
-      estimatedHours: estimatedHours !== '' ? parseFloat(estimatedHours) : undefined,
-      loggedHours: loggedHours !== '' ? parseFloat(loggedHours) : undefined,
-    };
-    onSave(updated);
+    if (liveDebounceRef.current) {
+      clearTimeout(liveDebounceRef.current);
+      liveDebounceRef.current = null;
+    }
+    onSave(buildDraft(book, chapter, stage, assignees, notes, deadline, estimatedHours, loggedHours));
     onClose();
   };
 
@@ -94,7 +172,7 @@ function EditTaskModal({
             <select
               className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1"
               value={book}
-              onChange={(e) => setBook(e.target.value)}
+              onChange={handleBookChange}
             >
               {BIBLE_BOOKS.map((b) => (
                 <option key={b} value={b}>
@@ -110,7 +188,7 @@ function EditTaskModal({
               min={1}
               className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1"
               value={chapter}
-              onChange={(e) => setChapter(e.target.value)}
+              onChange={handleChapterChange}
             />
           </div>
           <div>
@@ -118,7 +196,7 @@ function EditTaskModal({
             <select
               className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1"
               value={stage}
-              onChange={(e) => setStage(e.target.value)}
+              onChange={handleStageChange}
             >
               {orderedStages.map((s) => (
                 <option key={s} value={s}>
@@ -145,10 +223,10 @@ function EditTaskModal({
           <div>
             <label className="tw:block tw:font-medium tw:mb-1">Notas</label>
             <textarea
-              className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1"
+              className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:select-text"
               rows={3}
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={handleNotesChange}
             />
           </div>
           <div>
@@ -157,7 +235,7 @@ function EditTaskModal({
               type="date"
               className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1"
               value={deadline}
-              onChange={(e) => setDeadline(e.target.value)}
+              onChange={handleDeadlineChange}
             />
           </div>
           <div className="tw:flex tw:gap-3">
@@ -170,7 +248,7 @@ function EditTaskModal({
                 className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1"
                 value={estimatedHours}
                 placeholder="0"
-                onChange={(e) => setEstimatedHours(e.target.value)}
+                onChange={handleEstimatedHoursChange}
               />
             </div>
             <div className="tw:flex-1">
@@ -182,7 +260,7 @@ function EditTaskModal({
                 className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1"
                 value={loggedHours}
                 placeholder="0"
-                onChange={(e) => setLoggedHours(e.target.value)}
+                onChange={handleLoggedHoursChange}
               />
             </div>
           </div>
@@ -963,7 +1041,23 @@ globalThis.webViewComponent = function TaskBoardWebView({
       setActivityLog(store.activityLog ?? []);
       if (membersResult) setTeamMembers(JSON.parse(membersResult as string) as string[]);
     } catch (e) {
-      setError(`Error al cargar tareas: ${e}`);
+      // Auto-retry once after 3s — handles papi timeouts after long idle
+      try {
+        await new Promise((r) => setTimeout(r, 3000));
+        const [result, membersResult] = await Promise.all([
+          papi.commands.sendCommand('paratextProjectManager.getTasks', projectId),
+          papi.commands.sendCommand('paratextProjectManager.getTeamMembers'),
+        ]);
+        const store = JSON.parse(result) as TaskStore;
+        const knownDeleted = store.deletedTaskIds ?? [];
+        setDeletedTaskIds(knownDeleted);
+        setTasks((store.tasks ?? []).filter((t) => !knownDeleted.includes(t.id)));
+        setStageConfig(store.stageConfig ?? {});
+        setActivityLog(store.activityLog ?? []);
+        if (membersResult) setTeamMembers(JSON.parse(membersResult as string) as string[]);
+      } catch (retryErr) {
+        setError(`Error al cargar tareas: ${retryErr}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -1278,6 +1372,53 @@ globalThis.webViewComponent = function TaskBoardWebView({
 
   const orderedStages = useMemo(() => getOrderedStages(stageConfig), [stageConfig]);
 
+  // --- Real-time collab: subscribe to tasks_update events from teammates ---
+  useEffect(() => {
+    if (!projectId) return undefined;
+    let unsub: any;
+    try {
+      unsub = papi.network.getNetworkEvent<any>(
+        'paratextProjectManager.onCollabEvent',
+      )((event: any) => {
+        if (!event) return;
+        if (event.type === 'tasks_update' && event.payload?.projectId === projectId) {
+          silentRefresh();
+        }
+      });
+    } catch (err) {
+      console.warn('[TaskBoard] Error subscribing to collab event:', err);
+    }
+    return () => { if (unsub) unsub(); };
+  }, [projectId, silentRefresh]);
+
+  /** Live-update a task without adding an activity log entry — used for real-time typing sync */
+  const liveEditTask = useCallback(
+    async (draft: ProjectTask) => {
+      if (!projectId) return;
+      const updated = tasks.map((t) => (t.id === draft.id ? draft : t));
+      // Optimistic UI update
+      setTasks(updated);
+      // Persist (and broadcast via LAN collab)
+      try {
+        const store: TaskStore = {
+          schemaVersion: 1,
+          tasks: updated,
+          stageConfig,
+          activityLog,
+          ...(deletedTaskIds.length > 0 ? { deletedTaskIds } : {}),
+        };
+        await papi.commands.sendCommand(
+          'paratextProjectManager.saveTasks',
+          projectId,
+          JSON.stringify(store),
+        );
+      } catch (_) {
+        /* silent — live sync failure is non-critical, the final Save click will still succeed */
+      }
+    },
+    [projectId, tasks, stageConfig, activityLog, deletedTaskIds],
+  );
+
   const usedBooks = [...new Set(tasks.map((t) => t.book))].sort();
 
   const filteredTasks = tasks.filter((t) => {
@@ -1302,7 +1443,7 @@ globalThis.webViewComponent = function TaskBoardWebView({
   }
 
   return (
-    <div className="tw:flex tw:flex-col tw:h-full tw:bg-gray-50 tw:text-sm tw:select-none">
+    <div className="tw:flex tw:flex-col tw:h-full tw:bg-gray-50 tw:text-sm">
       {/* Header */}
       <div className="tw:flex tw:items-center tw:flex-wrap tw:gap-2 tw:px-3 tw:py-2 tw:bg-white tw:border-b tw:shadow-sm">
         <span className="tw:font-semibold tw:text-gray-700">Tablero de Tareas</span>
@@ -1528,6 +1669,7 @@ globalThis.webViewComponent = function TaskBoardWebView({
           teamMembers={teamMembers}
           onClose={() => setEditingTask(null)}
           onSave={editTask}
+          onLiveChange={liveEditTask}
         />
       )}
     </div>

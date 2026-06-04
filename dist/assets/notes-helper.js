@@ -372,7 +372,7 @@ function parseUsfmChapter(content) {
     const cleanedText = text.trim();
     if (!cleanedText) return;
 
-    const verseRegex = /\\v\s+(\d+)\s+([\s\S]*?)(?=\\v\s+\d+|$)/g;
+    const verseRegex = /\\v\s+(\d+)(?:\s+([\s\S]*?))?(?=\\v\s+\d+|$)/g;
     let vMatch;
     let hasVerses = false;
 
@@ -391,7 +391,7 @@ function parseUsfmChapter(content) {
     while ((vMatch = verseRegex.exec(cleanedText)) !== null) {
       hasVerses = true;
       const verseNum = parseInt(vMatch[1], 10);
-      const verseText = cleanUsfmText(vMatch[2]);
+      const verseText = cleanUsfmText(vMatch[2] || '');
 
       const existingVerse = children.find((c) => c.type === 'verse' && c.number === verseNum);
       if (existingVerse) {

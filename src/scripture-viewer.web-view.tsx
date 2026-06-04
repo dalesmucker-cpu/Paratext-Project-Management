@@ -164,6 +164,7 @@ interface EditableVerseProps {
   onContextMenu: (e: React.MouseEvent) => void;
   onCursorChange?: (offset: number) => void;
   onUndoStateChange?: (canUndo: boolean) => void;
+  onEditBroadcast?: (newText: string) => void;
 }
 
 // Module-level handle to the currently active EditableVerse, so the parent
@@ -198,11 +199,13 @@ const EditableVerse: React.FC<EditableVerseProps> = ({
   onContextMenu,
   onCursorChange,
   onUndoStateChange,
+  onEditBroadcast,
 }) => {
   const ref = useRef<HTMLSpanElement>(null);
   const [hasSaved, setHasSaved] = useState(false);
   const undoStackRef = useRef<string[]>([]);
-  const lastInputValueRef = useRef<string>(initialText);
+  const displayInitialText = initialText || '\u200B';
+  const lastInputValueRef = useRef<string>(displayInitialText);
   const [canUndo, setCanUndo] = useState(false);
 
   // Register this EditableVerse as the active one for the global undo/cancel buttons.
@@ -213,7 +216,7 @@ const EditableVerse: React.FC<EditableVerseProps> = ({
       cancel: () => {
         setHasSaved(true);
         if (ref.current) {
-          ref.current.textContent = initialText;
+          ref.current.textContent = displayInitialText;
         }
         onCancel();
       },
@@ -322,8 +325,9 @@ const EditableVerse: React.FC<EditableVerseProps> = ({
   const handleBlur = async (e: React.FocusEvent<HTMLSpanElement>) => {
     if (hasSaved) return;
     const text = e.currentTarget.textContent || '';
+    const cleanText = text.replace(/\u200B/g, '');
     setHasSaved(true);
-    await onSave(text);
+    await onSave(cleanText);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLSpanElement>) => {
@@ -350,7 +354,7 @@ const EditableVerse: React.FC<EditableVerseProps> = ({
       e.preventDefault();
       setHasSaved(true);
       if (ref.current) {
-        ref.current.textContent = initialText;
+        ref.current.textContent = displayInitialText;
       }
       onCancel();
     }
@@ -360,6 +364,7 @@ const EditableVerse: React.FC<EditableVerseProps> = ({
     const text = e.currentTarget.textContent || '';
     pushUndoSnapshot(text);
     handleCursorActivity();
+    if (onEditBroadcast) onEditBroadcast(text);
   };
 
   return (
@@ -384,8 +389,8 @@ const EditableVerse: React.FC<EditableVerseProps> = ({
         textDecoration: 'none',
         // Use inline display for normal verses so we don't shift surrounding text.
         // For empty verses, use inline-block so the cursor has a visible target area.
-        display: initialText.trim() === '' ? 'inline-block' : 'inline',
-        ...(initialText.trim() === ''
+        display: (initialText || '').trim() === '' ? 'inline-block' : 'inline',
+        ...((initialText || '').trim() === ''
           ? {
               minWidth: '80px',
               minHeight: '1.1em',
@@ -395,7 +400,7 @@ const EditableVerse: React.FC<EditableVerseProps> = ({
           : {}),
       }}
     >
-      {initialText}
+      {displayInitialText}
     </span>
   );
 };
@@ -640,8 +645,35 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
         console.error('Failed to load notes in background:', err);
       });
     } catch (err) {
-      console.error(err);
-      setError('Error al cargar texto o notas.');
+      // Auto-retry once after 3s — handles papi timeouts after long idle
+      try {
+        await new Promise((r) => setTimeout(r, 3000));
+        const textRes = await papi.commands.sendCommand(
+          'paratextProjectManager.getChapterText',
+          projectId,
+          bookCode,
+          chapterNum,
+        );
+        const parsedText = JSON.parse(textRes) as {
+          blocks: ChapterBlock[];
+          totalChapters: number;
+          error?: string;
+        };
+        if (parsedText.error) {
+          setError(`Error del archivo USFM: ${parsedText.error}`);
+          setChapterBlocks([]);
+        } else {
+          setChapterBlocks(parsedText.blocks);
+          setTotalChapters(parsedText.totalChapters || 1);
+          setError('');
+        }
+        loadNotes().catch((nErr) => {
+          console.error('Failed to load notes in background on retry:', nErr);
+        });
+      } catch (retryErr) {
+        console.error(retryErr);
+        setError('Error al cargar texto o notas.');
+      }
     } finally {
       setLoading(false);
     }
@@ -649,6 +681,9 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
 
   const lastBroadcastTimeRef = useRef<number>(0);
   const pendingBroadcastRef = useRef<NodeJS.Timeout | null>(null);
+  const lastEditBroadcastTimeRef = useRef<number>(0);
+  const pendingEditBroadcastRef = useRef<{ verse: number; text: string; ts: number } | null>(null);
+  const editBroadcastTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isEditingVerseRef = useRef<boolean>(false);
   const editingVerseNumRef = useRef<number | null>(null);
   // Tracks verse updates triggered by the LOCAL user so the verse_update listener
@@ -658,6 +693,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   useEffect(() => {
     return () => {
       if (pendingBroadcastRef.current) clearTimeout(pendingBroadcastRef.current);
+      if (editBroadcastTimerRef.current) clearTimeout(editBroadcastTimerRef.current);
     };
   }, []);
 
@@ -698,6 +734,77 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     [currentUser, projectId, selectedBook, selectedChapter],
   );
 
+  // Throttled broadcast of in-progress verse text (keystrokes).
+  // Replaces the previous "save-only" workflow: collaborators see the text
+  // appearing live as the local user types.
+  const handleVerseEditBroadcast = useCallback(
+    (verseNum: number, newText: string) => {
+      if (!currentUser || !selectedBook) return;
+      const cleanText = newText.replace(/\u200B/g, '');
+      const throttleMs = 150;
+      const now = Date.now();
+
+      const performEditBroadcast = () => {
+        lastEditBroadcastTimeRef.current = Date.now();
+        pendingEditBroadcastRef.current = null;
+        if (editBroadcastTimerRef.current) {
+          clearTimeout(editBroadcastTimerRef.current);
+          editBroadcastTimerRef.current = null;
+        }
+        papi.commands
+          .sendCommand(
+            'paratextProjectManager.broadcastVerseEdit',
+            currentUser,
+            projectId,
+            selectedBook,
+            selectedChapter,
+            verseNum,
+            cleanText,
+          )
+          .catch((e) => {
+            console.error('Failed to broadcast verse edit:', e);
+          });
+      };
+
+      pendingEditBroadcastRef.current = { verse: verseNum, text: cleanText, ts: now };
+      const elapsed = now - lastEditBroadcastTimeRef.current;
+      if (elapsed >= throttleMs) {
+        performEditBroadcast();
+      } else if (!editBroadcastTimerRef.current) {
+        editBroadcastTimerRef.current = setTimeout(performEditBroadcast, throttleMs - elapsed);
+      }
+    },
+    [currentUser, projectId, selectedBook, selectedChapter],
+  );
+
+  // Flush any pending keystroke broadcast when editing ends.
+  const flushPendingEditBroadcast = useCallback(() => {
+    if (editBroadcastTimerRef.current) {
+      clearTimeout(editBroadcastTimerRef.current);
+      editBroadcastTimerRef.current = null;
+    }
+    if (pendingEditBroadcastRef.current) {
+      const { verse, text } = pendingEditBroadcastRef.current;
+      pendingEditBroadcastRef.current = null;
+      lastEditBroadcastTimeRef.current = 0;
+      if (currentUser && selectedBook) {
+        papi.commands
+          .sendCommand(
+            'paratextProjectManager.broadcastVerseEdit',
+            currentUser,
+            projectId,
+            selectedBook,
+            selectedChapter,
+            verse,
+            text,
+          )
+          .catch(() => {
+            /* ignore */
+          });
+      }
+    }
+  }, [currentUser, projectId, selectedBook, selectedChapter]);
+
   // Verse editing states
   const [isEditingVerse, setIsEditingVerse] = useState(false);
   const [verseEditText, setVerseEditText] = useState('');
@@ -708,6 +815,9 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   useEffect(() => {
     isEditingVerseRef.current = isEditingVerse;
     editingVerseNumRef.current = selectedVerseNum;
+    if (isEditingVerse) {
+      setVerseHighlight(null);
+    }
   }, [isEditingVerse, selectedVerseNum]);
 
   // Text selection states for new notes
@@ -716,6 +826,42 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   const [contextBefore, setContextBefore] = useState('');
   const [contextAfter, setContextAfter] = useState('');
   const [initialOffset, setInitialOffset] = useState(0);
+
+  // Per-verse selection highlight: tracks the current text range the user has
+  // selected inside a verse, so we can render it with a background color.
+  const [verseHighlight, setVerseHighlight] = useState<{
+    verseNum: number;
+    start: number;
+    end: number;
+    text: string;
+  } | null>(null);
+
+  const captureVerseHighlight = (verseNum: number, verseText: string) => {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
+      setVerseHighlight(null);
+      return;
+    }
+    const range = sel.getRangeAt(0);
+    const verseEl = document.getElementById(`verse-${verseNum}`);
+    if (!verseEl || !verseEl.contains(range.commonAncestorContainer)) {
+      return;
+    }
+    // Compute character offsets within the verse text using a clone of the range
+    // that is collapsed to its start/end and compared to the verse text length.
+    const pre = range.cloneRange();
+    pre.selectNodeContents(verseEl);
+    pre.setEnd(range.startContainer, range.startOffset);
+    const start = pre.toString().length;
+    const length = range.toString().length;
+    const end = start + length;
+    const selected = range.toString();
+    if (!selected.trim()) {
+      setVerseHighlight(null);
+      return;
+    }
+    setVerseHighlight({ verseNum, start, end, text: selected });
+  };
 
   // Note creation form states
   const [showNewNoteForm, setShowNewNoteForm] = useState(false);
@@ -739,6 +885,19 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     };
     window.addEventListener('click', handleWindowClick);
     return () => window.removeEventListener('click', handleWindowClick);
+  }, []);
+
+  // Clear the verse highlight when the user clicks outside any verse span
+  // or when the document selection becomes collapsed.
+  useEffect(() => {
+    const handleSelectionChange = () => {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed) {
+        setVerseHighlight(null);
+      }
+    };
+    document.addEventListener('selectionchange', handleSelectionChange);
+    return () => document.removeEventListener('selectionchange', handleSelectionChange);
   }, []);
   const [replying, setReplying] = useState<Record<string, boolean>>({});
 
@@ -932,6 +1091,38 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
               return;
             }
             loadChapterRef.current(currentBook, currentChapter);
+          }
+        } else if (type === 'verse_edit') {
+          // Live keystroke broadcast from another collaborator.
+          // Apply it optimistically to the displayed verse text (do NOT save).
+          if (
+            payload &&
+            payload.projectId === currentProjId &&
+            payload.book === currentBook &&
+            payload.chapter === currentChapter &&
+            payload.user !== currentUsr
+          ) {
+            // Don't overwrite the verse that the LOCAL user is currently editing
+            if (isEditingVerseRef.current && editingVerseNumRef.current === payload.verse) {
+              return;
+            }
+            const newText = payload.newText ?? '';
+            setChapterBlocks((prev) =>
+              prev.map((block) => {
+                if (block.type === 'paragraph' || block.type === 'poetry') {
+                  return {
+                    ...block,
+                    children: block.children.map((child) => {
+                      if (child.type === 'verse' && child.number === payload.verse) {
+                        return { ...child, text: newText };
+                      }
+                      return child;
+                    }),
+                  };
+                }
+                return block;
+              }),
+            );
           }
         } else if (type === 'user_changed') {
           if (payload.username) {
@@ -1200,6 +1391,34 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     });
   };
 
+  // Wrap a character range within a string in a highlighted <mark> element.
+  // Used to draw attention to the currently selected word/phrase in a verse.
+  // Returns a React node (string + mark + string) that can be safely composed
+  // with the note highlights and cursor injection.
+  const wrapRangeInMark = (
+    text: string,
+    start: number,
+    end: number,
+    keyBase: string,
+  ): React.ReactNode => {
+    const safeStart = Math.max(0, Math.min(start, text.length));
+    const safeEnd = Math.max(safeStart, Math.min(end, text.length));
+    if (safeEnd <= safeStart) return text;
+    return (
+      <>
+        {text.substring(0, safeStart)}
+        <mark
+          key={`${keyBase}-hl`}
+          className="tw:transition-colors"
+          style={{ backgroundColor: 'rgba(99, 102, 241, 0.28)', borderRadius: '3px', padding: '0 2px' }}
+        >
+          {text.substring(safeStart, safeEnd)}
+        </mark>
+        {text.substring(safeEnd)}
+      </>
+    );
+  };
+
   // Fetch books & config
   const initData = useCallback(async () => {
     setLoading(true);
@@ -1257,14 +1476,65 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
         setError('No se encontraron libros de Escritura en este proyecto (archivos .SFM).');
       }
     } catch (err) {
-      console.error(err);
-      setError('Error al cargar libros de Escritura.');
+      // Auto-retry once after 3s — handles papi timeouts after long idle
+      try {
+        await new Promise((r) => setTimeout(r, 3000));
+        const [uRes, tmRes, bRes, collabRes] = await Promise.all([
+          papi.commands.sendCommand('paratextProjectManager.getCurrentUser'),
+          papi.commands.sendCommand('paratextProjectManager.getTeamMembers'),
+          papi.commands.sendCommand('paratextProjectManager.getProjectBooks', projectId),
+          papi.commands.sendCommand('paratextProjectManager.getCollabStatus'),
+        ]);
+        if (uRes) {
+          setCurrentUser(uRes);
+        } else if (collabRes && collabRes.username) {
+          setCurrentUser(collabRes.username);
+        }
+        if (tmRes) setTeamMembers(JSON.parse(tmRes as string) as string[]);
+
+        const bookList = JSON.parse(bRes as string) as BookInfo[];
+        setBooks(bookList);
+
+        if (bookList.length > 0) {
+          const lastNav = await papi.commands.sendCommand(
+            'paratextProjectManager.getLastNavigatedVerse',
+            projectId,
+          );
+          if (lastNav) {
+            setSelectedBook(lastNav.bookCode);
+            setSelectedChapter(lastNav.chapter);
+            pendingVerseRef.current = lastNav.verse;
+            if (scrollGroupId !== undefined && setScrRef) {
+              setScrRef({
+                book: lastNav.bookCode,
+                chapterNum: lastNav.chapter,
+                verseNum: lastNav.verse,
+              });
+            }
+          } else if (scrRefRef.current && scrRefRef.current.book) {
+            setSelectedBook(scrRefRef.current.book);
+            setSelectedChapter(scrRefRef.current.chapterNum);
+            pendingVerseRef.current = scrRefRef.current.verseNum;
+          } else {
+            const defaultBook = bookList.find((b) => b.code === 'RUT') || bookList[0];
+            setSelectedBook(defaultBook.code);
+            setSelectedChapter(1);
+            if (scrollGroupId !== undefined && setScrRef) {
+              setScrRef({
+                book: defaultBook.code,
+                chapterNum: 1,
+                verseNum: 1,
+              });
+            }
+          }
+        }
+      } catch (retryErr) {
+        console.error(retryErr);
+        setError('Error al cargar libros de Escritura.');
+      }
     } finally {
       setLoading(false);
     }
-  // Note: scrRef is intentionally NOT in the dep array — it changes on every
-  // navigation event (new object reference) and would cause initData to re-run
-  // constantly. We read it via scrRefRef.current instead.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, scrollGroupId, setScrRef]);
 
@@ -1272,10 +1542,28 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     initData();
   }, [initData]);
 
+  // Refresh on visibility change but no more than once every 2 minutes
+  const lastRefreshRef = useRef(0);
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (Date.now() - lastRefreshRef.current > 120_000) {
+        lastRefreshRef.current = Date.now();
+        if (selectedBook) {
+          loadChapter(selectedBook, selectedChapter);
+        }
+        loadNotes();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [selectedBook, selectedChapter, loadChapter, loadNotes]);
+
   // Cleaned up original non-callback loadChapter/loadNotes definitions since they were moved to top.
 
   useEffect(() => {
     if (selectedBook) {
+      setVerseHighlight(null);
       loadChapter(selectedBook, selectedChapter);
       if (pendingVerseRef.current !== null) {
         const pv = pendingVerseRef.current;
@@ -1626,8 +1914,9 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   const handleVerseClick = (verseNum: number, verseText: string) => {
     const selection = window.getSelection();
     const selectedStr = selection ? selection.toString().trim() : '';
+    const isEmpty = !verseText || verseText.trim().length === 0;
 
-    if (selectedStr) {
+    if (selectedStr && !isEmpty) {
       // User is selecting/has selected text. Do NOT enter edit mode.
       // Save the selection for context menu
       selectVerse(verseNum);
@@ -1672,7 +1961,8 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   const handleVerseContextMenu = (e: React.MouseEvent, verseNum: number, verseText: string) => {
     const selection = window.getSelection();
     const selectedStr = selection ? selection.toString().trim() : '';
-    if (selectedStr) {
+    const isEmpty = !verseText || verseText.trim().length === 0;
+    if (selectedStr && !isEmpty) {
       e.preventDefault();
       e.stopPropagation();
 
@@ -1930,62 +2220,23 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
               A+
             </button>
             {isEditingVerse && (
-              <>
-                <button
-                  type="button"
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                  }}
-                  onClick={async (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const activeEditable = document.querySelector(
-                      `#verse-${selectedVerseNum} [contenteditable="true"]`,
-                    ) as HTMLElement | null;
-                    if (activeEditable) {
-                      activeEditable.blur();
-                    }
-                  }}
-                  className="tw:px-2.5 tw:py-1 tw:bg-green-50 tw:hover:bg-green-100 tw:border tw:border-green-300 tw:text-green-800 tw:rounded tw:text-xs tw:font-semibold tw:cursor-pointer tw:flex tw:items-center tw:gap-1 tw:transition-all"
-                  title="Guardar cambios (Enter)"
-                >
-                  💾 Guardar
-                </button>
-                <button
-                  type="button"
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                  }}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    triggerVerseCancel();
-                  }}
-                  className="tw:px-2.5 tw:py-1 tw:bg-red-50 tw:hover:bg-red-100 tw:border tw:border-red-300 tw:text-red-800 tw:rounded tw:text-xs tw:font-semibold tw:cursor-pointer tw:flex tw:items-center tw:gap-1 tw:transition-all"
-                  title="Cancelar cambios (Esc)"
-                >
-                  ❌ Cancelar
-                </button>
-                <button
-                  type="button"
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                  }}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    triggerVerseUndo();
-                  }}
-                  disabled={!verseEditorCanUndo}
-                  title="Deshacer (Ctrl+Z)"
-                  className="tw:px-2.5 tw:py-1 tw:bg-amber-50 tw:hover:bg-amber-100 tw:border tw:border-amber-300 tw:text-amber-800 tw:rounded tw:text-xs tw:font-semibold tw:cursor-pointer disabled:tw:opacity-40 disabled:tw:cursor-not-allowed tw:flex tw:items-center tw:gap-1 tw:transition-all"
-                >
-                  ↶ Deshacer
-                </button>
-              </>
+              <button
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  triggerVerseUndo();
+                }}
+                disabled={!verseEditorCanUndo}
+                title="Deshacer (Ctrl+Z)"
+                className="tw:px-2.5 tw:py-1 tw:bg-amber-50 tw:hover:bg-amber-100 tw:border tw:border-amber-300 tw:text-amber-800 tw:rounded tw:text-xs tw:font-semibold tw:cursor-pointer disabled:tw:opacity-40 disabled:tw:cursor-not-allowed tw:flex tw:items-center tw:gap-1 tw:transition-all"
+              >
+                ↶ Deshacer
+              </button>
             )}
             <button
               onClick={() => loadChapter(selectedBook, selectedChapter)}
@@ -2066,12 +2317,21 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                         : null;
 
                       const isEmpty = !child.text || child.text.trim().length === 0;
+                      const selectionForThisVerse =
+                        verseHighlight && verseHighlight.verseNum === child.number
+                          ? verseHighlight
+                          : null;
                       return (
                         <span
                           key={cIdx}
                           id={`verse-${child.number}`}
                           onClick={() => handleVerseClick(child.number, child.text)}
                           onContextMenu={(e) => handleVerseContextMenu(e, child.number, child.text)}
+                          onMouseUp={() => {
+                            if (!isEditing) {
+                              captureVerseHighlight(child.number, child.text);
+                            }
+                          }}
                           className="tw:relative tw:inline tw:rounded tw:transition-all tw:py-0.5 tw:cursor-text"
                           style={{
                             ...otherEditorHighlight ? { backgroundColor: otherEditorHighlight, padding: '2px 4px', borderRadius: '4px' } : {},
@@ -2117,15 +2377,29 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                               onUndoStateChange={(canUndoNow) => {
                                 setVerseEditorCanUndo(canUndoNow);
                               }}
+                              onEditBroadcast={(text) => {
+                                handleVerseEditBroadcast(child.number, text);
+                              }}
                             />
                           ) : (
                             <span>
                               {injectCursorsIntoElements(
-                                highlightText(
-                                  child.text,
-                                  chapterNotesByVerse[child.number] ?? [],
-                                  child.number,
-                                ),
+                                selectionForThisVerse
+                                  ? wrapRangeInMark(
+                                      highlightText(
+                                        child.text,
+                                        chapterNotesByVerse[child.number] ?? [],
+                                        child.number,
+                                      ),
+                                      selectionForThisVerse.start,
+                                      selectionForThisVerse.end,
+                                      `v${child.number}`,
+                                    )
+                                  : highlightText(
+                                      child.text,
+                                      chapterNotesByVerse[child.number] ?? [],
+                                      child.number,
+                                    ),
                                 editorsWithCursors,
                               )}
                             </span>

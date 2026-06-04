@@ -220,7 +220,25 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
       if (membersResult) {
         setTeamMembers(JSON.parse(membersResult as string) as string[]);
       }
-    } catch (_) {}
+    } catch (_) {
+      // Auto-retry once after 3s — handles papi timeouts after long idle
+      try {
+        await new Promise((r) => setTimeout(r, 3000));
+        const [userResult, membersResult] = await Promise.all([
+          papi.commands.sendCommand('paratextProjectManager.getCurrentUser'),
+          papi.commands.sendCommand('paratextProjectManager.getTeamMembers'),
+        ]);
+        if (userResult) {
+          setCurrentUser(userResult);
+          loadSettings(userResult);
+        }
+        if (membersResult) {
+          setTeamMembers(JSON.parse(membersResult as string) as string[]);
+        }
+      } catch (retryErr) {
+        console.error('Failed to load user and members after retry:', retryErr);
+      }
+    }
   }, [loadSettings]);
 
   // Load threads
@@ -260,7 +278,41 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
           setSelectedThreadId(loadedThreads[0].threadId);
         }
       } catch (e) {
-        setError(`Error al cargar notas: ${e}`);
+        // Auto-retry once after 3s — handles papi timeouts after long idle
+        try {
+          await new Promise((r) => setTimeout(r, 3000));
+          const res = await papi.commands.sendCommand(
+            'paratextProjectManager.getProjectNotes',
+            projectId,
+            currentUser,
+          );
+          const parsed = JSON.parse(res) as {
+            threads: ParatextNoteThread[];
+            authors: string[];
+            error?: string;
+          };
+          if (parsed.error) {
+            setError(parsed.error);
+            return;
+          }
+          const loadedThreads = parsed.threads || [];
+          setThreads(loadedThreads);
+
+          if (selectIdAfterLoad) {
+            const exists = loadedThreads.some((t) => t.threadId === selectIdAfterLoad);
+            if (exists) {
+              setSelectedThreadId(selectIdAfterLoad);
+            } else if (loadedThreads.length > 0) {
+              setSelectedThreadId(loadedThreads[0].threadId);
+            } else {
+              setSelectedThreadId(null);
+            }
+          } else if (loadedThreads.length > 0 && !selectedThreadId) {
+            setSelectedThreadId(loadedThreads[0].threadId);
+          }
+        } catch (retryErr) {
+          setError(`Error al cargar notas: ${retryErr}`);
+        }
       } finally {
         setLoading(false);
       }
@@ -277,6 +329,43 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
       loadNotes();
     }
   }, [projectId, currentUser, loadNotes]);
+
+  // Listen to collaboration events
+  useEffect(() => {
+    let unsub: any;
+    try {
+      unsub = papi.network.getNetworkEvent<any>(
+        'paratextProjectManager.onCollabEvent',
+      )((event: any) => {
+        if (!event) return;
+        const { type, payload } = event;
+        if (type === 'note_update' && payload.projectId === projectId) {
+          loadNotes();
+        } else if (type === 'user_changed' && payload.username) {
+          setCurrentUser(payload.username);
+        }
+      });
+    } catch (err) {
+      console.warn('Error subscribing to collab event in notes-viewer:', err);
+    }
+    return () => {
+      if (unsub) unsub();
+    };
+  }, [projectId, loadNotes]);
+
+  // Refresh on visibility change but no more than once every 2 minutes
+  const lastRefreshRef = useRef(0);
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (Date.now() - lastRefreshRef.current > 120_000) {
+        lastRefreshRef.current = Date.now();
+        loadNotes();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [loadNotes]);
 
 
 
