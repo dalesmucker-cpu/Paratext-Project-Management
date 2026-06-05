@@ -355,6 +355,7 @@ function parseUsfmChapter(content) {
   const lines = content.split(/\r?\n/);
   const blocks = [];
   let currentBlock = null;
+  let activeVerseNum = null;
 
   const cleanUsfmText = (text) => {
     return text
@@ -372,7 +373,7 @@ function parseUsfmChapter(content) {
     const cleanedText = text.trim();
     if (!cleanedText) return;
 
-    const verseRegex = /\\v\s+(\d+)(?:\s+([\s\S]*?))?(?=\\v\s+\d+|$)/g;
+    const verseRegex = /\\v\s+(\d+)(?:\s+([^\\]*?))?(?=\\v\s+\d+|$)/g;
     let vMatch;
     let hasVerses = false;
 
@@ -380,10 +381,19 @@ function parseUsfmChapter(content) {
     if (firstVerseIndex > 0) {
       const beforeText = cleanUsfmText(cleanedText.substring(0, firstVerseIndex));
       if (beforeText) {
-        if (children.length > 0 && children[children.length - 1].type === 'text') {
-          children[children.length - 1].text += ' ' + beforeText;
+        if (activeVerseNum !== null) {
+          const existingVerse = children.find((c) => c.type === 'verse' && c.number === activeVerseNum);
+          if (existingVerse) {
+            existingVerse.text += ' ' + beforeText;
+          } else {
+            children.push({ type: 'verse', number: activeVerseNum, text: beforeText });
+          }
         } else {
-          children.push({ type: 'text', text: beforeText });
+          if (children.length > 0 && children[children.length - 1].type === 'text') {
+            children[children.length - 1].text += ' ' + beforeText;
+          } else {
+            children.push({ type: 'text', text: beforeText });
+          }
         }
       }
     }
@@ -392,6 +402,7 @@ function parseUsfmChapter(content) {
       hasVerses = true;
       const verseNum = parseInt(vMatch[1], 10);
       const verseText = cleanUsfmText(vMatch[2] || '');
+      activeVerseNum = verseNum;
 
       const existingVerse = children.find((c) => c.type === 'verse' && c.number === verseNum);
       if (existingVerse) {
@@ -404,12 +415,19 @@ function parseUsfmChapter(content) {
     if (!hasVerses) {
       const clean = cleanUsfmText(cleanedText);
       if (clean) {
-        if (children.length > 0 && children[children.length - 1].type === 'verse') {
-          children[children.length - 1].text += ' ' + clean;
-        } else if (children.length > 0 && children[children.length - 1].type === 'text') {
-          children[children.length - 1].text += ' ' + clean;
+        if (activeVerseNum !== null) {
+          const existingVerse = children.find((c) => c.type === 'verse' && c.number === activeVerseNum);
+          if (existingVerse) {
+            existingVerse.text += ' ' + clean;
+          } else {
+            children.push({ type: 'verse', number: activeVerseNum, text: clean });
+          }
         } else {
-          children.push({ type: 'text', text: clean });
+          if (children.length > 0 && children[children.length - 1].type === 'text') {
+            children[children.length - 1].text += ' ' + clean;
+          } else {
+            children.push({ type: 'text', text: clean });
+          }
         }
       }
     }
@@ -423,6 +441,7 @@ function parseUsfmChapter(content) {
       const text = line.replace(/\\s\d*\s*/, '').trim();
       blocks.push({ type: 'heading', text });
       currentBlock = null;
+      activeVerseNum = null;
     } else if (line.startsWith('\\p') || line.startsWith('\\m')) {
       currentBlock = { type: 'paragraph', children: [] };
       blocks.push(currentBlock);
@@ -446,13 +465,11 @@ function parseUsfmChapter(content) {
       }
       parseLineContent(line, currentBlock.children);
     } else {
-      if (currentBlock) {
-        parseLineContent(line, currentBlock.children);
-      } else {
+      if (!currentBlock) {
         currentBlock = { type: 'paragraph', children: [] };
         blocks.push(currentBlock);
-        parseLineContent(line, currentBlock.children);
       }
+      parseLineContent(line, currentBlock.children);
     }
   }
 
@@ -2130,6 +2147,16 @@ function applyEditToRawUsfm(originalRaw, originalCleaned, newCleaned) {
     return s.value.replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '').length;
   });
 
+  const getLeadingWhitespace = (str) => {
+    const match = str.match(/^\s+/);
+    return match ? match[0] : '';
+  };
+
+  const getTrailingWhitespace = (str) => {
+    const match = str.match(/\s+$/);
+    return match ? match[0] : '';
+  };
+
   // Walk newCleaned and assign characters to text segments in order.
   let newCleanedPos = 0;
   const resultParts = [];
@@ -2145,14 +2172,21 @@ function applyEditToRawUsfm(originalRaw, originalCleaned, newCleaned) {
     }
     const slice = newCleaned.substring(newCleanedPos, newCleanedPos + take);
     newCleanedPos += take;
-    resultParts.push({ idx: seg.idx, value: slice });
+    
+    // Preserve original leading and trailing whitespace to prevent space stripping/tag merging
+    const leadingWs = getLeadingWhitespace(seg.value);
+    const trailingWs = getTrailingWhitespace(seg.value);
+    resultParts.push({ idx: seg.idx, value: leadingWs + slice + trailingWs });
   }
 
   // If we didn't consume all of newCleaned, append the remainder to the
   // last text segment.
   if (newCleanedPos < newCleaned.length && resultParts.length > 0) {
     const last = resultParts[resultParts.length - 1];
-    last.value += newCleaned.substring(newCleanedPos);
+    const trailingWs = getTrailingWhitespace(textSegments[textSegments.length - 1].value);
+    // Strip trailing whitespace from intermediate value, append remainder, then re-append trailing whitespace
+    const currentBase = last.value.substring(0, last.value.length - trailingWs.length);
+    last.value = currentBase + newCleaned.substring(newCleanedPos) + trailingWs;
   }
 
   // Reassemble segments, replacing text values with their assigned slices.
@@ -2214,7 +2248,7 @@ function saveVerseLocal(projectId, bookCode, chapter, verse, newText) {
   const chapBody = chapMatch[2];
 
   const verseRegex = new RegExp(
-    `(\\\\v\\s+${verse}\\b\\s*)([\\s\\S]*?)(?=\\\\v\\s+\\d+|$)`,
+    `(\\\\v\\s+${verse}\\b[ \\t]*)([\\s\\S]*?)(?=\\\\v\\s+\\d+|$)`,
     'i',
   );
   const vMatch = verseRegex.exec(chapBody);

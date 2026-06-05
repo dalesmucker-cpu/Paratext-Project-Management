@@ -19,6 +19,7 @@ function parseUsfmChapter(content) {
   const lines = content.split(/\r?\n/);
   const blocks = [];
   let currentBlock = null;
+  let activeVerseNum = null;
 
   const cleanUsfmText = (text) => {
     return text
@@ -36,7 +37,7 @@ function parseUsfmChapter(content) {
     const cleanedText = text.trim();
     if (!cleanedText) return;
 
-    const verseRegex = /\\v\s+(\d+)\s+([\s\S]*?)(?=\\v\s+\d+|$)/g;
+    const verseRegex = /\\v\s+(\d+)(?:\s+([\s\S]*?))?(?=\\v\s+\d+|$)/g;
     let vMatch;
     let hasVerses = false;
 
@@ -44,10 +45,19 @@ function parseUsfmChapter(content) {
     if (firstVerseIndex > 0) {
       const beforeText = cleanUsfmText(cleanedText.substring(0, firstVerseIndex));
       if (beforeText) {
-        if (children.length > 0 && children[children.length - 1].type === 'text') {
-          children[children.length - 1].text += ' ' + beforeText;
+        if (activeVerseNum !== null) {
+          const existingVerse = children.find((c) => c.type === 'verse' && c.number === activeVerseNum);
+          if (existingVerse) {
+            existingVerse.text += ' ' + beforeText;
+          } else {
+            children.push({ type: 'verse', number: activeVerseNum, text: beforeText });
+          }
         } else {
-          children.push({ type: 'text', text: beforeText });
+          if (children.length > 0 && children[children.length - 1].type === 'text') {
+            children[children.length - 1].text += ' ' + beforeText;
+          } else {
+            children.push({ type: 'text', text: beforeText });
+          }
         }
       }
     }
@@ -55,7 +65,8 @@ function parseUsfmChapter(content) {
     while ((vMatch = verseRegex.exec(cleanedText)) !== null) {
       hasVerses = true;
       const verseNum = parseInt(vMatch[1], 10);
-      const verseText = cleanUsfmText(vMatch[2]);
+      const verseText = cleanUsfmText(vMatch[2] || '');
+      activeVerseNum = verseNum;
 
       const existingVerse = children.find((c) => c.type === 'verse' && c.number === verseNum);
       if (existingVerse) {
@@ -68,12 +79,19 @@ function parseUsfmChapter(content) {
     if (!hasVerses) {
       const clean = cleanUsfmText(cleanedText);
       if (clean) {
-        if (children.length > 0 && children[children.length - 1].type === 'verse') {
-          children[children.length - 1].text += ' ' + clean;
-        } else if (children.length > 0 && children[children.length - 1].type === 'text') {
-          children[children.length - 1].text += ' ' + clean;
+        if (activeVerseNum !== null) {
+          const existingVerse = children.find((c) => c.type === 'verse' && c.number === activeVerseNum);
+          if (existingVerse) {
+            existingVerse.text += ' ' + clean;
+          } else {
+            children.push({ type: 'verse', number: activeVerseNum, text: clean });
+          }
         } else {
-          children.push({ type: 'text', text: clean });
+          if (children.length > 0 && children[children.length - 1].type === 'text') {
+            children[children.length - 1].text += ' ' + clean;
+          } else {
+            children.push({ type: 'text', text: clean });
+          }
         }
       }
     }
@@ -87,6 +105,7 @@ function parseUsfmChapter(content) {
       const text = line.replace(/\\s\d*\s*/, '').trim();
       blocks.push({ type: 'heading', text });
       currentBlock = null;
+      activeVerseNum = null;
     } else if (line.startsWith('\\p') || line.startsWith('\\m')) {
       currentBlock = { type: 'paragraph', children: [] };
       blocks.push(currentBlock);
@@ -110,13 +129,11 @@ function parseUsfmChapter(content) {
       }
       parseLineContent(line, currentBlock.children);
     } else {
-      if (currentBlock) {
-        parseLineContent(line, currentBlock.children);
-      } else {
+      if (!currentBlock) {
         currentBlock = { type: 'paragraph', children: [] };
         blocks.push(currentBlock);
-        parseLineContent(line, currentBlock.children);
       }
+      parseLineContent(line, currentBlock.children);
     }
   }
 
