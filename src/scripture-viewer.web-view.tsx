@@ -405,6 +405,47 @@ const EditableVerse: React.FC<EditableVerseProps> = ({
   );
 };
 
+const renderFootnotes = (node: React.ReactNode): React.ReactNode => {
+  if (typeof node === 'string') {
+    const parts = node.split(/(\[FN:[\s\S]*?\])/g);
+    if (parts.length === 1) return node;
+    return (
+      <>
+        {parts.map((part, idx) => {
+          if (part.startsWith('[FN:') && part.endsWith(']')) {
+            const footnoteText = part.slice(4, -1);
+            return (
+              <span
+                key={idx}
+                className="tw:text-xs tw:font-semibold tw:text-indigo-600 tw:align-super tw:mx-0.5 tw:cursor-pointer tw:select-none tw:hover:text-indigo-800 tw:transition-colors"
+                title={footnoteText}
+                onClick={(e) => {
+                  e.stopPropagation();
+                }}
+              >
+                *
+              </span>
+            );
+          }
+          return part;
+        })}
+      </>
+    );
+  }
+
+  if (React.isValidElement(node)) {
+    if (!node.props.children) return node;
+    const children = React.Children.map(node.props.children, (child) => renderFootnotes(child));
+    return React.cloneElement(node, { ...node.props, key: node.key }, children);
+  }
+
+  if (Array.isArray(node)) {
+    return node.map((child, idx) => <React.Fragment key={idx}>{renderFootnotes(child)}</React.Fragment>);
+  }
+
+  return node;
+};
+
 globalThis.webViewComponent = function ScriptureViewerWebView({
   projectId,
   useWebViewScrollGroupScrRef,
@@ -2286,7 +2327,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                   >
                     {block.children.map((child, cIdx) => {
                       if (child.type === 'text') {
-                        return <span key={cIdx}>{child.text}</span>;
+                        return <span key={cIdx}>{renderFootnotes(child.text)}</span>;
                       }
 
                       const isSelected = selectedVerseNum === child.number;
@@ -2383,24 +2424,26 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                             />
                           ) : (
                             <span>
-                              {injectCursorsIntoElements(
-                                selectionForThisVerse
-                                  ? wrapRangeInMark(
-                                      highlightText(
+                              {renderFootnotes(
+                                injectCursorsIntoElements(
+                                  selectionForThisVerse
+                                    ? wrapRangeInMark(
+                                        highlightText(
+                                          child.text,
+                                          chapterNotesByVerse[child.number] ?? [],
+                                          child.number,
+                                        ),
+                                        selectionForThisVerse.start,
+                                        selectionForThisVerse.end,
+                                        `v${child.number}`,
+                                      )
+                                    : highlightText(
                                         child.text,
                                         chapterNotesByVerse[child.number] ?? [],
                                         child.number,
                                       ),
-                                      selectionForThisVerse.start,
-                                      selectionForThisVerse.end,
-                                      `v${child.number}`,
-                                    )
-                                  : highlightText(
-                                      child.text,
-                                      chapterNotesByVerse[child.number] ?? [],
-                                      child.number,
-                                    ),
-                                editorsWithCursors,
+                                  editorsWithCursors,
+                                )
                               )}
                             </span>
                           )}
