@@ -313,7 +313,6 @@ async function driveGetOrCreateFolder(accessToken, folderName) {
   process.stdout.write(JSON.stringify({ folderId: createData.id }));
 }
 
-
 async function driveRead(accessToken, fileId) {
   const res = await httpsGetJson(
     `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`,
@@ -378,17 +377,17 @@ async function driveWrite(accessToken, fileId, fileName, content, folderId) {
       metaObj.parents = [folderId.trim()];
     }
     const metadata = JSON.stringify(metaObj);
-    
+
     const partHeader1 = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n`;
     const partHeader2 = `--${boundary}\r\nContent-Type: ${mimeType}\r\nContent-Transfer-Encoding: binary\r\n\r\n`;
     const partFooter = `\r\n--${boundary}--`;
-    
+
     // Combine headers and binary buffer
     const bodyBuffer = Buffer.concat([
       Buffer.from(partHeader1, 'utf8'),
       Buffer.from(partHeader2, 'utf8'),
       buffer,
-      Buffer.from(partFooter, 'utf8')
+      Buffer.from(partFooter, 'utf8'),
     ]);
 
     const res = await httpsRequest(
@@ -795,7 +794,6 @@ async function syncDeadlines(input) {
     } else if (action === 'drive-read') {
       await driveRead(args[0], args[1]);
     } else if (action === 'drive-write') {
-
       let stdinData = '';
       process.stdin.setEncoding('utf8');
       process.stdin.on('data', (chunk) => {
