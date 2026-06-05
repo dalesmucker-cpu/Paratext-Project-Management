@@ -141,6 +141,17 @@ function CommentText({
   );
 }
 
+/** Safely convert any caught value (including papi plain-object errors) to a readable string. */
+function errMsg(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (typeof e === 'object' && e !== null) {
+    const obj = e as Record<string, unknown>;
+    if (typeof obj.message === 'string') return obj.message;
+    return JSON.stringify(obj);
+  }
+  return String(e);
+}
+
 globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebViewProps) {
   const [threads, setThreads] = useState<ParatextNoteThread[]>([]);
   const [loading, setLoading] = useState(false);
@@ -311,7 +322,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
             setSelectedThreadId(loadedThreads[0].threadId);
           }
         } catch (retryErr) {
-          setError(`Error al cargar notas: ${retryErr}`);
+          setError(`Error al cargar notas: ${errMsg(retryErr)}`);
         }
       } finally {
         setLoading(false);

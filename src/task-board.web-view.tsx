@@ -980,6 +980,17 @@ function NewTaskModal({
   );
 }
 
+/** Safely convert any caught value (including papi plain-object errors) to a readable string. */
+function errMsg(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (typeof e === 'object' && e !== null) {
+    const obj = e as Record<string, unknown>;
+    if (typeof obj.message === 'string') return obj.message;
+    return JSON.stringify(obj);
+  }
+  return String(e);
+}
+
 // ---- Main Task Board Component ----
 
 globalThis.webViewComponent = function TaskBoardWebView({
@@ -1056,7 +1067,7 @@ globalThis.webViewComponent = function TaskBoardWebView({
         setActivityLog(store.activityLog ?? []);
         if (membersResult) setTeamMembers(JSON.parse(membersResult as string) as string[]);
       } catch (retryErr) {
-        setError(`Error al cargar tareas: ${retryErr}`);
+        setError(`Error al cargar tareas: ${errMsg(retryErr)}`);
       }
     } finally {
       setLoading(false);
@@ -1218,7 +1229,7 @@ globalThis.webViewComponent = function TaskBoardWebView({
         if (saveResult === 'queued') setSyncPending(true);
         else if (saveResult === 'ok') setSyncPending(false);
       } catch (e) {
-        setError(`Error al guardar: ${e}`);
+        setError(`Error al guardar: ${errMsg(e)}`);
       } finally {
         setSaving(false);
       }
@@ -1362,7 +1373,7 @@ globalThis.webViewComponent = function TaskBoardWebView({
         else if (saveResult === 'ok') setSyncPending(false);
         setStageConfig(newConfig);
       } catch (e) {
-        setError(`Error al guardar etapas: ${e}`);
+        setError(`Error al guardar etapas: ${errMsg(e)}`);
       } finally {
         setSaving(false);
       }
