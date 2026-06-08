@@ -1004,6 +1004,10 @@ async function handleAction(action, args) {
             /* ignore header read error */
           }
 
+          if (projectId && projectId.toUpperCase() === 'VMM' && code === 'DEU') {
+            bookName = 'Deuteronomy';
+          }
+
           return { code, name: bookName, fileName: foundFile };
         }
         return null;
