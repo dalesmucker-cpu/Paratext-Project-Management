@@ -46,7 +46,9 @@ function parseUsfmChapter(content) {
       const beforeText = cleanUsfmText(cleanedText.substring(0, firstVerseIndex));
       if (beforeText) {
         if (activeVerseNum !== null) {
-          const existingVerse = children.find((c) => c.type === 'verse' && c.number === activeVerseNum);
+          const existingVerse = children.find(
+            (c) => c.type === 'verse' && c.number === activeVerseNum,
+          );
           if (existingVerse) {
             existingVerse.text += ' ' + beforeText;
           } else {
@@ -80,7 +82,9 @@ function parseUsfmChapter(content) {
       const clean = cleanUsfmText(cleanedText);
       if (clean) {
         if (activeVerseNum !== null) {
-          const existingVerse = children.find((c) => c.type === 'verse' && c.number === activeVerseNum);
+          const existingVerse = children.find(
+            (c) => c.type === 'verse' && c.number === activeVerseNum,
+          );
           if (existingVerse) {
             existingVerse.text += ' ' + clean;
           } else {
@@ -148,7 +152,7 @@ function findProjectDir(projectId) {
     path.join(userHome, 'My Paratext 9 Projects'),
     path.join(userHome, '.paratext-10-studio', 'projects', 'Paratext 9 Projects'),
     'C:\\My Paratext Projects',
-    path.join(userHome, 'My Paratext Projects')
+    path.join(userHome, 'My Paratext Projects'),
   ];
 
   console.log('Searching paths:', searchPaths);
@@ -171,8 +175,12 @@ function findProjectDir(projectId) {
               const nameMatch = /<Name>([^<]+)<\/Name>/i.exec(xml);
               const guid = guidMatch ? guidMatch[1] : '';
               const name = nameMatch ? nameMatch[1] : '';
-              
-              if (normalizeGuid(guid) === normalizedId || name === projectId || folder === projectId) {
+
+              if (
+                normalizeGuid(guid) === normalizedId ||
+                name === projectId ||
+                folder === projectId
+              ) {
                 return fullPath;
               }
             }
@@ -191,7 +199,7 @@ function findProjectDir(projectId) {
 async function run() {
   const projectId = '95F9D2DE8892138DD1386F78F0671712F31D48D0';
   console.log('Resolving project directory for:', projectId);
-  
+
   const pPath = findProjectDir(projectId);
   if (!pPath) {
     console.error('Could not resolve project directory.');
@@ -243,7 +251,12 @@ async function run() {
   console.log('Parsing USFM chapter...');
   const parseStart = Date.now();
   const blocks = parseUsfmChapter(chapterContent);
-  console.log('USFM parsing completed in', Date.now() - parseStart, 'ms. Total blocks:', blocks.length);
+  console.log(
+    'USFM parsing completed in',
+    Date.now() - parseStart,
+    'ms. Total blocks:',
+    blocks.length,
+  );
 }
 
 run().catch(console.error);

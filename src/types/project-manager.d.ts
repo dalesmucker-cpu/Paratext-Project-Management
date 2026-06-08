@@ -131,10 +131,7 @@ declare module 'papi-shared-types' {
     /** Gets the current collaboration status */
     'paratextProjectManager.getCollabStatus': () => Promise<any>;
     /** Sends a collaboration chat message */
-    'paratextProjectManager.sendCollabChat': (
-      username: string,
-      message: string,
-    ) => Promise<string>;
+    'paratextProjectManager.sendCollabChat': (username: string, message: string) => Promise<string>;
     /** Broadcasts editing cursor location */
     'paratextProjectManager.broadcastCursor': (
       username: string,

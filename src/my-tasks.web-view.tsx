@@ -313,8 +313,6 @@ globalThis.webViewComponent = function MyTasksWebView({
     loadData();
   }, [loadData]);
 
-
-
   // Background auto-refresh — silently picks up changes saved by other computers
   const savingRef = useRef(false);
   useEffect(() => {

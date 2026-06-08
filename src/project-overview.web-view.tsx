@@ -675,7 +675,9 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
   const [collabHostIp, setCollabHostIp] = useState('127.0.0.1');
   const [collabActiveUsers, setCollabActiveUsers] = useState<string[]>([]);
   const [collabIps, setCollabIps] = useState<string[]>([]);
-  const [collabChatMessages, setCollabChatMessages] = useState<{ user: string; message: string; timestamp: number }[]>([]);
+  const [collabChatMessages, setCollabChatMessages] = useState<
+    { user: string; message: string; timestamp: number }[]
+  >([]);
   const [collabStatusMsg, setCollabStatusMsg] = useState('');
   const [collabErrorMsg, setCollabErrorMsg] = useState('');
   const [collabConnecting, setCollabConnecting] = useState(false);
@@ -684,7 +686,10 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
 
   useEffect(() => {
     if (!collabRoomId && projectId) {
-      const cleanId = projectId.replace(/[^a-zA-Z0-9]/g, '').substring(0, 6).toUpperCase();
+      const cleanId = projectId
+        .replace(/[^a-zA-Z0-9]/g, '')
+        .substring(0, 6)
+        .toUpperCase();
       // Generate a stronger random suffix (8 hex chars = 32 bits of entropy)
       const arr = new Uint8Array(4);
       if (typeof globalThis.crypto !== 'undefined' && globalThis.crypto.getRandomValues) {
@@ -692,7 +697,9 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       } else {
         for (let i = 0; i < arr.length; i++) arr[i] = Math.floor(Math.random() * 256);
       }
-      const randHex = Array.from(arr, (b) => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+      const randHex = Array.from(arr, (b) => b.toString(16).padStart(2, '0'))
+        .join('')
+        .toUpperCase();
       setCollabRoomId(`PM-${cleanId || 'ROOM'}-${randHex}`);
     }
   }, [projectId, collabRoomId]);
@@ -980,12 +987,18 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         collabType === 'online' ? collabServerUrl.trim() : '',
       );
       if (res && res.status === 'ok') {
-        setCollabStatusMsg(collabType === 'online' ? 'Sesión de colaboración online iniciada.' : 'Servidor de colaboración local iniciado.');
+        setCollabStatusMsg(
+          collabType === 'online'
+            ? 'Sesión de colaboración online iniciada.'
+            : 'Servidor de colaboración local iniciado.',
+        );
         await loadCollabStatus();
       } else {
         const errMsg = res?.error || 'Error desconocido al iniciar colaboración.';
         if (/EADDRINUSE|address already in use/i.test(errMsg)) {
-          setCollabErrorMsg(`${errMsg}\n\nSi el puerto ${collabPort} está ocupado, cambia el puerto o cierra la otra sesión.`);
+          setCollabErrorMsg(
+            `${errMsg}\n\nSi el puerto ${collabPort} está ocupado, cambia el puerto o cierra la otra sesión.`,
+          );
         } else {
           setCollabErrorMsg(errMsg);
         }
@@ -1035,7 +1048,11 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         collabType === 'online' ? collabServerUrl.trim() : '',
       );
       if (res && res.status === 'ok') {
-        setCollabStatusMsg(collabType === 'online' ? 'Conectado a la sala online.' : 'Conectado al servidor de colaboración local.');
+        setCollabStatusMsg(
+          collabType === 'online'
+            ? 'Conectado a la sala online.'
+            : 'Conectado al servidor de colaboración local.',
+        );
         await loadCollabStatus();
       } else {
         setCollabErrorMsg(res?.error || 'No se pudo conectar.');
@@ -1084,7 +1101,11 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
     if (!chatInput.trim()) return;
     try {
       const sender = collabUsername || currentUser || 'Usuario';
-      await papi.commands.sendCommand('paratextProjectManager.sendCollabChat', sender, chatInput.trim());
+      await papi.commands.sendCommand(
+        'paratextProjectManager.sendCollabChat',
+        sender,
+        chatInput.trim(),
+      );
       setChatInput('');
     } catch (_) {}
   };
@@ -1125,41 +1146,41 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
   useEffect(() => {
     let unsub: any;
     try {
-      unsub = papi.network.getNetworkEvent<any>(
-        'paratextProjectManager.onCollabEvent',
-      )((event: any) => {
-        if (!event) return;
-        const { type, payload } = event;
-        if (type === 'user_list') {
-          setCollabActiveUsers(payload.users || []);
-        } else if (type === 'chat_message') {
-          setCollabChatMessages((prev) => [...prev, payload]);
-        } else if (type === 'tasks_update') {
-          silentRefresh();
-        } else if (type === 'status_update') {
-          if (payload.role) {
-            setCollabRole(payload.role);
-            // If we just connected, clear the reconnect banner
-            if (payload.role !== 'none') {
+      unsub = papi.network.getNetworkEvent<any>('paratextProjectManager.onCollabEvent')(
+        (event: any) => {
+          if (!event) return;
+          const { type, payload } = event;
+          if (type === 'user_list') {
+            setCollabActiveUsers(payload.users || []);
+          } else if (type === 'chat_message') {
+            setCollabChatMessages((prev) => [...prev, payload]);
+          } else if (type === 'tasks_update') {
+            silentRefresh();
+          } else if (type === 'status_update') {
+            if (payload.role) {
+              setCollabRole(payload.role);
+              // If we just connected, clear the reconnect banner
+              if (payload.role !== 'none') {
+                setReconnecting(false);
+                setReconnectAttempts(0);
+                setHasEverConnected(true);
+              }
+            }
+            if (payload.reconnecting) {
+              setReconnecting(true);
+              setReconnectAttempts(payload.attempt || 0);
+              setCollabStatusMsg(
+                `Reconectando al anfitrión (intento #${payload.attempt || 1}, en ${Math.round((payload.delayMs || 0) / 1000)}s)...`,
+              );
+              setCollabErrorMsg('');
+            } else if (payload.error) {
+              setCollabErrorMsg(payload.error);
+              setCollabStatusMsg('');
               setReconnecting(false);
-              setReconnectAttempts(0);
-              setHasEverConnected(true);
             }
           }
-          if (payload.reconnecting) {
-            setReconnecting(true);
-            setReconnectAttempts(payload.attempt || 0);
-            setCollabStatusMsg(
-              `Reconectando al anfitrión (intento #${payload.attempt || 1}, en ${Math.round((payload.delayMs || 0) / 1000)}s)...`
-            );
-            setCollabErrorMsg('');
-          } else if (payload.error) {
-            setCollabErrorMsg(payload.error);
-            setCollabStatusMsg('');
-            setReconnecting(false);
-          }
-        }
-      });
+        },
+      );
     } catch (err) {
       console.warn('Error subscribing to collab event:', err);
     }
@@ -2104,7 +2125,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
             <span className="tw:text-sm">✨</span>
             <span className="tw:font-medium">{updateMessage}</span>
           </div>
-          <button 
+          <button
             className="tw:text-xs tw:bg-white/20 tw:backdrop-blur-sm tw:text-white tw:border tw:border-white/30 tw:px-2.5 tw:py-1 tw:rounded-md tw:hover:bg-white/30 tw:transition-all"
             onClick={() => setUpdateMessage('')}
           >
@@ -2319,7 +2340,11 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                       <div className="tw:mt-2 tw:pt-2 tw:border-t tw:border-red-200 tw:text-[11px]">
                         💡 <strong>Si la conexión con el anfitrión falla:</strong>
                         <ul className="tw:list-disc tw:pl-5 tw:mt-1 tw:space-y-0.5">
-                          <li>Verifica que el Firewall de Windows permite <code>paratext-project-manager</code> o el puerto <code>{collabPort}</code>.</li>
+                          <li>
+                            Verifica que el Firewall de Windows permite{' '}
+                            <code>paratext-project-manager</code> o el puerto{' '}
+                            <code>{collabPort}</code>.
+                          </li>
                           <li>Confirma que ambos equipos están en la misma red.</li>
                           <li>Prueba hacer ping a la IP del anfitrión.</li>
                         </ul>
@@ -2368,7 +2393,9 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                           : 'Inicia un servidor local para que otros se conecten a tu proyecto a través de la red local.'}
                       </p>
                       <div>
-                        <label className="tw:block tw:text-[10px] tw:text-gray-400">Nombre de Usuario</label>
+                        <label className="tw:block tw:text-[10px] tw:text-gray-400">
+                          Nombre de Usuario
+                        </label>
                         <input
                           className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
                           value={collabUsername}
@@ -2379,7 +2406,9 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                       {collabType === 'online' ? (
                         <>
                           <div>
-                            <label className="tw:block tw:text-[10px] tw:text-gray-400">ID de la Sala</label>
+                            <label className="tw:block tw:text-[10px] tw:text-gray-400">
+                              ID de la Sala
+                            </label>
                             <input
                               className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:font-mono"
                               value={collabRoomId}
@@ -2388,7 +2417,9 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                             />
                           </div>
                           <div>
-                            <label className="tw:block tw:text-[10px] tw:text-gray-400">Servidor Relay (Opcional)</label>
+                            <label className="tw:block tw:text-[10px] tw:text-gray-400">
+                              Servidor Relay (Opcional)
+                            </label>
                             <input
                               className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:font-mono tw:text-[10px]"
                               value={collabServerUrl}
@@ -2399,7 +2430,9 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                         </>
                       ) : (
                         <div>
-                          <label className="tw:block tw:text-[10px] tw:text-gray-400">Puerto (Opcional)</label>
+                          <label className="tw:block tw:text-[10px] tw:text-gray-400">
+                            Puerto (Opcional)
+                          </label>
                           <input
                             type="number"
                             className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
@@ -2429,7 +2462,9 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                           : 'Conéctate al servidor de un anfitrión local para sincronizar en tiempo real.'}
                       </p>
                       <div>
-                        <label className="tw:block tw:text-[10px] tw:text-gray-400">Nombre de Usuario</label>
+                        <label className="tw:block tw:text-[10px] tw:text-gray-400">
+                          Nombre de Usuario
+                        </label>
                         <input
                           className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
                           value={collabUsername}
@@ -2440,7 +2475,9 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                       {collabType === 'online' ? (
                         <>
                           <div>
-                            <label className="tw:block tw:text-[10px] tw:text-gray-400">ID de la Sala</label>
+                            <label className="tw:block tw:text-[10px] tw:text-gray-400">
+                              ID de la Sala
+                            </label>
                             <input
                               className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:font-mono"
                               value={collabRoomId}
@@ -2449,7 +2486,9 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                             />
                           </div>
                           <div>
-                            <label className="tw:block tw:text-[10px] tw:text-gray-400">Servidor Relay (Opcional)</label>
+                            <label className="tw:block tw:text-[10px] tw:text-gray-400">
+                              Servidor Relay (Opcional)
+                            </label>
                             <input
                               className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:font-mono tw:text-[10px]"
                               value={collabServerUrl}
@@ -2461,7 +2500,9 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                       ) : (
                         <>
                           <div>
-                            <label className="tw:block tw:text-[10px] tw:text-gray-400">IP del Anfitrión</label>
+                            <label className="tw:block tw:text-[10px] tw:text-gray-400">
+                              IP del Anfitrión
+                            </label>
                             <input
                               className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
                               value={collabHostIp}
@@ -2470,7 +2511,9 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                             />
                           </div>
                           <div>
-                            <label className="tw:block tw:text-[10px] tw:text-gray-400">Puerto</label>
+                            <label className="tw:block tw:text-[10px] tw:text-gray-400">
+                              Puerto
+                            </label>
                             <input
                               type="number"
                               className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
@@ -2496,7 +2539,8 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                     <div className="tw:flex tw:justify-between tw:items-start tw:bg-slate-50 tw:border tw:p-3 tw:rounded">
                       <div className="tw:space-y-1 tw:flex-1 tw:mr-2">
                         <p className="tw:font-semibold tw:text-slate-800">
-                          Sesión {collabType === 'online' ? 'Online' : 'Local'} Activa: {collabRole === 'host' ? 'Anfitrión' : 'Invitado'}
+                          Sesión {collabType === 'online' ? 'Online' : 'Local'} Activa:{' '}
+                          {collabRole === 'host' ? 'Anfitrión' : 'Invitado'}
                         </p>
                         {collabType === 'online' ? (
                           <div>
@@ -2522,7 +2566,10 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                             <div className="tw:flex tw:flex-wrap tw:gap-1 tw:mt-1">
                               {collabIps.length > 0 ? (
                                 collabIps.map((ip) => (
-                                  <span key={ip} className="tw:bg-slate-200 tw:text-slate-700 tw:px-1.5 tw:py-0.5 tw:rounded tw:text-[10px] tw:font-mono">
+                                  <span
+                                    key={ip}
+                                    className="tw:bg-slate-200 tw:text-slate-700 tw:px-1.5 tw:py-0.5 tw:rounded tw:text-[10px] tw:font-mono"
+                                  >
                                     {ip}:{collabPort}
                                   </span>
                                 ))
@@ -2535,14 +2582,22 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                           </div>
                         ) : (
                           <p className="tw:text-[10px] tw:text-gray-500">
-                            Conectado a: <span className="tw:font-mono">{collabHostIp}:{collabPort}</span>
+                            Conectado a:{' '}
+                            <span className="tw:font-mono">
+                              {collabHostIp}:{collabPort}
+                            </span>
                           </p>
                         )}
                         <div className="tw:pt-1">
-                          <span className="tw:text-[10px] tw:text-gray-400">Usuarios en línea:</span>
+                          <span className="tw:text-[10px] tw:text-gray-400">
+                            Usuarios en línea:
+                          </span>
                           <div className="tw:flex tw:flex-wrap tw:gap-1.5 tw:mt-1">
                             {collabActiveUsers.map((user) => (
-                              <span key={user} className="tw:inline-flex tw:items-center tw:gap-1 tw:bg-green-50 tw:border tw:border-green-100 tw:text-green-800 tw:text-[10px] tw:px-2 tw:py-0.5 tw:rounded-full">
+                              <span
+                                key={user}
+                                className="tw:inline-flex tw:items-center tw:gap-1 tw:bg-green-50 tw:border tw:border-green-100 tw:text-green-800 tw:text-[10px] tw:px-2 tw:py-0.5 tw:rounded-full"
+                              >
                                 <span className="tw:w-1.5 tw:h-1.5 tw:rounded-full tw:bg-green-500" />
                                 {user}
                               </span>
@@ -2599,11 +2654,17 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                           </p>
                         ) : (
                           collabChatMessages.map((msg, idx) => (
-                            <div key={idx} className="tw:text-[11px] tw:bg-white tw:p-1.5 tw:rounded tw:border tw:shadow-sm">
+                            <div
+                              key={idx}
+                              className="tw:text-[11px] tw:bg-white tw:p-1.5 tw:rounded tw:border tw:shadow-sm"
+                            >
                               <div className="tw:flex tw:justify-between tw:mb-0.5">
                                 <span className="tw:font-bold tw:text-slate-700">{msg.user}</span>
                                 <span className="tw:text-[9px] tw:text-gray-400">
-                                  {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  {new Date(msg.timestamp).toLocaleTimeString([], {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })}
                                 </span>
                               </div>
                               <p className="tw:text-gray-600">{msg.message}</p>

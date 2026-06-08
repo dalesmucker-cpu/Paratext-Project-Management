@@ -440,7 +440,9 @@ const renderFootnotes = (node: React.ReactNode): React.ReactNode => {
   }
 
   if (Array.isArray(node)) {
-    return node.map((child, idx) => <React.Fragment key={idx}>{renderFootnotes(child)}</React.Fragment>);
+    return node.map((child, idx) => (
+      <React.Fragment key={idx}>{renderFootnotes(child)}</React.Fragment>
+    ));
   }
 
   return node;
@@ -491,7 +493,19 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   const [selectedVerseNum, setSelectedVerseNum] = useState<number | null>(null);
   const [notesPopupVerseNum, setNotesPopupVerseNum] = useState<number | null>(null);
   const [currentUser, setCurrentUser] = useState('');
-  const [collabCursors, setCollabCursors] = useState<Record<string, { projectId: string; book: string; chapter: number; verse: number | null; offset?: number | null; timestamp?: number }>>({});
+  const [collabCursors, setCollabCursors] = useState<
+    Record<
+      string,
+      {
+        projectId: string;
+        book: string;
+        chapter: number;
+        verse: number | null;
+        offset?: number | null;
+        timestamp?: number;
+      }
+    >
+  >({});
   const [teamMembers, setTeamMembers] = useState<string[]>([]);
 
   const getCursorColors = (user: string) => {
@@ -545,7 +559,10 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     );
   };
 
-  const renderVerseTextWithCursors = (text: string, editors: { user: string; offset: number }[]) => {
+  const renderVerseTextWithCursors = (
+    text: string,
+    editors: { user: string; offset: number }[],
+  ) => {
     if (editors.length === 0) return text;
     const sorted = [...editors].sort((a, b) => a.offset - b.offset);
     const elements: React.ReactNode[] = [];
@@ -594,7 +611,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
         elements.push(text.substring(lastIndex));
       }
       currentGlobalCharOffset += text.length;
-      return elements.length > 1 ? <>{elements}</> : elements[0] ?? '';
+      return elements.length > 1 ? <>{elements}</> : (elements[0] ?? '');
     };
 
     const traverse = (node: React.ReactNode): React.ReactNode => {
@@ -606,7 +623,11 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
         const element = node as React.ReactElement<any>;
         if (element.props && element.props.children) {
           const processedChildren = traverse(element.props.children);
-          return React.cloneElement(element, { ...element.props, key: element.key }, processedChildren);
+          return React.cloneElement(
+            element,
+            { ...element.props, key: element.key },
+            processedChildren,
+          );
         }
         return node;
       }
@@ -657,38 +678,11 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     }
   }, [projectId, currentUser]);
 
-  const loadChapter = useCallback(async (bookCode: string, chapterNum: number) => {
-    if (!bookCode) return;
-    setLoading(true);
-    try {
-      const textRes = await papi.commands.sendCommand(
-        'paratextProjectManager.getChapterText',
-        projectId,
-        bookCode,
-        chapterNum,
-      );
-      const parsedText = JSON.parse(textRes) as {
-        blocks: ChapterBlock[];
-        totalChapters: number;
-        error?: string;
-      };
-      if (parsedText.error) {
-        setError(`Error del archivo USFM: ${parsedText.error}`);
-        setChapterBlocks([]);
-      } else {
-        setChapterBlocks(parsedText.blocks);
-        setTotalChapters(parsedText.totalChapters || 1);
-        setError('');
-      }
-
-      // Load notes asynchronously to speed up chapter switching
-      loadNotes().catch((err) => {
-        console.error('Failed to load notes in background:', err);
-      });
-    } catch (err) {
-      // Auto-retry once after 3s — handles papi timeouts after long idle
+  const loadChapter = useCallback(
+    async (bookCode: string, chapterNum: number) => {
+      if (!bookCode) return;
+      setLoading(true);
       try {
-        await new Promise((r) => setTimeout(r, 3000));
         const textRes = await papi.commands.sendCommand(
           'paratextProjectManager.getChapterText',
           projectId,
@@ -708,17 +702,47 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
           setTotalChapters(parsedText.totalChapters || 1);
           setError('');
         }
-        loadNotes().catch((nErr) => {
-          console.error('Failed to load notes in background on retry:', nErr);
+
+        // Load notes asynchronously to speed up chapter switching
+        loadNotes().catch((err) => {
+          console.error('Failed to load notes in background:', err);
         });
-      } catch (retryErr) {
-        console.error(retryErr);
-        setError('Error al cargar texto o notas.');
+      } catch (err) {
+        // Auto-retry once after 3s — handles papi timeouts after long idle
+        try {
+          await new Promise((r) => setTimeout(r, 3000));
+          const textRes = await papi.commands.sendCommand(
+            'paratextProjectManager.getChapterText',
+            projectId,
+            bookCode,
+            chapterNum,
+          );
+          const parsedText = JSON.parse(textRes) as {
+            blocks: ChapterBlock[];
+            totalChapters: number;
+            error?: string;
+          };
+          if (parsedText.error) {
+            setError(`Error del archivo USFM: ${parsedText.error}`);
+            setChapterBlocks([]);
+          } else {
+            setChapterBlocks(parsedText.blocks);
+            setTotalChapters(parsedText.totalChapters || 1);
+            setError('');
+          }
+          loadNotes().catch((nErr) => {
+            console.error('Failed to load notes in background on retry:', nErr);
+          });
+        } catch (retryErr) {
+          console.error(retryErr);
+          setError('Error al cargar texto o notas.');
+        }
+      } finally {
+        setLoading(false);
       }
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId, loadNotes]);
+    },
+    [projectId, loadNotes],
+  );
 
   const lastBroadcastTimeRef = useRef<number>(0);
   const pendingBroadcastRef = useRef<NodeJS.Timeout | null>(null);
@@ -729,7 +753,12 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   const editingVerseNumRef = useRef<number | null>(null);
   // Tracks verse updates triggered by the LOCAL user so the verse_update listener
   // doesn't trigger a redundant loadChapter that could overwrite the edit.
-  const selfVerseUpdateRef = useRef<{ book: string; chapter: number; verse: number; ts: number } | null>(null);
+  const selfVerseUpdateRef = useRef<{
+    book: string;
+    chapter: number;
+    verse: number;
+    ts: number;
+  } | null>(null);
 
   useEffect(() => {
     return () => {
@@ -1077,100 +1106,108 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   useEffect(() => {
     let unsubEvent: any;
     try {
-      unsubEvent = papi.network.getNetworkEvent<any>(
-        'paratextProjectManager.onCollabEvent',
-      )((event: any) => {
-        if (!event) return;
-        const { type, payload } = event;
-        const currentProjId = projectIdRef.current;
-        const currentUsr = currentUserRef.current;
-        const currentBook = selectedBookRef.current;
-        const currentChapter = selectedChapterRef.current;
+      unsubEvent = papi.network.getNetworkEvent<any>('paratextProjectManager.onCollabEvent')(
+        (event: any) => {
+          if (!event) return;
+          const { type, payload } = event;
+          const currentProjId = projectIdRef.current;
+          const currentUsr = currentUserRef.current;
+          const currentBook = selectedBookRef.current;
+          const currentChapter = selectedChapterRef.current;
 
-        if (type === 'cursor_update') {
-          if (!payload?.user || payload.user === currentUsr || payload.projectId !== currentProjId) {
-            return;
-          }
-          setCollabCursors((prev) => {
-            const next = { ...prev };
-            if (payload.verse === null) {
-              delete next[payload.user];
-            } else {
-              next[payload.user] = { ...payload, timestamp: payload.timestamp ?? Date.now() };
-            }
-            return next;
-          });
-        } else if (type === 'note_update') {
-          if (payload.projectId === currentProjId) {
-            loadNotesRef.current();
-          }
-        } else if (type === 'verse_update') {
-          if (
-            payload.projectId === currentProjId &&
-            payload.book === currentBook &&
-            payload.chapter === currentChapter
-          ) {
-            // CRITICAL: Do NOT reload the chapter if the user is currently editing.
-            // The EditableVerse uses contentEditable with the chapterBlocks text as initialText.
-            // Reloading chapterBlocks would cause React to re-render the DOM and
-            // ERASE the user's in-progress typing (data loss!).
-            if (isEditingVerseRef.current) {
-              console.log(`[collab] Skipped verse_update reload — user is editing verse ${editingVerseNumRef.current}`);
-              return;
-            }
-            // Also skip if this verse_update is from our OWN save (avoid double loadChapter)
-            const self = selfVerseUpdateRef.current;
+          if (type === 'cursor_update') {
             if (
-              self &&
-              self.book === payload.book &&
-              self.chapter === payload.chapter &&
-              self.verse === payload.verse &&
-              Date.now() - self.ts < 5000
+              !payload?.user ||
+              payload.user === currentUsr ||
+              payload.projectId !== currentProjId
             ) {
-              console.log(`[collab] Skipped self-triggered verse_update for ${payload.book} ${payload.chapter}:${payload.verse}`);
-              selfVerseUpdateRef.current = null;
               return;
             }
-            loadChapterRef.current(currentBook, currentChapter);
-          }
-        } else if (type === 'verse_edit') {
-          // Live keystroke broadcast from another collaborator.
-          // Apply it optimistically to the displayed verse text (do NOT save).
-          if (
-            payload &&
-            payload.projectId === currentProjId &&
-            payload.book === currentBook &&
-            payload.chapter === currentChapter &&
-            payload.user !== currentUsr
-          ) {
-            // Don't overwrite the verse that the LOCAL user is currently editing
-            if (isEditingVerseRef.current && editingVerseNumRef.current === payload.verse) {
-              return;
+            setCollabCursors((prev) => {
+              const next = { ...prev };
+              if (payload.verse === null) {
+                delete next[payload.user];
+              } else {
+                next[payload.user] = { ...payload, timestamp: payload.timestamp ?? Date.now() };
+              }
+              return next;
+            });
+          } else if (type === 'note_update') {
+            if (payload.projectId === currentProjId) {
+              loadNotesRef.current();
             }
-            const newText = payload.newText ?? '';
-            setChapterBlocks((prev) =>
-              prev.map((block) => {
-                if (block.type === 'paragraph' || block.type === 'poetry') {
-                  return {
-                    ...block,
-                    children: block.children.map((child) => {
-                      if (child.type === 'verse' && child.number === payload.verse) {
-                        return { ...child, text: newText };
-                      }
-                      return child;
-                    }),
-                  };
-                }
-                return block;
-              }),
-            );
+          } else if (type === 'verse_update') {
+            if (
+              payload.projectId === currentProjId &&
+              payload.book === currentBook &&
+              payload.chapter === currentChapter
+            ) {
+              // CRITICAL: Do NOT reload the chapter if the user is currently editing.
+              // The EditableVerse uses contentEditable with the chapterBlocks text as initialText.
+              // Reloading chapterBlocks would cause React to re-render the DOM and
+              // ERASE the user's in-progress typing (data loss!).
+              if (isEditingVerseRef.current) {
+                console.log(
+                  `[collab] Skipped verse_update reload — user is editing verse ${editingVerseNumRef.current}`,
+                );
+                return;
+              }
+              // Also skip if this verse_update is from our OWN save (avoid double loadChapter)
+              const self = selfVerseUpdateRef.current;
+              if (
+                self &&
+                self.book === payload.book &&
+                self.chapter === payload.chapter &&
+                self.verse === payload.verse &&
+                Date.now() - self.ts < 5000
+              ) {
+                console.log(
+                  `[collab] Skipped self-triggered verse_update for ${payload.book} ${payload.chapter}:${payload.verse}`,
+                );
+                selfVerseUpdateRef.current = null;
+                return;
+              }
+              loadChapterRef.current(currentBook, currentChapter);
+            }
+          } else if (type === 'verse_edit') {
+            // Live keystroke broadcast from another collaborator.
+            // Apply it optimistically to the displayed verse text (do NOT save).
+            if (
+              payload &&
+              payload.projectId === currentProjId &&
+              payload.book === currentBook &&
+              payload.chapter === currentChapter &&
+              payload.user !== currentUsr
+            ) {
+              // Don't overwrite the verse that the LOCAL user is currently editing
+              if (isEditingVerseRef.current && editingVerseNumRef.current === payload.verse) {
+                return;
+              }
+              const newText = payload.newText ?? '';
+              setChapterBlocks((prev) =>
+                prev.map((block) => {
+                  if (block.type === 'paragraph' || block.type === 'poetry') {
+                    return {
+                      ...block,
+                      children: block.children.map((child) => {
+                        if (child.type === 'verse' && child.number === payload.verse) {
+                          return { ...child, text: newText };
+                        }
+                        return child;
+                      }),
+                    };
+                  }
+                  return block;
+                }),
+              );
+            }
+          } else if (type === 'user_changed') {
+            if (payload.username) {
+              setCurrentUser(payload.username);
+            }
           }
-        } else if (type === 'user_changed') {
-          if (payload.username) {
-            setCurrentUser(payload.username);
-          }
-        }
-      });
+        },
+      );
     } catch (e) {
       console.error('Failed to subscribe to collab event:', e);
     }
@@ -1217,7 +1254,15 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       }
     };
     updateCursor();
-  }, [isEditingVerse, selectedVerseNum, selectedBook, selectedChapter, currentUser, projectId, initialOffset]);
+  }, [
+    isEditingVerse,
+    selectedVerseNum,
+    selectedBook,
+    selectedChapter,
+    currentUser,
+    projectId,
+    initialOffset,
+  ]);
 
   // Scroll to active verse element when selectedVerseNum or chapterBlocks changes
   useEffect(() => {
@@ -1451,7 +1496,11 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
         <mark
           key={`${keyBase}-hl`}
           className="tw:transition-colors"
-          style={{ backgroundColor: 'rgba(99, 102, 241, 0.28)', borderRadius: '3px', padding: '0 2px' }}
+          style={{
+            backgroundColor: 'rgba(99, 102, 241, 0.28)',
+            borderRadius: '3px',
+            padding: '0 2px',
+          }}
         >
           {text.substring(safeStart, safeEnd)}
         </mark>
@@ -1576,7 +1625,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     } finally {
       setLoading(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, scrollGroupId, setScrRef]);
 
   useEffect(() => {
@@ -1846,7 +1895,9 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
               showErrorMessage(`Error al enviar adjunto: ${res}`);
             }
           } else {
-            showErrorMessage(`Error al guardar archivo adjunto: ${saveRes?.error || 'Unknown error'}`);
+            showErrorMessage(
+              `Error al guardar archivo adjunto: ${saveRes?.error || 'Unknown error'}`,
+            );
           }
         } catch (err) {
           showErrorMessage(`Error al guardar adjunto: ${err}`);
@@ -1920,11 +1971,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   };
 
   // Delete Comment Handler
-  const handleDeleteComment = (
-    threadId: string,
-    commentDate: string,
-    commentAuthor: string,
-  ) => {
+  const handleDeleteComment = (threadId: string, commentDate: string, commentAuthor: string) => {
     setCommentToDelete({ threadId, commentDate, commentAuthor });
   };
 
@@ -1970,7 +2017,10 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       setStartPosition(offset);
 
       const before = fullText.substring(Math.max(0, offset - 30), offset);
-      const after = fullText.substring(offset + selectedStr.length, offset + selectedStr.length + 30);
+      const after = fullText.substring(
+        offset + selectedStr.length,
+        offset + selectedStr.length + 30,
+      );
       setContextBefore(before);
       setContextAfter(after);
       return;
@@ -2017,7 +2067,10 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       setStartPosition(offset);
 
       const before = fullText.substring(Math.max(0, offset - 30), offset);
-      const after = fullText.substring(offset + selectedStr.length, offset + selectedStr.length + 30);
+      const after = fullText.substring(
+        offset + selectedStr.length,
+        offset + selectedStr.length + 30,
+      );
       setContextBefore(before);
       setContextAfter(after);
 
@@ -2217,7 +2270,10 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                     if (val) {
                       setCurrentUser(val);
                       try {
-                        await papi.commands.sendCommand('paratextProjectManager.setCurrentUser', val);
+                        await papi.commands.sendCommand(
+                          'paratextProjectManager.setCurrentUser',
+                          val,
+                        );
                       } catch (_) {}
                     }
                   }}
@@ -2375,16 +2431,24 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                           }}
                           className="tw:relative tw:inline tw:rounded tw:transition-all tw:py-0.5 tw:cursor-text"
                           style={{
-                            ...otherEditorHighlight ? { backgroundColor: otherEditorHighlight, padding: '2px 4px', borderRadius: '4px' } : {},
+                            ...(otherEditorHighlight
+                              ? {
+                                  backgroundColor: otherEditorHighlight,
+                                  padding: '2px 4px',
+                                  borderRadius: '4px',
+                                }
+                              : {}),
                             // Show the dashed placeholder only when not actively editing
-                            ...(isEmpty && !isEditing ? {
-                              minWidth: '32px',
-                              display: 'inline-block',
-                              height: '1.2em',
-                              verticalAlign: 'middle',
-                              borderBottom: '1px dashed #94a3b8',
-                              marginRight: '4px',
-                            } : {}),
+                            ...(isEmpty && !isEditing
+                              ? {
+                                  minWidth: '32px',
+                                  display: 'inline-block',
+                                  height: '1.2em',
+                                  verticalAlign: 'middle',
+                                  borderBottom: '1px dashed #94a3b8',
+                                  marginRight: '4px',
+                                }
+                              : {}),
                           }}
                         >
                           {/* Verse number tag */}
@@ -2411,7 +2475,9 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                                 setIsEditingVerse(false);
                                 setSelectedVerseNum(null);
                               }}
-                              onContextMenu={(e) => handleVerseContextMenu(e, child.number, child.text)}
+                              onContextMenu={(e) =>
+                                handleVerseContextMenu(e, child.number, child.text)
+                              }
                               onCursorChange={(offset) => {
                                 handleCursorChange(child.number, offset);
                               }}
@@ -2443,7 +2509,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                                         child.number,
                                       ),
                                   editorsWithCursors,
-                                )
+                                ),
                               )}
                             </span>
                           )}
@@ -2811,9 +2877,12 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       {commentToDelete && (
         <div className="tw:fixed tw:inset-0 tw:bg-black/50 tw:flex tw:items-center tw:justify-center tw:z-[10001] tw:backdrop-blur-sm">
           <div className="tw:bg-white tw:rounded-xl tw:shadow-xl tw:p-6 tw:w-96 tw:max-w-[90%] tw:border tw:border-slate-200">
-            <h3 className="tw:text-lg tw:font-bold tw:text-slate-800 tw:mb-2">¿Eliminar comentario?</h3>
+            <h3 className="tw:text-lg tw:font-bold tw:text-slate-800 tw:mb-2">
+              ¿Eliminar comentario?
+            </h3>
             <p className="tw:text-sm tw:text-slate-600 tw:mb-5">
-              ¿Estás seguro de que quieres eliminar este comentario? Esta acción no se puede deshacer.
+              ¿Estás seguro de que quieres eliminar este comentario? Esta acción no se puede
+              deshacer.
             </p>
             <div className="tw:flex tw:justify-end tw:gap-3">
               <button

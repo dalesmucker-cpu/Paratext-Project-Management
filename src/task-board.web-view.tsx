@@ -108,7 +108,12 @@ function EditTaskModal({
   );
 
   // Clean up debounce timer on unmount
-  useEffect(() => () => { if (liveDebounceRef.current) clearTimeout(liveDebounceRef.current); }, []);
+  useEffect(
+    () => () => {
+      if (liveDebounceRef.current) clearTimeout(liveDebounceRef.current);
+    },
+    [],
+  );
 
   const toggleAssignee = (name: string) => {
     const next = assignees.includes(name)
@@ -120,23 +125,68 @@ function EditTaskModal({
 
   const handleBookChange = (e: ChangeEvent<HTMLSelectElement>) => {
     setBook(e.target.value);
-    scheduleLive(e.target.value, chapter, stage, assignees, notes, deadline, estimatedHours, loggedHours);
+    scheduleLive(
+      e.target.value,
+      chapter,
+      stage,
+      assignees,
+      notes,
+      deadline,
+      estimatedHours,
+      loggedHours,
+    );
   };
   const handleChapterChange = (e: ChangeEvent<HTMLInputElement>) => {
     setChapter(e.target.value);
-    scheduleLive(book, e.target.value, stage, assignees, notes, deadline, estimatedHours, loggedHours);
+    scheduleLive(
+      book,
+      e.target.value,
+      stage,
+      assignees,
+      notes,
+      deadline,
+      estimatedHours,
+      loggedHours,
+    );
   };
   const handleStageChange = (e: ChangeEvent<HTMLSelectElement>) => {
     setStage(e.target.value);
-    scheduleLive(book, chapter, e.target.value, assignees, notes, deadline, estimatedHours, loggedHours);
+    scheduleLive(
+      book,
+      chapter,
+      e.target.value,
+      assignees,
+      notes,
+      deadline,
+      estimatedHours,
+      loggedHours,
+    );
   };
   const handleNotesChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
     setNotes(e.target.value);
-    scheduleLive(book, chapter, stage, assignees, e.target.value, deadline, estimatedHours, loggedHours);
+    scheduleLive(
+      book,
+      chapter,
+      stage,
+      assignees,
+      e.target.value,
+      deadline,
+      estimatedHours,
+      loggedHours,
+    );
   };
   const handleDeadlineChange = (e: ChangeEvent<HTMLInputElement>) => {
     setDeadline(e.target.value);
-    scheduleLive(book, chapter, stage, assignees, notes, e.target.value, estimatedHours, loggedHours);
+    scheduleLive(
+      book,
+      chapter,
+      stage,
+      assignees,
+      notes,
+      e.target.value,
+      estimatedHours,
+      loggedHours,
+    );
   };
   const handleEstimatedHoursChange = (e: ChangeEvent<HTMLInputElement>) => {
     setEstimatedHours(e.target.value);
@@ -152,7 +202,9 @@ function EditTaskModal({
       clearTimeout(liveDebounceRef.current);
       liveDebounceRef.current = null;
     }
-    onSave(buildDraft(book, chapter, stage, assignees, notes, deadline, estimatedHours, loggedHours));
+    onSave(
+      buildDraft(book, chapter, stage, assignees, notes, deadline, estimatedHours, loggedHours),
+    );
     onClose();
   };
 
@@ -1078,8 +1130,6 @@ globalThis.webViewComponent = function TaskBoardWebView({
     loadTasks();
   }, [loadTasks]);
 
-
-
   // Background auto-refresh — silently picks up changes saved by other computers
   const savingRef = useRef(false);
   useEffect(() => {
@@ -1388,18 +1438,20 @@ globalThis.webViewComponent = function TaskBoardWebView({
     if (!projectId) return undefined;
     let unsub: any;
     try {
-      unsub = papi.network.getNetworkEvent<any>(
-        'paratextProjectManager.onCollabEvent',
-      )((event: any) => {
-        if (!event) return;
-        if (event.type === 'tasks_update' && event.payload?.projectId === projectId) {
-          silentRefresh();
-        }
-      });
+      unsub = papi.network.getNetworkEvent<any>('paratextProjectManager.onCollabEvent')(
+        (event: any) => {
+          if (!event) return;
+          if (event.type === 'tasks_update' && event.payload?.projectId === projectId) {
+            silentRefresh();
+          }
+        },
+      );
     } catch (err) {
       console.warn('[TaskBoard] Error subscribing to collab event:', err);
     }
-    return () => { if (unsub) unsub(); };
+    return () => {
+      if (unsub) unsub();
+    };
   }, [projectId, silentRefresh]);
 
   /** Live-update a task without adding an activity log entry — used for real-time typing sync */

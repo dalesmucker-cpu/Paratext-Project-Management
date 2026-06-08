@@ -267,11 +267,7 @@ export default function UnreadNotesWidget({
   };
 
   // Delete Comment Handler
-  const handleDeleteComment = (
-    threadId: string,
-    commentDate: string,
-    commentAuthor: string,
-  ) => {
+  const handleDeleteComment = (threadId: string, commentDate: string, commentAuthor: string) => {
     setCommentToDelete({ threadId, commentDate, commentAuthor });
   };
 
@@ -479,15 +475,15 @@ export default function UnreadNotesWidget({
   useEffect(() => {
     let unsub: any;
     try {
-      unsub = papi.network.getNetworkEvent<any>(
-        'paratextProjectManager.onCollabEvent',
-      )((event: any) => {
-        if (!event) return;
-        const { type, payload } = event;
-        if (type === 'note_update' && payload.projectId === projectId) {
-          loadNotes();
-        }
-      });
+      unsub = papi.network.getNetworkEvent<any>('paratextProjectManager.onCollabEvent')(
+        (event: any) => {
+          if (!event) return;
+          const { type, payload } = event;
+          if (type === 'note_update' && payload.projectId === projectId) {
+            loadNotes();
+          }
+        },
+      );
     } catch (err) {
       console.warn('Error subscribing to collab event in unread-notes-widget:', err);
     }
@@ -707,7 +703,9 @@ export default function UnreadNotesWidget({
               <label className="tw:block tw:text-gray-500 tw:mb-0.5">Mostrar</label>
               <select
                 value={settings.showMode}
-                onChange={(e) => saveSettings({ showMode: e.target.value as 'all' | 'unread_only' })}
+                onChange={(e) =>
+                  saveSettings({ showMode: e.target.value as 'all' | 'unread_only' })
+                }
                 className="tw:w-full tw:border tw:rounded tw:px-1.5 tw:py-0.5 tw:bg-white"
               >
                 <option value="unread_only">Solo no leídas</option>
@@ -718,7 +716,9 @@ export default function UnreadNotesWidget({
               <label className="tw:block tw:text-gray-500 tw:mb-0.5">Filtro de hilos</label>
               <select
                 value={settings.scope}
-                onChange={(e) => saveSettings({ scope: e.target.value as 'all' | 'assigned_to_me' | 'my_threads' })}
+                onChange={(e) =>
+                  saveSettings({ scope: e.target.value as 'all' | 'assigned_to_me' | 'my_threads' })
+                }
                 className="tw:w-full tw:border tw:rounded tw:px-1.5 tw:py-0.5 tw:bg-white"
               >
                 <option value="all">Todos los hilos</option>
@@ -758,7 +758,11 @@ export default function UnreadNotesWidget({
               <label className="tw:block tw:text-gray-500 tw:mb-0.5">Tamaño de letra</label>
               <select
                 value={settings.textSize || 'medium'}
-                onChange={(e) => saveSettings({ textSize: e.target.value as 'small' | 'medium' | 'large' | 'xlarge' })}
+                onChange={(e) =>
+                  saveSettings({
+                    textSize: e.target.value as 'small' | 'medium' | 'large' | 'xlarge',
+                  })
+                }
                 className="tw:w-full tw:border tw:rounded tw:px-1.5 tw:py-0.5 tw:bg-white"
               >
                 <option value="small">Pequeño</option>
@@ -780,7 +784,9 @@ export default function UnreadNotesWidget({
         className={`tw:divide-y tw:divide-gray-100 tw:overflow-y-auto tw:transition-all ${isExpanded ? 'tw:max-h-[650px]' : 'tw:max-h-[300px]'}`}
       >
         {loading && threads.length === 0 ? (
-          <div className="tw:p-8 tw:text-center tw:text-slate-500 tw:text-xs">Cargando notas...</div>
+          <div className="tw:p-8 tw:text-center tw:text-slate-500 tw:text-xs">
+            Cargando notas...
+          </div>
         ) : filteredThreads.length === 0 ? (
           <div className="tw:p-8 tw:text-center tw:text-slate-500 tw:text-xs">
             {settings.showMode === 'unread_only'
@@ -1017,9 +1023,12 @@ export default function UnreadNotesWidget({
       {commentToDelete && (
         <div className="tw:fixed tw:inset-0 tw:bg-black/50 tw:flex tw:items-center tw:justify-center tw:z-[9999] tw:backdrop-blur-sm">
           <div className="tw:bg-white tw:rounded-xl tw:shadow-xl tw:p-6 tw:w-96 tw:max-w-[90%] tw:border tw:border-slate-200">
-            <h3 className="tw:text-lg tw:font-bold tw:text-slate-800 tw:mb-2">¿Eliminar comentario?</h3>
+            <h3 className="tw:text-lg tw:font-bold tw:text-slate-800 tw:mb-2">
+              ¿Eliminar comentario?
+            </h3>
             <p className="tw:text-sm tw:text-slate-600 tw:mb-5">
-              ¿Estás seguro de que quieres eliminar este comentario? Esta acción no se puede deshacer.
+              ¿Estás seguro de que quieres eliminar este comentario? Esta acción no se puede
+              deshacer.
             </p>
             <div className="tw:flex tw:justify-end tw:gap-3">
               <button

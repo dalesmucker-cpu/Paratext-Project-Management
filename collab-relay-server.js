@@ -1,11 +1,9 @@
 /**
  * Standalone WebSocket Collaboration Relay Server for Paratext Project Manager
- * 
- * Dependencies:
- *   npm install ws
- * 
- * To run:
- *   node collab-relay-server.js
+ *
+ * Dependencies: npm install ws
+ *
+ * To run: node collab-relay-server.js
  */
 
 const http = require('http');
@@ -40,7 +38,12 @@ wss.on('connection', (ws) => {
       if (msg.type === 'host_room') {
         const { roomId, username } = msg.payload;
         if (!roomId || !username) {
-          ws.send(JSON.stringify({ type: 'error', payload: { message: 'Falta Room ID o Nombre de Usuario.' } }));
+          ws.send(
+            JSON.stringify({
+              type: 'error',
+              payload: { message: 'Falta Room ID o Nombre de Usuario.' },
+            }),
+          );
           return;
         }
 
@@ -49,7 +52,12 @@ wss.on('connection', (ws) => {
           const existing = rooms.get(roomId);
           // If the host is already active, prevent duplicate host
           if (existing.host && existing.host.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'error', payload: { message: 'La sala ya está siendo alojada por otro usuario.' } }));
+            ws.send(
+              JSON.stringify({
+                type: 'error',
+                payload: { message: 'La sala ya está siendo alojada por otro usuario.' },
+              }),
+            );
             return;
           }
           // Otherwise, clear the dead room
@@ -77,18 +85,35 @@ wss.on('connection', (ws) => {
       if (msg.type === 'join_room') {
         const { roomId, username } = msg.payload;
         if (!roomId || !username) {
-          ws.send(JSON.stringify({ type: 'error', payload: { message: 'Falta Room ID o Nombre de Usuario.' } }));
+          ws.send(
+            JSON.stringify({
+              type: 'error',
+              payload: { message: 'Falta Room ID o Nombre de Usuario.' },
+            }),
+          );
           return;
         }
 
         if (!rooms.has(roomId)) {
-          ws.send(JSON.stringify({ type: 'error', payload: { message: `La sala "${roomId}" no existe o el anfitrión no ha iniciado sesión.` } }));
+          ws.send(
+            JSON.stringify({
+              type: 'error',
+              payload: {
+                message: `La sala "${roomId}" no existe o el anfitrión no ha iniciado sesión.`,
+              },
+            }),
+          );
           return;
         }
 
         const room = rooms.get(roomId);
         if (room.usernames.has(username)) {
-          ws.send(JSON.stringify({ type: 'error', payload: { message: 'El nombre de usuario ya está en uso en esta sala.' } }));
+          ws.send(
+            JSON.stringify({
+              type: 'error',
+              payload: { message: 'El nombre de usuario ya está en uso en esta sala.' },
+            }),
+          );
           return;
         }
 
@@ -109,10 +134,18 @@ wss.on('connection', (ws) => {
         broadcastUserList(roomId);
 
         // Send system notice to the room
-        broadcastToRoom(roomId, {
-          type: 'chat_message',
-          payload: { user: 'Sistema', message: `${username} se ha unido a la colaboración.`, timestamp: Date.now() }
-        }, null);
+        broadcastToRoom(
+          roomId,
+          {
+            type: 'chat_message',
+            payload: {
+              user: 'Sistema',
+              message: `${username} se ha unido a la colaboración.`,
+              timestamp: Date.now(),
+            },
+          },
+          null,
+        );
 
         console.log(`[Guest Joined] Room: ${roomId}, User: ${username}`);
         return;
@@ -127,7 +160,6 @@ wss.on('connection', (ws) => {
           sendToUser(myRoomId, target, payload);
         }
       }
-
     } catch (err) {
       console.error('Error handling message:', err);
     }
@@ -140,10 +172,14 @@ wss.on('connection', (ws) => {
       if (myRole === 'host') {
         console.log(`[Host Left] Room closed: ${myRoomId}`);
         // Host disconnected: notify and disconnect all guests
-        broadcastToRoom(myRoomId, {
-          type: 'status_update',
-          payload: { role: 'none', error: 'El anfitrión ha cerrado la sesión.' }
-        }, ws);
+        broadcastToRoom(
+          myRoomId,
+          {
+            type: 'status_update',
+            payload: { role: 'none', error: 'El anfitrión ha cerrado la sesión.' },
+          },
+          ws,
+        );
 
         for (const guestWs of room.guests.values()) {
           if (guestWs.readyState === WebSocket.OPEN) {
@@ -157,10 +193,18 @@ wss.on('connection', (ws) => {
         room.usernames.delete(myUsername);
 
         broadcastUserList(myRoomId);
-        broadcastToRoom(myRoomId, {
-          type: 'chat_message',
-          payload: { user: 'Sistema', message: `${myUsername} ha salido de la colaboración.`, timestamp: Date.now() }
-        }, null);
+        broadcastToRoom(
+          myRoomId,
+          {
+            type: 'chat_message',
+            payload: {
+              user: 'Sistema',
+              message: `${myUsername} ha salido de la colaboración.`,
+              timestamp: Date.now(),
+            },
+          },
+          null,
+        );
       }
     }
   });

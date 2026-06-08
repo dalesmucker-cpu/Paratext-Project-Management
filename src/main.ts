@@ -96,7 +96,12 @@ let execToken: ExecutionToken;
 let notesHelperProcess: ChildProcess | undefined;
 let isDeactivating = false;
 let collabEventEmitter: any;
-let lastNavigatedVerse: { projectId: string; bookCode: string; chapter: number; verse: number } | null = null;
+let lastNavigatedVerse: {
+  projectId: string;
+  bookCode: string;
+  chapter: number;
+  verse: number;
+} | null = null;
 let localCollabRole: 'host' | 'client' | 'none' = 'none';
 const pendingNotesRequests = new Map<
   string,
@@ -144,7 +149,9 @@ function startNotesHelper(createProcess: ElevatedPrivileges['createProcess']): v
     return;
   }
   try {
-    const currentProcess = createProcess.fork(execToken, 'assets/notes-helper.js', [], { silent: true });
+    const currentProcess = createProcess.fork(execToken, 'assets/notes-helper.js', [], {
+      silent: true,
+    });
     notesHelperProcess = currentProcess;
 
     notesHelperProcess.on('message', (message: any) => {
@@ -216,7 +223,9 @@ function startNotesHelper(createProcess: ElevatedPrivileges['createProcess']): v
           return;
         }
       } catch (e) {
-        logger.warn(`Project Manager: Notes helper ping check failed on attempt ${helperStartAttempts}: ${e}`);
+        logger.warn(
+          `Project Manager: Notes helper ping check failed on attempt ${helperStartAttempts}: ${e}`,
+        );
       }
 
       // If we got here, it's unresponsive
@@ -869,7 +878,9 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
       }
       if (!pid) return undefined;
       pendingProjectId[TASK_BOARD_TYPE] = pid;
-      return papi.webViews.openWebView(TASK_BOARD_TYPE, undefined, { existingId: `task-board-${pid}` });
+      return papi.webViews.openWebView(TASK_BOARD_TYPE, undefined, {
+        existingId: `task-board-${pid}`,
+      });
     },
   );
 
@@ -903,7 +914,9 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
       }
       if (!pid) return undefined;
       pendingProjectId[PROJECT_OVERVIEW_TYPE] = pid;
-      return papi.webViews.openWebView(PROJECT_OVERVIEW_TYPE, undefined, { existingId: `project-overview-${pid}` });
+      return papi.webViews.openWebView(PROJECT_OVERVIEW_TYPE, undefined, {
+        existingId: `project-overview-${pid}`,
+      });
     },
   );
 
@@ -967,7 +980,9 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
                 const merged = mergeTaskStores(localContent, driveContent);
                 if (merged !== localContent && tasksPath) {
                   await runFileHelper('write', tasksPath, merged);
-                  logger.info(`Project Manager: getTasks background merged local+Drive for "${projectId}"`);
+                  logger.info(
+                    `Project Manager: getTasks background merged local+Drive for "${projectId}"`,
+                  );
                   if (collabEventEmitter) {
                     collabEventEmitter.emit({ type: 'tasks_update', payload: { projectId } });
                   }
@@ -975,7 +990,9 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
               } else {
                 if (tasksPath) {
                   await runFileHelper('write', tasksPath, driveContent);
-                  logger.info(`Project Manager: getTasks background synced Drive only (no local file before) for "${projectId}"`);
+                  logger.info(
+                    `Project Manager: getTasks background synced Drive only (no local file before) for "${projectId}"`,
+                  );
                   if (collabEventEmitter) {
                     collabEventEmitter.emit({ type: 'tasks_update', payload: { projectId } });
                   }
@@ -1043,7 +1060,9 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
             if (newFileId && newFileId !== existingFileId) {
               const updatedIds = { ...driveConfig.fileIds, [projectId]: newFileId };
               await writeTasksDriveConfig({ fileIds: updatedIds });
-              logger.info(`Project Manager: Drive task file ${newFileId} created for "${projectId}"`);
+              logger.info(
+                `Project Manager: Drive task file ${newFileId} created for "${projectId}"`,
+              );
             }
           }
         } catch (driveErr) {
@@ -1063,10 +1082,12 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
       // --- Broadcast via LAN Collaboration if active ---
       if (localCollabRole !== 'none') {
         try {
-          await sendToNotesHelper('broadcastCollab', [{
-            type: 'tasks_update',
-            payload: { projectId, tasksJson }
-          }]);
+          await sendToNotesHelper('broadcastCollab', [
+            {
+              type: 'tasks_update',
+              payload: { projectId, tasksJson },
+            },
+          ]);
         } catch (e) {
           logger.warn(`Failed to broadcast tasks_update via collab: ${e}`);
         }
@@ -1469,7 +1490,9 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
       }
       if (!pid) return undefined;
       pendingProjectId[NOTES_VIEWER_TYPE] = pid;
-      return papi.webViews.openWebView(NOTES_VIEWER_TYPE, undefined, { existingId: `notes-viewer-${pid}` });
+      return papi.webViews.openWebView(NOTES_VIEWER_TYPE, undefined, {
+        existingId: `notes-viewer-${pid}`,
+      });
     },
   );
 
@@ -1486,7 +1509,9 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
       }
       if (!pid) return undefined;
       pendingProjectId[SCRIPTURE_VIEWER_TYPE] = pid;
-      return papi.webViews.openWebView(SCRIPTURE_VIEWER_TYPE, undefined, { existingId: `scripture-viewer-${pid}` });
+      return papi.webViews.openWebView(SCRIPTURE_VIEWER_TYPE, undefined, {
+        existingId: `scripture-viewer-${pid}`,
+      });
     },
   );
 
@@ -1560,13 +1585,15 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         // --- Broadcast via LAN Collaboration if active ---
         if (localCollabRole !== 'none') {
           try {
-            await sendToNotesHelper('broadcastCollab', [{
-              type: 'note_update',
-              payload: {
-                projectId,
-                senderUser: authorName,
-              }
-            }]);
+            await sendToNotesHelper('broadcastCollab', [
+              {
+                type: 'note_update',
+                payload: {
+                  projectId,
+                  senderUser: authorName,
+                },
+              },
+            ]);
           } catch (e) {
             logger.warn(`Failed to broadcast note_update via collab for deletion: ${e}`);
           }
@@ -1618,14 +1645,16 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         // --- Broadcast via LAN Collaboration if active ---
         if (localCollabRole !== 'none') {
           try {
-            await sendToNotesHelper('broadcastCollab', [{
-              type: 'note_update',
-              payload: {
-                projectId,
-                senderUser: currentUser,
-                replyData
-              }
-            }]);
+            await sendToNotesHelper('broadcastCollab', [
+              {
+                type: 'note_update',
+                payload: {
+                  projectId,
+                  senderUser: currentUser,
+                  replyData,
+                },
+              },
+            ]);
           } catch (e) {
             logger.warn(`Failed to broadcast note_update via collab: ${e}`);
           }
@@ -1718,11 +1747,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
           newText,
         ])) as { status: string; error?: string } | string;
 
-        if (
-          typeof saveResult === 'object' &&
-          saveResult &&
-          saveResult.status === 'error'
-        ) {
+        if (typeof saveResult === 'object' && saveResult && saveResult.status === 'error') {
           logger.warn(`updateVerseText save failed: ${saveResult.error}`);
           return `error: ${saveResult.error}`;
         }

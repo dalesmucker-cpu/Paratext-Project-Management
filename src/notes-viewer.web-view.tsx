@@ -199,6 +199,77 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
   const fileInputRef = useRef<HTMLInputElement>(null);
   const commentsTimelineRef = useRef<HTMLDivElement>(null);
 
+  // Split pane resizing state and ref
+  const containerRef = useRef<HTMLDivElement>(null);
+  const leftWidthRef = useRef(350);
+  const [leftWidth, setLeftWidth] = useState(() => {
+    const saved = localStorage.getItem('notes_viewer_sidebar_width');
+    return saved ? parseInt(saved, 10) : 350;
+  });
+  leftWidthRef.current = leftWidth;
+
+  const isResizingRef = useRef(false);
+
+  const startResizing = () => {
+    isResizingRef.current = true;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    startResizing();
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    startResizing();
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizingRef.current || !containerRef.current) return;
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const newWidth = e.clientX - containerRect.left;
+      const minW = 200;
+      const maxW = Math.min(600, containerRect.width * 0.6);
+      const boundedWidth = Math.max(minW, Math.min(maxW, newWidth));
+      setLeftWidth(boundedWidth);
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!isResizingRef.current || !containerRef.current || e.touches.length === 0) return;
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const newWidth = e.touches[0].clientX - containerRect.left;
+      const minW = 200;
+      const maxW = Math.min(600, containerRect.width * 0.6);
+      const boundedWidth = Math.max(minW, Math.min(maxW, newWidth));
+      setLeftWidth(boundedWidth);
+    };
+
+    const handleMouseUp = () => {
+      if (isResizingRef.current) {
+        isResizingRef.current = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        localStorage.setItem('notes_viewer_sidebar_width', String(leftWidthRef.current));
+      }
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('touchmove', handleTouchMove);
+    window.addEventListener('touchend', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleMouseUp);
+    };
+  }, []);
+
+  const [mediaButtonsCollapsed, setMediaButtonsCollapsed] = useState(() => window.innerWidth < 640);
+
   // Fetch settings from user config
   const loadSettings = useCallback(async (user: string) => {
     if (!user) return;
@@ -345,17 +416,17 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
   useEffect(() => {
     let unsub: any;
     try {
-      unsub = papi.network.getNetworkEvent<any>(
-        'paratextProjectManager.onCollabEvent',
-      )((event: any) => {
-        if (!event) return;
-        const { type, payload } = event;
-        if (type === 'note_update' && payload.projectId === projectId) {
-          loadNotes();
-        } else if (type === 'user_changed' && payload.username) {
-          setCurrentUser(payload.username);
-        }
-      });
+      unsub = papi.network.getNetworkEvent<any>('paratextProjectManager.onCollabEvent')(
+        (event: any) => {
+          if (!event) return;
+          const { type, payload } = event;
+          if (type === 'note_update' && payload.projectId === projectId) {
+            loadNotes();
+          } else if (type === 'user_changed' && payload.username) {
+            setCurrentUser(payload.username);
+          }
+        },
+      );
     } catch (err) {
       console.warn('Error subscribing to collab event in notes-viewer:', err);
     }
@@ -377,8 +448,6 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, [loadNotes]);
-
-
 
   // Save Settings
   const saveSettings = async (updates: Partial<NotesDisplaySettings>) => {
@@ -643,11 +712,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
   };
 
   // Delete Comment Handler
-  const handleDeleteComment = (
-    threadId: string,
-    commentDate: string,
-    commentAuthor: string,
-  ) => {
+  const handleDeleteComment = (threadId: string, commentDate: string, commentAuthor: string) => {
     setCommentToDelete({ threadId, commentDate, commentAuthor });
   };
 
@@ -946,7 +1011,9 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
             <label className="tw:font-semibold tw:text-slate-600">Ámbito de hilos</label>
             <select
               value={settings.scope}
-              onChange={(e) => saveSettings({ scope: e.target.value as 'all' | 'assigned_to_me' | 'my_threads' })}
+              onChange={(e) =>
+                saveSettings({ scope: e.target.value as 'all' | 'assigned_to_me' | 'my_threads' })
+              }
               className="tw:w-full tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:bg-white"
             >
               <option value="all">Todos los hilos</option>
@@ -982,7 +1049,11 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
             <label className="tw:font-semibold tw:text-slate-600">Tamaño de letra</label>
             <select
               value={settings.textSize || 'medium'}
-              onChange={(e) => saveSettings({ textSize: e.target.value as 'small' | 'medium' | 'large' | 'xlarge' })}
+              onChange={(e) =>
+                saveSettings({
+                  textSize: e.target.value as 'small' | 'medium' | 'large' | 'xlarge',
+                })
+              }
               className="tw:w-full tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:bg-white"
             >
               <option value="small">Pequeño</option>
@@ -995,9 +1066,12 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
       )}
 
       {/* Main Split-Pane View */}
-      <div className="tw:flex-1 tw:flex tw:overflow-hidden tw:min-h-0">
+      <div className="tw:flex-1 tw:flex tw:overflow-hidden tw:min-h-0" ref={containerRef}>
         {/* Left Column: Thread List */}
-        <div className="tw:w-80 md:tw:w-96 tw:border-r tw:border-gray-200 tw:bg-white tw:flex tw:flex-col tw:shrink-0 tw:min-w-0">
+        <div
+          style={{ width: `${leftWidth}px` }}
+          className="tw:bg-white tw:flex tw:flex-col tw:shrink-0 tw:min-w-[200px]"
+        >
           {/* Quick Filters */}
           <div className="tw:p-3 tw:border-b tw:border-gray-100 tw:bg-slate-50/50 tw:space-y-2 tw:shrink-0">
             {/* Search Input */}
@@ -1125,6 +1199,14 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
           </div>
         </div>
 
+        {/* Drag Resizer Bar */}
+        <div
+          onMouseDown={handleMouseDown}
+          onTouchStart={handleTouchStart}
+          className="tw:w-[3px] tw:hover:w-1.5 tw:bg-slate-200 tw:hover:bg-indigo-400 active:tw:bg-indigo-650 tw:cursor-col-resize tw:shrink-0 tw:z-20 tw:transition-all tw:duration-150 tw:h-full"
+          title="Arrastra para cambiar el tamaño"
+        />
+
         {/* Right Column: Thread Detail */}
         <div className="tw:flex-1 tw:flex tw:flex-col tw:bg-slate-50 tw:min-w-0 tw:h-full tw:overflow-hidden">
           {selectedThread ? (
@@ -1186,7 +1268,10 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
               )}
 
               {/* Comments Timeline */}
-              <div ref={commentsTimelineRef} className="tw:flex-1 tw:overflow-y-auto tw:p-4 tw:space-y-4">
+              <div
+                ref={commentsTimelineRef}
+                className="tw:flex-1 tw:overflow-y-auto tw:p-4 tw:space-y-4"
+              >
                 <div className="tw:max-w-3xl tw:mx-auto tw:space-y-4">
                   {selectedThread.comments.map((comm, idx) => {
                     const isOwnComment = isMe(comm.user);
@@ -1288,7 +1373,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
               {/* Reply Box Section / Audio recording */}
               {isRecording ? (
                 <div className="tw:bg-white tw:border-t tw:border-gray-200 tw:p-4 tw:shrink-0 tw:shadow-lg">
-                  <div className="tw:max-w-3xl tw:mx-auto tw:flex tw:items-center tw:justify-between tw:gap-3 tw:bg-red-50/50 tw:p-3 tw:rounded-lg tw:border tw:border-red-100">
+                  <div className="tw:max-w-3xl tw:mx-auto tw:flex tw:flex-col sm:tw:flex-row tw:items-center tw:justify-between tw:gap-3 tw:bg-red-50/50 tw:p-3 tw:rounded-lg tw:border tw:border-red-100">
                     <span className="tw:text-red-600 tw:text-sm tw:flex tw:items-center tw:gap-2 tw:animate-pulse tw:font-medium">
                       <span className="tw:w-2.5 tw:h-2.5 tw:rounded-full tw:bg-red-600"></span>
                       Grabando nota de voz... ({formatDuration(recordDuration)})
@@ -1327,11 +1412,14 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                         className={`tw:w-full tw:border tw:border-gray-350 tw:rounded-lg tw:p-2 tw:focus:outline-none tw:focus:border-indigo-500 tw:focus:ring-1 tw:focus:ring-indigo-100 tw:resize-none ${inputSizeClass}`}
                       />
                     </div>
+                    {/* Media Buttons (Attachment & Audio) */}
                     <button
                       type="button"
                       onClick={handleAttachClick}
                       disabled={replying || attaching || !currentUser}
-                      className="tw:p-2 tw:bg-slate-100 tw:hover:bg-slate-200 tw:text-slate-700 tw:border tw:border-slate-200 tw:rounded-lg tw:transition-colors tw:h-[38px] tw:flex tw:items-center tw:justify-center tw:w-[38px] tw:cursor-pointer"
+                      className={`tw:p-2 tw:bg-slate-100 tw:hover:bg-slate-200 tw:text-slate-700 tw:border tw:border-slate-200 tw:rounded-lg tw:transition-colors tw:h-[34px] sm:tw:h-[38px] tw:w-[34px] sm:tw:w-[38px] tw:items-center tw:justify-center tw:cursor-pointer ${
+                        mediaButtonsCollapsed ? 'tw:hidden sm:tw:flex' : 'tw:flex'
+                      }`}
                       title="Adjuntar archivo"
                     >
                       {attaching ? '⏳' : '📎'}
@@ -1340,17 +1428,34 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                       type="button"
                       onClick={startRecording}
                       disabled={replying || attaching || !currentUser}
-                      className="tw:p-2 tw:bg-slate-100 tw:hover:bg-slate-200 tw:text-slate-700 tw:border tw:border-slate-200 tw:rounded-lg tw:transition-colors tw:h-[38px] tw:flex tw:items-center tw:justify-center tw:w-[38px] tw:cursor-pointer"
+                      className={`tw:p-2 tw:bg-slate-100 tw:hover:bg-slate-200 tw:text-slate-700 tw:border tw:border-slate-200 tw:rounded-lg tw:transition-colors tw:h-[34px] sm:tw:h-[38px] tw:w-[34px] sm:tw:w-[38px] tw:items-center tw:justify-center tw:cursor-pointer ${
+                        mediaButtonsCollapsed ? 'tw:hidden sm:tw:flex' : 'tw:flex'
+                      }`}
                       title="Grabar nota de voz"
                     >
                       🎙️
                     </button>
+                    {/* Collapse Toggle Button (visible only on small screens) */}
                     <button
+                      type="button"
+                      onClick={() => setMediaButtonsCollapsed(!mediaButtonsCollapsed)}
+                      className="sm:tw:hidden tw:p-2 tw:bg-slate-100 tw:hover:bg-slate-200 tw:text-slate-700 tw:border tw:border-slate-200 tw:rounded-lg tw:transition-colors tw:h-[34px] tw:w-[34px] tw:flex tw:items-center tw:justify-center tw:cursor-pointer tw:font-bold"
+                      title={
+                        mediaButtonsCollapsed
+                          ? 'Mostrar opciones de adjunto/audio'
+                          : 'Ocultar opciones'
+                      }
+                    >
+                      {mediaButtonsCollapsed ? '＋' : '－'}
+                    </button>
+                    {/* Send Button */}
+                    <button
+                      type="button"
                       onClick={() => handleReply(selectedThread)}
                       disabled={replying || attaching || !replyText.trim() || !currentUser}
-                      className="tw:px-4 tw:py-2 tw:bg-slate-600 tw:hover:bg-slate-700 tw:text-white tw:font-semibold tw:rounded-lg tw:text-xs tw:disabled:opacity-40 tw:whitespace-nowrap tw:transition-all tw:shadow-sm tw:h-[38px] tw:cursor-pointer"
+                      className="tw:px-3 sm:tw:px-4 tw:py-1.5 sm:tw:py-2 tw:bg-slate-600 tw:hover:bg-slate-700 tw:text-white tw:font-semibold tw:rounded-lg tw:text-[11px] sm:tw:text-xs tw:disabled:opacity-40 tw:whitespace-nowrap tw:transition-all tw:shadow-sm tw:h-[34px] sm:tw:h-[38px] tw:cursor-pointer tw:flex tw:items-center tw:justify-center"
                     >
-                      {replying ? 'Enviando...' : 'Responder'}
+                      {replying ? '⏳' : 'Responder'}
                     </button>
                   </div>
                 </div>
@@ -1370,9 +1475,12 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
       {commentToDelete && (
         <div className="tw:fixed tw:inset-0 tw:bg-black/50 tw:flex tw:items-center tw:justify-center tw:z-[9999] tw:backdrop-blur-sm">
           <div className="tw:bg-white tw:rounded-xl tw:shadow-xl tw:p-6 tw:w-96 tw:max-w-[90%] tw:border tw:border-slate-200">
-            <h3 className="tw:text-lg tw:font-bold tw:text-slate-800 tw:mb-2">¿Eliminar comentario?</h3>
+            <h3 className="tw:text-lg tw:font-bold tw:text-slate-800 tw:mb-2">
+              ¿Eliminar comentario?
+            </h3>
             <p className="tw:text-sm tw:text-slate-600 tw:mb-5">
-              ¿Estás seguro de que quieres eliminar este comentario? Esta acción no se puede deshacer.
+              ¿Estás seguro de que quieres eliminar este comentario? Esta acción no se puede
+              deshacer.
             </p>
             <div className="tw:flex tw:justify-end tw:gap-3">
               <button

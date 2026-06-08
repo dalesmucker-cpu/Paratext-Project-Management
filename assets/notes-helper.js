@@ -382,7 +382,9 @@ function parseUsfmChapter(content) {
       const beforeText = cleanUsfmText(cleanedText.substring(0, firstVerseIndex));
       if (beforeText) {
         if (activeVerseNum !== null) {
-          const existingVerse = children.find((c) => c.type === 'verse' && c.number === activeVerseNum);
+          const existingVerse = children.find(
+            (c) => c.type === 'verse' && c.number === activeVerseNum,
+          );
           if (existingVerse) {
             existingVerse.text += ' ' + beforeText;
           } else {
@@ -416,7 +418,9 @@ function parseUsfmChapter(content) {
       const clean = cleanUsfmText(cleanedText);
       if (clean) {
         if (activeVerseNum !== null) {
-          const existingVerse = children.find((c) => c.type === 'verse' && c.number === activeVerseNum);
+          const existingVerse = children.find(
+            (c) => c.type === 'verse' && c.number === activeVerseNum,
+          );
           if (existingVerse) {
             existingVerse.text += ' ' + clean;
           } else {
@@ -728,7 +732,10 @@ async function handleAction(action, args) {
       // Load read log
       let readLog = {};
       try {
-        const exists = await fs.promises.access(readLogPath).then(() => true).catch(() => false);
+        const exists = await fs.promises
+          .access(readLogPath)
+          .then(() => true)
+          .catch(() => false);
         if (exists) {
           readLog = JSON.parse(await fs.promises.readFile(readLogPath, 'utf8'));
         }
@@ -1033,10 +1040,7 @@ async function handleAction(action, args) {
       const filePath = path.join(projectDir, foundFile);
       const fileContent = await fs.promises.readFile(filePath, 'utf8');
 
-      const chapterRegex = new RegExp(
-        `\\\\c\\s+${chapter}\\b([\\s\\S]*?)(?=\\\\c\\s+\\d+|$)`,
-        'i',
-      );
+      const chapterRegex = new RegExp(`\\\\c\\s+${chapter}\\b([\\s\\S]*?)(?=\\\\c\\s+\\d+|$)`, 'i');
       const match = chapterRegex.exec(fileContent);
       if (!match) {
         return { blocks: [], totalChapters: countChapters(fileContent) };
@@ -1150,10 +1154,12 @@ async function handleAction(action, args) {
             collabWs = ws;
 
             ws.onopen = () => {
-              ws.send(JSON.stringify({
-                type: 'host_room',
-                payload: { roomId: collabRoomId, username: collabUsername }
-              }));
+              ws.send(
+                JSON.stringify({
+                  type: 'host_room',
+                  payload: { roomId: collabRoomId, username: collabUsername },
+                }),
+              );
             };
 
             ws.onmessage = (event) => {
@@ -1162,10 +1168,20 @@ async function handleAction(action, args) {
 
                 if (msg.type === 'handshake_ack') {
                   resolve({ status: 'ok', role: 'host' });
-                  process.send({ event: 'collab', data: { type: 'user_list', payload: { users: Array.from(collabActiveUsers) } } });
                   process.send({
                     event: 'collab',
-                    data: { type: 'chat_message', payload: { user: 'Sistema', message: `Iniciaste sesión online en la sala: ${collabRoomId}`, timestamp: Date.now() } }
+                    data: { type: 'user_list', payload: { users: Array.from(collabActiveUsers) } },
+                  });
+                  process.send({
+                    event: 'collab',
+                    data: {
+                      type: 'chat_message',
+                      payload: {
+                        user: 'Sistema',
+                        message: `Iniciaste sesión online en la sala: ${collabRoomId}`,
+                        timestamp: Date.now(),
+                      },
+                    },
                   });
                 } else if (msg.type === 'error') {
                   cleanupCollab();
@@ -1177,11 +1193,13 @@ async function handleAction(action, args) {
                   if (fs.existsSync(tasksPath)) {
                     tasksJson = fs.readFileSync(tasksPath, 'utf8');
                   }
-                  ws.send(JSON.stringify({
-                    type: 'send_to',
-                    target: guestName,
-                    payload: { type: 'init_sync', payload: { tasksJson } }
-                  }));
+                  ws.send(
+                    JSON.stringify({
+                      type: 'send_to',
+                      target: guestName,
+                      payload: { type: 'init_sync', payload: { tasksJson } },
+                    }),
+                  );
                 } else if (msg.type === 'user_list') {
                   collabActiveUsers = new Set(msg.payload.users);
                   process.send({ event: 'collab', data: msg });
@@ -1193,14 +1211,24 @@ async function handleAction(action, args) {
                   process.send({ event: 'collab', data: localMsg });
                 } else if (msg.type === 'note_update') {
                   const localMsg = localizeCollabProject(msg, projectId);
-                  saveCollabComment(projectId, localMsg.payload.senderUser, localMsg.payload.replyData);
+                  saveCollabComment(
+                    projectId,
+                    localMsg.payload.senderUser,
+                    localMsg.payload.replyData,
+                  );
                   process.send({ event: 'collab', data: localMsg });
                 } else if (msg.type === 'cursor_update') {
                   process.send({ event: 'collab', data: localizeCollabProject(msg, projectId) });
                 } else if (msg.type === 'verse_update') {
                   const localMsg = localizeCollabProject(msg, projectId);
                   try {
-                    saveVerseLocal(projectId, localMsg.payload.book, localMsg.payload.chapter, localMsg.payload.verse, localMsg.payload.newText);
+                    saveVerseLocal(
+                      projectId,
+                      localMsg.payload.book,
+                      localMsg.payload.chapter,
+                      localMsg.payload.verse,
+                      localMsg.payload.newText,
+                    );
                   } catch (svErr) {
                     console.error(`[collab] HOST (online) saveVerseLocal failed: ${svErr.message}`);
                   }
@@ -1222,9 +1250,14 @@ async function handleAction(action, args) {
 
             ws.onclose = () => {
               cleanupCollab();
-              process.send({ event: 'collab', data: { type: 'status_update', payload: { role: 'none', error: 'Se cerró la sesión online.' } } });
+              process.send({
+                event: 'collab',
+                data: {
+                  type: 'status_update',
+                  payload: { role: 'none', error: 'Se cerró la sesión online.' },
+                },
+              });
             };
-
           } catch (e) {
             cleanupCollab();
             reject(e);
@@ -1252,7 +1285,9 @@ async function handleAction(action, args) {
                     return;
                   }
                   if (msg.type === 'ping') {
-                    try { socket.write(JSON.stringify({ type: 'pong' }) + '\n'); } catch (_) {}
+                    try {
+                      socket.write(JSON.stringify({ type: 'pong' }) + '\n');
+                    } catch (_) {}
                     return;
                   }
                   console.log(`[collab] HOST received from client: ${msg.type}`);
@@ -1265,7 +1300,10 @@ async function handleAction(action, args) {
                     collabActiveUsers.add(socketUser);
 
                     // Broadcast updated user list
-                    broadcastCollab({ type: 'user_list', payload: { users: Array.from(collabActiveUsers) } });
+                    broadcastCollab({
+                      type: 'user_list',
+                      payload: { users: Array.from(collabActiveUsers) },
+                    });
 
                     // Send init sync (current tasks)
                     const tasksPath = path.join(projectDir, 'project-tasks.json');
@@ -1273,19 +1311,38 @@ async function handleAction(action, args) {
                     if (fs.existsSync(tasksPath)) {
                       tasksJson = fs.readFileSync(tasksPath, 'utf8');
                     }
-                    socket.write(JSON.stringify({ type: 'init_sync', payload: { tasksJson } }) + '\n');
+                    socket.write(
+                      JSON.stringify({ type: 'init_sync', payload: { tasksJson } }) + '\n',
+                    );
 
                     // Send system chat message
                     broadcastCollab({
                       type: 'chat_message',
-                      payload: { user: 'Sistema', message: `${socketUser} se ha unido a la colaboración.`, timestamp: Date.now() }
+                      payload: {
+                        user: 'Sistema',
+                        message: `${socketUser} se ha unido a la colaboración.`,
+                        timestamp: Date.now(),
+                      },
                     });
 
                     // Notify host main.ts
-                    process.send({ event: 'collab', data: { type: 'user_list', payload: { users: Array.from(collabActiveUsers) } } });
                     process.send({
                       event: 'collab',
-                      data: { type: 'chat_message', payload: { user: 'Sistema', message: `${socketUser} se ha unido a la colaboración.`, timestamp: Date.now() } }
+                      data: {
+                        type: 'user_list',
+                        payload: { users: Array.from(collabActiveUsers) },
+                      },
+                    });
+                    process.send({
+                      event: 'collab',
+                      data: {
+                        type: 'chat_message',
+                        payload: {
+                          user: 'Sistema',
+                          message: `${socketUser} se ha unido a la colaboración.`,
+                          timestamp: Date.now(),
+                        },
+                      },
                     });
                   } else if (msg.type === 'tasks_update') {
                     const localMsg = localizeCollabProject(msg, projectId);
@@ -1294,7 +1351,11 @@ async function handleAction(action, args) {
                     process.send({ event: 'collab', data: localMsg });
                   } else if (msg.type === 'note_update') {
                     const localMsg = localizeCollabProject(msg, projectId);
-                    saveCollabComment(projectId, localMsg.payload.senderUser, localMsg.payload.replyData);
+                    saveCollabComment(
+                      projectId,
+                      localMsg.payload.senderUser,
+                      localMsg.payload.replyData,
+                    );
                     broadcastCollab(localMsg, socket);
                     process.send({ event: 'collab', data: localMsg });
                   } else if (msg.type === 'cursor_update') {
@@ -1307,9 +1368,17 @@ async function handleAction(action, args) {
                   } else if (msg.type === 'verse_update') {
                     const localMsg = localizeCollabProject(msg, projectId);
                     try {
-                      saveVerseLocal(projectId, localMsg.payload.book, localMsg.payload.chapter, localMsg.payload.verse, localMsg.payload.newText);
+                      saveVerseLocal(
+                        projectId,
+                        localMsg.payload.book,
+                        localMsg.payload.chapter,
+                        localMsg.payload.verse,
+                        localMsg.payload.newText,
+                      );
                     } catch (svErr) {
-                      console.error(`[collab] HOST saveVerseLocal from client failed: ${svErr.message}`);
+                      console.error(
+                        `[collab] HOST saveVerseLocal from client failed: ${svErr.message}`,
+                      );
                     }
                     broadcastCollab(localMsg, socket);
                     process.send({ event: 'collab', data: localMsg });
@@ -1322,18 +1391,38 @@ async function handleAction(action, args) {
                   collabSockets = collabSockets.filter((s) => s !== socket);
                   if (socketUser) {
                     collabActiveUsers.delete(socketUser);
-                    broadcastCollab({ type: 'user_list', payload: { users: Array.from(collabActiveUsers) } });
+                    broadcastCollab({
+                      type: 'user_list',
+                      payload: { users: Array.from(collabActiveUsers) },
+                    });
                     broadcastCollab({
                       type: 'chat_message',
-                      payload: { user: 'Sistema', message: `${socketUser} ha salido de la colaboración.`, timestamp: Date.now() }
+                      payload: {
+                        user: 'Sistema',
+                        message: `${socketUser} ha salido de la colaboración.`,
+                        timestamp: Date.now(),
+                      },
                     });
-                    process.send({ event: 'collab', data: { type: 'user_list', payload: { users: Array.from(collabActiveUsers) } } });
                     process.send({
                       event: 'collab',
-                      data: { type: 'chat_message', payload: { user: 'Sistema', message: `${socketUser} ha salido de la colaboración.`, timestamp: Date.now() } }
+                      data: {
+                        type: 'user_list',
+                        payload: { users: Array.from(collabActiveUsers) },
+                      },
+                    });
+                    process.send({
+                      event: 'collab',
+                      data: {
+                        type: 'chat_message',
+                        payload: {
+                          user: 'Sistema',
+                          message: `${socketUser} ha salido de la colaboración.`,
+                          timestamp: Date.now(),
+                        },
+                      },
                     });
                   }
-                }
+                },
               );
 
               // Send periodic pings to detect dead connections
@@ -1344,12 +1433,18 @@ async function handleAction(action, args) {
                 }
                 // If no pong in 15s, consider the connection dead
                 if (Date.now() - lastPongAt > 15000) {
-                  console.warn(`[collab] HOST: client ${socketUser} hasn't responded to pings in 15s, closing`);
-                  try { socket.destroy(); } catch (_) {}
+                  console.warn(
+                    `[collab] HOST: client ${socketUser} hasn't responded to pings in 15s, closing`,
+                  );
+                  try {
+                    socket.destroy();
+                  } catch (_) {}
                   clearInterval(pingInterval);
                   return;
                 }
-                try { socket.write(JSON.stringify({ type: 'ping' }) + '\n'); } catch (_) {}
+                try {
+                  socket.write(JSON.stringify({ type: 'ping' }) + '\n');
+                } catch (_) {}
               }, 5000);
               socket.on('close', () => clearInterval(pingInterval));
             });
@@ -1371,7 +1466,8 @@ async function handleAction(action, args) {
     }
 
     case 'connectCollabClient': {
-      const [ipOrRoomId, portOrNull, username, projectId, projectDir, collabTypeArg, serverUrlArg] = args;
+      const [ipOrRoomId, portOrNull, username, projectId, projectDir, collabTypeArg, serverUrlArg] =
+        args;
       if (projectDir) projectDirs.set(projectId, projectDir);
 
       // If we're in an auto-reconnect, the state is already clean and we
@@ -1394,10 +1490,12 @@ async function handleAction(action, args) {
             collabWs = ws;
 
             ws.onopen = () => {
-              ws.send(JSON.stringify({
-                type: 'join_room',
-                payload: { roomId: collabRoomId, username: collabUsername }
-              }));
+              ws.send(
+                JSON.stringify({
+                  type: 'join_room',
+                  payload: { roomId: collabRoomId, username: collabUsername },
+                }),
+              );
             };
 
             ws.onmessage = (event) => {
@@ -1411,7 +1509,10 @@ async function handleAction(action, args) {
                   reject(new Error(msg.payload.message));
                 } else if (msg.type === 'init_sync') {
                   saveTasksLocal(projectId, msg.payload.tasksJson);
-                  process.send({ event: 'collab', data: { type: 'tasks_update', payload: { projectId } } });
+                  process.send({
+                    event: 'collab',
+                    data: { type: 'tasks_update', payload: { projectId } },
+                  });
                 } else if (msg.type === 'user_list') {
                   collabActiveUsers = new Set(msg.payload.users);
                   process.send({ event: 'collab', data: msg });
@@ -1421,7 +1522,11 @@ async function handleAction(action, args) {
                   process.send({ event: 'collab', data: localMsg });
                 } else if (msg.type === 'note_update') {
                   const localMsg = localizeCollabProject(msg, projectId);
-                  saveCollabComment(projectId, localMsg.payload.senderUser, localMsg.payload.replyData);
+                  saveCollabComment(
+                    projectId,
+                    localMsg.payload.senderUser,
+                    localMsg.payload.replyData,
+                  );
                   process.send({ event: 'collab', data: localMsg });
                 } else if (msg.type === 'cursor_update') {
                   process.send({ event: 'collab', data: localizeCollabProject(msg, projectId) });
@@ -1430,9 +1535,17 @@ async function handleAction(action, args) {
                 } else if (msg.type === 'verse_update') {
                   const localMsg = localizeCollabProject(msg, projectId);
                   try {
-                    saveVerseLocal(projectId, localMsg.payload.book, localMsg.payload.chapter, localMsg.payload.verse, localMsg.payload.newText);
+                    saveVerseLocal(
+                      projectId,
+                      localMsg.payload.book,
+                      localMsg.payload.chapter,
+                      localMsg.payload.verse,
+                      localMsg.payload.newText,
+                    );
                   } catch (svErr) {
-                    console.error(`[collab] CLIENT saveVerseLocal from host failed: ${svErr.message}`);
+                    console.error(
+                      `[collab] CLIENT saveVerseLocal from host failed: ${svErr.message}`,
+                    );
                   }
                   process.send({ event: 'collab', data: localMsg });
                 } else if (msg.type === 'status_update') {
@@ -1452,9 +1565,14 @@ async function handleAction(action, args) {
 
             ws.onclose = () => {
               cleanupCollab();
-              process.send({ event: 'collab', data: { type: 'status_update', payload: { role: 'none', error: 'Se perdió la conexión con el servidor online.' } } });
+              process.send({
+                event: 'collab',
+                data: {
+                  type: 'status_update',
+                  payload: { role: 'none', error: 'Se perdió la conexión con el servidor online.' },
+                },
+              });
             };
-
           } catch (e) {
             cleanupCollab();
             reject(e);
@@ -1475,7 +1593,9 @@ async function handleAction(action, args) {
               socket.setKeepAlive(true, 10000);
               socket.setNoDelay(true);
               collabClientSocket = socket;
-              console.log(`[collab] CLIENT socket connected to host ${collabHostIp}:${collabPort}, writable=${socket.writable}`);
+              console.log(
+                `[collab] CLIENT socket connected to host ${collabHostIp}:${collabPort}, writable=${socket.writable}`,
+              );
               socket.write(JSON.stringify({ type: 'handshake', payload: { username } }) + '\n');
               // Remember params for auto-reconnect BEFORE resolving.
               rememberClientConnection({
@@ -1511,7 +1631,9 @@ async function handleAction(action, args) {
                 cleanupCollab();
                 reject(err);
               } else {
-                try { socket.destroy(); } catch (_) {}
+                try {
+                  socket.destroy();
+                } catch (_) {}
               }
             });
 
@@ -1524,7 +1646,9 @@ async function handleAction(action, args) {
                   // lastPongAt tracks whether the HOST is responding to OUR pings.
                   // Resetting it here would mask a dead one-way connection where
                   // the host sends pings but never responds to client pings.
-                  try { socket.write(JSON.stringify({ type: 'pong' }) + '\n'); } catch (_) {}
+                  try {
+                    socket.write(JSON.stringify({ type: 'pong' }) + '\n');
+                  } catch (_) {}
                   return;
                 }
                 if (msg.type === 'pong') {
@@ -1535,7 +1659,10 @@ async function handleAction(action, args) {
                 console.log(`[collab] CLIENT received from host: ${msg.type}`);
                 if (msg.type === 'init_sync') {
                   saveTasksLocal(projectId, msg.payload.tasksJson);
-                  process.send({ event: 'collab', data: { type: 'tasks_update', payload: { projectId } } });
+                  process.send({
+                    event: 'collab',
+                    data: { type: 'tasks_update', payload: { projectId } },
+                  });
                 } else if (msg.type === 'user_list') {
                   collabActiveUsers = new Set(msg.payload.users);
                   process.send({ event: 'collab', data: msg });
@@ -1545,7 +1672,11 @@ async function handleAction(action, args) {
                   process.send({ event: 'collab', data: localMsg });
                 } else if (msg.type === 'note_update') {
                   const localMsg = localizeCollabProject(msg, projectId);
-                  saveCollabComment(projectId, localMsg.payload.senderUser, localMsg.payload.replyData);
+                  saveCollabComment(
+                    projectId,
+                    localMsg.payload.senderUser,
+                    localMsg.payload.replyData,
+                  );
                   process.send({ event: 'collab', data: localMsg });
                 } else if (msg.type === 'cursor_update') {
                   process.send({ event: 'collab', data: localizeCollabProject(msg, projectId) });
@@ -1554,7 +1685,13 @@ async function handleAction(action, args) {
                 } else if (msg.type === 'verse_update') {
                   const localMsg = localizeCollabProject(msg, projectId);
                   try {
-                    saveVerseLocal(projectId, localMsg.payload.book, localMsg.payload.chapter, localMsg.payload.verse, localMsg.payload.newText);
+                    saveVerseLocal(
+                      projectId,
+                      localMsg.payload.book,
+                      localMsg.payload.chapter,
+                      localMsg.payload.verse,
+                      localMsg.payload.newText,
+                    );
                   } catch (svErr) {
                     console.error(`[collab] saveVerseLocal (online) failed: ${svErr.message}`);
                   }
@@ -1579,10 +1716,13 @@ async function handleAction(action, args) {
                 } else {
                   process.send({
                     event: 'collab',
-                    data: { type: 'status_update', payload: { role: 'none', error: 'Se perdió la conexión con el servidor.' } },
+                    data: {
+                      type: 'status_update',
+                      payload: { role: 'none', error: 'Se perdió la conexión con el servidor.' },
+                    },
                   });
                 }
-              }
+              },
             );
 
             // Send periodic pings; if no pong in 15s, the connection is dead
@@ -1593,11 +1733,15 @@ async function handleAction(action, args) {
               }
               if (Date.now() - lastPongAt > 15000) {
                 console.warn(`[collab] CLIENT: no pong from host in 15s, destroying socket`);
-                try { socket.destroy(); } catch (_) {}
+                try {
+                  socket.destroy();
+                } catch (_) {}
                 clearInterval(pingInterval);
                 return;
               }
-              try { socket.write(JSON.stringify({ type: 'ping' }) + '\n'); } catch (_) {}
+              try {
+                socket.write(JSON.stringify({ type: 'ping' }) + '\n');
+              } catch (_) {}
             }, 5000);
             socket.on('close', () => clearInterval(pingInterval));
           } catch (e) {
@@ -1660,7 +1804,9 @@ async function handleAction(action, args) {
     case 'broadcastCollab': {
       const [msg] = args;
       hasAliveLanSocket();
-      console.log(`[collab] Helper received broadcastCollab IPC: ${msg?.type} (role=${collabRole}, type=${collabType})`);
+      console.log(
+        `[collab] Helper received broadcastCollab IPC: ${msg?.type} (role=${collabRole}, type=${collabType})`,
+      );
       broadcastCollab(msg);
       return 'ok';
     }
@@ -1747,7 +1893,9 @@ function scheduleReconnect() {
   const delay = delays[Math.min(reconnectAttempts, delays.length - 1)];
   reconnectAttempts++;
   isReconnecting = true;
-  console.log(`[collab] Auto-reconnect attempt #${reconnectAttempts} in ${delay}ms to ${reconnectParams.ipOrRoomId}:${reconnectParams.port}`);
+  console.log(
+    `[collab] Auto-reconnect attempt #${reconnectAttempts} in ${delay}ms to ${reconnectParams.ipOrRoomId}:${reconnectParams.port}`,
+  );
   try {
     process.send({
       event: 'collab',
@@ -1767,7 +1915,9 @@ function scheduleReconnect() {
 async function attemptReconnect() {
   if (!reconnectParams) return;
   const params = reconnectParams;
-  console.log(`[collab] Auto-reconnect: connecting to ${params.ipOrRoomId}:${params.port} (attempt #${reconnectAttempts})`);
+  console.log(
+    `[collab] Auto-reconnect: connecting to ${params.ipOrRoomId}:${params.port} (attempt #${reconnectAttempts})`,
+  );
   try {
     const result = await handleAction('connectCollabClient', [
       params.ipOrRoomId,
@@ -1803,21 +1953,29 @@ function cleanupCollab(silent = false) {
   isReconnecting = false;
 
   if (collabServer) {
-    try { collabServer.close(); } catch (_) {}
+    try {
+      collabServer.close();
+    } catch (_) {}
     collabServer = null;
   }
   for (const socket of collabSockets) {
-    try { socket.destroy(); } catch (_) {}
+    try {
+      socket.destroy();
+    } catch (_) {}
   }
   collabSockets = [];
 
   if (collabClientSocket) {
-    try { collabClientSocket.destroy(); } catch (_) {}
+    try {
+      collabClientSocket.destroy();
+    } catch (_) {}
     collabClientSocket = null;
   }
 
   if (collabWs) {
-    try { collabWs.close(); } catch (_) {}
+    try {
+      collabWs.close();
+    } catch (_) {}
     collabWs = null;
   }
 
@@ -1900,7 +2058,8 @@ function hasAliveLanSocket() {
 function broadcastCollab(msg, excludeSocket = null) {
   hasAliveLanSocket();
   if (collabType === 'online') {
-    if (collabWs && collabWs.readyState === 1) { // 1 is OPEN
+    if (collabWs && collabWs.readyState === 1) {
+      // 1 is OPEN
       try {
         collabWs.send(JSON.stringify({ type: 'broadcast', payload: msg }));
       } catch (_) {}
@@ -1921,20 +2080,31 @@ function broadcastCollab(msg, excludeSocket = null) {
           socket.write(line, (err) => {
             if (err) {
               console.error('[collab] Socket write error (host):', err.message);
-              try { socket.destroy(); } catch (_) {}
+              try {
+                socket.destroy();
+              } catch (_) {}
             }
           });
           sentCount++;
         } catch (e) {
           console.error('[collab] Socket write exception (host):', e.message);
-          try { socket.destroy(); } catch (_) {}
+          try {
+            socket.destroy();
+          } catch (_) {}
         }
       } else {
         skipped++;
       }
     }
-    if (msg.type === 'cursor_update' || msg.type === 'verse_update' || msg.type === 'tasks_update' || msg.type === 'note_update') {
-      console.log(`[collab] HOST broadcast ${msg.type} to ${sentCount}/${collabSockets.length} client(s) (skipped ${skipped} dead)`);
+    if (
+      msg.type === 'cursor_update' ||
+      msg.type === 'verse_update' ||
+      msg.type === 'tasks_update' ||
+      msg.type === 'note_update'
+    ) {
+      console.log(
+        `[collab] HOST broadcast ${msg.type} to ${sentCount}/${collabSockets.length} client(s) (skipped ${skipped} dead)`,
+      );
     }
   } else if (collabRole === 'client' || (collabRole === 'none' && collabClientSocket)) {
     const socket = collabClientSocket;
@@ -1943,21 +2113,38 @@ function broadcastCollab(msg, excludeSocket = null) {
         const ok = socket.write(line, (err) => {
           if (err) {
             console.error('[collab] Client socket write error:', err.message);
-            try { socket.destroy(); } catch (_) {}
+            try {
+              socket.destroy();
+            } catch (_) {}
           }
         });
-        if (msg.type === 'cursor_update' || msg.type === 'verse_update' || msg.type === 'tasks_update' || msg.type === 'note_update' || msg.type === 'chat_message' || msg.type === 'note_update') {
-          console.log(`[collab] CLIENT sent ${msg.type} to host (writable=${socket.writable}, write OK=${ok})`);
+        if (
+          msg.type === 'cursor_update' ||
+          msg.type === 'verse_update' ||
+          msg.type === 'tasks_update' ||
+          msg.type === 'note_update' ||
+          msg.type === 'chat_message' ||
+          msg.type === 'note_update'
+        ) {
+          console.log(
+            `[collab] CLIENT sent ${msg.type} to host (writable=${socket.writable}, write OK=${ok})`,
+          );
         }
       } catch (e) {
         console.error('[collab] Client socket write exception:', e.message);
-        try { socket.destroy(); } catch (_) {}
+        try {
+          socket.destroy();
+        } catch (_) {}
       }
     } else {
-      console.warn(`[collab] CLIENT tried to send ${msg.type} but socket is not writable (writable=${socket?.writable}, destroyed=${socket?.destroyed}, exists=${!!socket})`);
+      console.warn(
+        `[collab] CLIENT tried to send ${msg.type} but socket is not writable (writable=${socket?.writable}, destroyed=${socket?.destroyed}, exists=${!!socket})`,
+      );
     }
   } else {
-    console.warn(`[collab] broadcastCollab called with collabRole='${collabRole}' and no live socket — message dropped: ${msg.type}`);
+    console.warn(
+      `[collab] broadcastCollab called with collabRole='${collabRole}' and no live socket — message dropped: ${msg.type}`,
+    );
   }
 }
 
@@ -2133,9 +2320,7 @@ function applyEditToRawUsfm(originalRaw, originalCleaned, newCleaned) {
   // Walk segments and assign each text segment a slice of newCleaned.
   // We compute the cumulative cleaned length at segment boundaries and
   // map the differences.
-  const textSegments = segments
-    .map((s, idx) => ({ ...s, idx }))
-    .filter((s) => s.kind === 'text');
+  const textSegments = segments.map((s, idx) => ({ ...s, idx })).filter((s) => s.kind === 'text');
 
   if (textSegments.length === 0) {
     return newCleaned + (originalRaw ? ' ' + originalRaw : '');
@@ -2172,7 +2357,7 @@ function applyEditToRawUsfm(originalRaw, originalCleaned, newCleaned) {
     }
     const slice = newCleaned.substring(newCleanedPos, newCleanedPos + take);
     newCleanedPos += take;
-    
+
     // Preserve original leading and trailing whitespace to prevent space stripping/tag merging
     const leadingWs = getLeadingWhitespace(seg.value);
     const trailingWs = getTrailingWhitespace(seg.value);
@@ -2219,10 +2404,7 @@ function saveVerseLocal(projectId, bookCode, chapter, verse, newText) {
   }
 
   const files = fs.readdirSync(projectDir);
-  const regex = new RegExp(
-    `^${escapeRegex(prePart)}\\d*${bookCode}${escapeRegex(postPart)}$`,
-    'i',
-  );
+  const regex = new RegExp(`^${escapeRegex(prePart)}\\d*${bookCode}${escapeRegex(postPart)}$`, 'i');
   const foundFile = files.find((f) => regex.test(f));
   if (!foundFile) {
     const err = `Book file not found for code ${bookCode} in ${projectDir}`;
@@ -2233,10 +2415,7 @@ function saveVerseLocal(projectId, bookCode, chapter, verse, newText) {
   const filePath = path.join(projectDir, foundFile);
   const fileContent = fs.readFileSync(filePath, 'utf8');
 
-  const chapterRegex = new RegExp(
-    `(\\\\c\\s+${chapter}\\b)([\\s\\S]*?)(?=\\\\c\\s+\\d+|$)`,
-    'i',
-  );
+  const chapterRegex = new RegExp(`(\\\\c\\s+${chapter}\\b)([\\s\\S]*?)(?=\\\\c\\s+\\d+|$)`, 'i');
   const chapMatch = chapterRegex.exec(fileContent);
   if (!chapMatch) {
     const err = `Chapter ${chapter} not found in ${foundFile}`;
@@ -2263,7 +2442,8 @@ function saveVerseLocal(projectId, bookCode, chapter, verse, newText) {
   const newline = fileContent.includes('\r\n') ? '\r\n' : '\n';
 
   // Find the first block marker to split off trailing structural markup
-  const blockMarkerRegex = /[\r\n]+\\(p|m|q|s|b|li|lh|lim|tr|tc|cl|im|ip|is|iot|io|d|r|nb)[a-z0-9]*\b/i;
+  const blockMarkerRegex =
+    /[\r\n]+\\(p|m|q|s|b|li|lh|lim|tr|tc|cl|im|ip|is|iot|io|d|r|nb)[a-z0-9]*\b/i;
   const blockMatch = blockMarkerRegex.exec(vBody);
 
   let trailingBlockMarkers = '';
@@ -2281,11 +2461,7 @@ function saveVerseLocal(projectId, bookCode, chapter, verse, newText) {
     const originalCleaned = stripUsfmForCompare(actualVerseText);
     const newCleaned = (newText || '').replace(/\s+/g, ' ').trim();
     if (originalCleaned && newCleaned) {
-      verseReplacement = applyEditToRawUsfm(
-        actualVerseText,
-        originalCleaned,
-        newCleaned,
-      );
+      verseReplacement = applyEditToRawUsfm(actualVerseText, originalCleaned, newCleaned);
     }
   }
 
@@ -2352,10 +2528,7 @@ function mergeTasks(localJson, incomingJson) {
     if (!local.tasks) return incomingJson;
     if (!remote.tasks) return localJson;
 
-    const deletedIds = new Set([
-      ...(local.deletedTaskIds || []),
-      ...(remote.deletedTaskIds || []),
-    ]);
+    const deletedIds = new Set([...(local.deletedTaskIds || []), ...(remote.deletedTaskIds || [])]);
 
     const taskMap = new Map();
     for (const t of remote.tasks || []) {
