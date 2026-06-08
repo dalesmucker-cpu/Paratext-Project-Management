@@ -64,7 +64,7 @@ function TaskRow({
           {/* Deadline */}
           {task.deadline && (
             <p className={`tw:text-xs tw:mt-0.5 ${dlClass}`}>
-              ⏰ Fecha límite: {new Date(task.deadline).toLocaleDateString('es')}
+              Fecha límite: {new Date(task.deadline).toLocaleDateString('es')}
             </p>
           )}
           {/* Hours */}
@@ -119,7 +119,7 @@ function TaskRow({
               className="tw:px-2 tw:py-1 tw:text-xs tw:bg-slate-50 tw:text-slate-600 tw:border tw:border-slate-200 tw:rounded tw:hover:bg-slate-100 tw:whitespace-nowrap"
               onClick={() => onStatusChange(task.id, 'pending')}
             >
-              ↩ Retomar
+              Retomar
             </button>
           ) : null}
           {task.status !== 'flagged' && (
@@ -127,7 +127,7 @@ function TaskRow({
               className="tw:px-2 tw:py-1 tw:text-xs tw:bg-red-50 tw:text-red-600 tw:border tw:border-red-200 tw:rounded tw:hover:bg-red-100"
               onClick={() => onStatusChange(task.id, 'flagged')}
             >
-              ⚑ Bandera
+              Bandera
             </button>
           )}
         </div>
@@ -209,7 +209,7 @@ function computeNotifications(
     });
     if (overdue.length > 0) {
       msgs.push(
-        `⚠ Vencida${overdue.length > 1 ? 's' : ''}: ${overdue.map((t) => `${t.book} ${t.chapter}`).join(', ')}`,
+        `Vencida${overdue.length > 1 ? 's' : ''}: ${overdue.map((t) => `${t.book} ${t.chapter}`).join(', ')}`,
       );
     }
   }
@@ -237,6 +237,19 @@ globalThis.webViewComponent = function MyTasksWebView({
   const [filterStatus, setFilterStatus] = useWebViewState<string>('filterStatus', 'active');
   const [searchText, setSearchText] = useState('');
   const [showUserPicker, setShowUserPicker] = useState(false);
+
+  const [sidebarVisible, setSidebarVisible] = useState(() => {
+    const saved = localStorage.getItem('my_tasks_sidebar_visible');
+    return saved !== 'false';
+  });
+
+  const toggleSidebar = () => {
+    setSidebarVisible((v) => {
+      const next = !v;
+      localStorage.setItem('my_tasks_sidebar_visible', String(next));
+      return next;
+    });
+  };
 
   // Notification preferences (persisted per panel)
   const [lastSeenTaskData, setLastSeenTaskData] = useWebViewState<string>('lastSeenTaskData', '{}');
@@ -561,53 +574,77 @@ globalThis.webViewComponent = function MyTasksWebView({
       {/* Header */}
       <div className="tw:px-3 tw:py-2 tw:bg-white tw:border-b tw:shadow-sm">
         <div className="tw:flex tw:items-center tw:justify-between tw:gap-2 tw:flex-wrap">
-          <span className="tw:font-semibold tw:text-gray-700 tw:flex tw:items-center tw:gap-1.5">
-            Mis Tareas
-            {counts.flagged + counts['in-progress'] + counts.pending > 0 && (
-              <span
-                className={`tw:rounded-full tw:px-1.5 tw:py-0.5 tw:text-xs tw:font-normal ${
-                  counts.flagged > 0
-                    ? 'tw:bg-red-100 tw:text-red-700'
-                    : 'tw:bg-slate-200 tw:text-slate-600'
-                }`}
+          <div className="tw:flex tw:items-center tw:gap-2">
+            <button
+              onClick={toggleSidebar}
+              className="tw:p-1.5 tw:rounded-md tw:text-slate-600 tw:hover:bg-slate-100 tw:hover:text-slate-800 tw:transition-colors tw:cursor-pointer tw:flex tw:items-center tw:justify-center"
+              title={sidebarVisible ? 'Ocultar filtros' : 'Mostrar filtros'}
+            >
+              <svg
+                className="tw:w-5 tw:h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
               >
-                {counts.flagged + counts['in-progress'] + counts.pending}
-              </span>
-            )}
-          </span>
-          <div className="tw:flex tw:gap-1 tw:items-center">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M4 6h16M4 12h16M4 18h16"
+                ></path>
+              </svg>
+            </button>
+            <span className="tw:font-semibold tw:text-gray-700 tw:flex tw:items-center tw:gap-1.5">
+              Mis Tareas
+              {counts.flagged + counts['in-progress'] + counts.pending > 0 && (
+                <span
+                  className={`tw:rounded-full tw:px-1.5 tw:py-0.5 tw:text-xs tw:font-normal ${
+                    counts.flagged > 0
+                      ? 'tw:bg-red-100 tw:text-red-700'
+                      : 'tw:bg-slate-200 tw:text-slate-600'
+                  }`}
+                >
+                  {counts.flagged + counts['in-progress'] + counts.pending}
+                </span>
+              )}
+            </span>
+          </div>
+          <div className="tw:flex tw:gap-1.5 tw:items-center">
             {saving && <span className="tw:text-gray-400 tw:text-xs">Guardando…</span>}
             <button
-              className="tw:relative tw:p-1 tw:rounded tw:hover:bg-gray-100 tw:text-sm"
+              className="tw:relative tw:p-1.5 tw:rounded tw:hover:bg-gray-100 tw:text-slate-600 tw:cursor-pointer tw:flex tw:items-center tw:justify-center"
               title="Configurar notificaciones"
               onClick={() => setShowNotifSettings((v) => !v)}
             >
-              🔔
+              <svg className="tw:w-4 tw:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
+              </svg>
               {notifications.length > 0 && (
-                <span className="tw:absolute tw:-top-0.5 tw:-right-0.5 tw:bg-red-500 tw:text-white tw:text-xs tw:rounded-full tw:w-4 tw:h-4 tw:flex tw:items-center tw:justify-center tw:leading-none">
+                <span className="tw:absolute tw:-top-0.5 tw:-right-0.5 tw:bg-red-500 tw:text-white tw:text-[10px] tw:rounded-full tw:w-4 tw:h-4 tw:flex tw:items-center tw:justify-center tw:leading-none">
                   {notifications.length}
                 </span>
               )}
             </button>
             <button
-              className="tw:px-2 tw:py-0.5 tw:bg-gray-100 tw:rounded tw:text-xs tw:hover:bg-gray-200"
+              className="tw:px-2.5 tw:py-1 tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:border-slate-200 tw:rounded tw:text-xs tw:font-medium tw:text-slate-700 tw:cursor-pointer"
               onClick={selectProject}
               title="Cambiar proyecto"
             >
-              ⇄
+              Cambiar Proyecto
             </button>
             <button
-              className="tw:px-2 tw:py-0.5 tw:bg-gray-100 tw:rounded tw:text-xs tw:hover:bg-gray-200"
+              className="tw:px-2.5 tw:py-1 tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:border-slate-200 tw:rounded tw:text-xs tw:font-medium tw:text-slate-700 tw:cursor-pointer"
               onClick={loadData}
               title="Actualizar"
             >
-              ↻
+              Actualizar
             </button>
           </div>
         </div>
 
         {/* User identity row */}
-        {!loading && (
+        {sidebarVisible && !loading && (
           <div className="tw:mt-1.5">
             {currentUser && !showUserPicker ? (
               <div className="tw:flex tw:items-center tw:gap-2 tw:text-xs">
@@ -652,63 +689,69 @@ globalThis.webViewComponent = function MyTasksWebView({
         )}
 
         {/* Summary counts */}
-        <div className="tw:flex tw:gap-3 tw:mt-1.5 tw:text-xs tw:flex-wrap">
-          <span className="tw:text-red-600">
-            ⚑ {counts.flagged} bandera{counts.flagged !== 1 ? 's' : ''}
-          </span>
-          <span className="tw:text-yellow-700">⟳ {counts['in-progress']} en progreso</span>
-          <span className="tw:text-gray-500">
-            • {counts.pending} pendiente{counts.pending !== 1 ? 's' : ''}
-          </span>
-          <span className="tw:text-green-600">
-            ✓ {counts.complete} completo{counts.complete !== 1 ? 's' : ''}
-          </span>
-        </div>
+        {sidebarVisible && (
+          <div className="tw:flex tw:gap-3 tw:mt-1.5 tw:text-xs tw:flex-wrap">
+            <span className="tw:text-red-600">
+              Banderas: {counts.flagged}
+            </span>
+            <span className="tw:text-yellow-700">En progreso: {counts['in-progress']}</span>
+            <span className="tw:text-gray-500">
+              Pendientes: {counts.pending}
+            </span>
+            <span className="tw:text-green-600">
+              Completadas: {counts.complete}
+            </span>
+          </div>
+        )}
 
         {/* Filter tabs */}
-        <div className="tw:flex tw:gap-1 tw:mt-2">
-          {[
-            { key: 'active', label: 'Activas' },
-            { key: 'flagged', label: 'Banderas' },
-            { key: 'complete', label: 'Completas' },
-            { key: 'all', label: 'Todas' },
-          ].map(({ key, label }) => (
-            <button
-              key={key}
-              className={`tw:px-2 tw:py-0.5 tw:rounded tw:text-xs tw:border ${
-                filterStatus === key
-                  ? 'tw:bg-slate-600 tw:text-white tw:border-slate-600'
-                  : 'tw:bg-white tw:text-gray-600 tw:border-gray-200 tw:hover:bg-gray-50'
-              }`}
-              onClick={() => setFilterStatus(key)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        {sidebarVisible && (
+          <div className="tw:flex tw:gap-1 tw:mt-2">
+            {[
+              { key: 'active', label: 'Activas' },
+              { key: 'flagged', label: 'Banderas' },
+              { key: 'complete', label: 'Completas' },
+              { key: 'all', label: 'Todas' },
+            ].map(({ key, label }) => (
+              <button
+                key={key}
+                className={`tw:px-2 tw:py-0.5 tw:rounded tw:text-xs tw:border ${
+                  filterStatus === key
+                    ? 'tw:bg-slate-600 tw:text-white tw:border-slate-600'
+                    : 'tw:bg-white tw:text-gray-600 tw:border-gray-200 tw:hover:bg-gray-50'
+                }`}
+                onClick={() => setFilterStatus(key)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Search box */}
-        <div className="tw:relative tw:mt-1.5">
-          <input
-            type="text"
-            placeholder="Buscar libro, cap., notas, etapa…"
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
-            className="tw:w-full tw:border tw:border-gray-200 tw:rounded tw:px-2 tw:py-0.5 tw:text-xs tw:pr-6 tw:focus:outline-none tw:focus:border-slate-400"
-          />
-          {searchText && (
-            <button
-              className="tw:absolute tw:right-1.5 tw:top-1/2 tw:-translate-y-1/2 tw:text-gray-400 tw:hover:text-gray-600 tw:leading-none"
-              onClick={() => setSearchText('')}
-              title="Limpiar búsqueda"
-            >
-              ✕
-            </button>
-          )}
-        </div>
+        {sidebarVisible && (
+          <div className="tw:relative tw:mt-1.5">
+            <input
+              type="text"
+              placeholder="Buscar libro, cap., notas, etapa…"
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              className="tw:w-full tw:border tw:border-gray-200 tw:rounded tw:px-2 tw:py-0.5 tw:text-xs tw:pr-6 tw:focus:outline-none tw:focus:border-slate-400"
+            />
+            {searchText && (
+              <button
+                className="tw:absolute tw:right-1.5 tw:top-1/2 tw:-translate-y-1/2 tw:text-gray-400 tw:hover:text-gray-600 tw:leading-none"
+                onClick={() => setSearchText('')}
+                title="Limpiar búsqueda"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Notification settings panel */}
-        {showNotifSettings && (
+        {sidebarVisible && showNotifSettings && (
           <div className="tw:mt-2 tw:p-2 tw:bg-gray-50 tw:border tw:border-gray-200 tw:rounded-lg tw:text-xs tw:space-y-1.5">
             <div className="tw:font-semibold tw:text-gray-700">Configuración de notificaciones</div>
             <label className="tw:flex tw:items-center tw:gap-2">
@@ -773,7 +816,7 @@ globalThis.webViewComponent = function MyTasksWebView({
             <div className="tw:space-y-1">
               {notifications.map((msg, i) => (
                 <p key={i} className="tw:text-xs tw:text-slate-700">
-                  🔔 {msg}
+                  {msg}
                 </p>
               ))}
             </div>

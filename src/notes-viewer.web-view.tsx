@@ -208,6 +208,19 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
   });
   leftWidthRef.current = leftWidth;
 
+  const [sidebarVisible, setSidebarVisible] = useState(() => {
+    const saved = localStorage.getItem('notes_viewer_sidebar_visible');
+    return saved !== 'false';
+  });
+
+  const toggleSidebar = () => {
+    setSidebarVisible((v) => {
+      const next = !v;
+      localStorage.setItem('notes_viewer_sidebar_visible', String(next));
+      return next;
+    });
+  };
+
   const isResizingRef = useRef(false);
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -916,8 +929,28 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
       {/* Top Banner / User Picker */}
       <div className="tw:bg-white tw:border-b tw:border-gray-200 tw:px-4 tw:py-2.5 tw:flex tw:items-center tw:justify-between tw:shrink-0 tw:shadow-sm">
         <div className="tw:flex tw:items-center tw:gap-3">
+          <button
+            onClick={toggleSidebar}
+            className="tw:p-1.5 tw:rounded-md tw:text-slate-600 tw:hover:bg-slate-100 tw:hover:text-slate-800 tw:transition-colors tw:cursor-pointer tw:flex tw:items-center tw:justify-center"
+            title={sidebarVisible ? 'Ocultar panel lateral' : 'Mostrar panel lateral'}
+          >
+            <svg
+              className="tw:w-5 tw:h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M4 6h16M4 12h16M4 18h16"
+              ></path>
+            </svg>
+          </button>
           <span className="tw:font-bold tw:text-slate-800 tw:text-base tw:flex tw:items-center tw:gap-2">
-            💬 Visor de Notas
+            Visor de Notas
           </span>
           {!loading && <div className="tw:h-4 tw:w-px tw:bg-gray-300 tw:hidden sm:tw:block"></div>}
           {!loading && (
@@ -930,7 +963,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                   </strong>
                   <button
                     onClick={() => setShowUserPicker(true)}
-                    className="tw:text-indigo-600 tw:hover:text-indigo-800 tw:hover:underline tw:text-xs tw:ml-1 tw:cursor-pointer"
+                    className="tw:text-indigo-600 tw:hover:text-indigo-850 tw:hover:underline tw:text-xs tw:ml-1 tw:cursor-pointer"
                   >
                     Cambiar
                   </button>
@@ -967,7 +1000,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                 : 'tw:bg-white tw:text-slate-600 tw:border-slate-200'
             }`}
           >
-            ⚙️ Ajustes
+            Ajustes
           </button>
           <button
             onClick={() => loadNotes(selectedThreadId)}
@@ -975,7 +1008,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
             className="tw:p-1 tw:px-2.5 tw:text-xs tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:border-slate-200 tw:text-slate-700 tw:rounded-md tw:font-medium tw:transition-colors tw:cursor-pointer"
             title="Sincronizar / Actualizar"
           >
-            {loading ? 'Sincronizando...' : '↻ Actualizar'}
+            {loading ? 'Sincronizando...' : 'Actualizar'}
           </button>
         </div>
       </div>
@@ -1055,10 +1088,11 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
       {/* Main Split-Pane View */}
       <div className="tw:flex-1 tw:flex tw:overflow-hidden tw:min-h-0" ref={containerRef}>
         {/* Left Column: Thread List */}
-        <div
-          style={{ width: `${leftWidth}px` }}
-          className="tw:bg-white tw:flex tw:flex-col tw:shrink-0 tw:min-w-[200px]"
-        >
+        {sidebarVisible && (
+          <div
+            style={{ width: `${leftWidth}px` }}
+            className="tw:bg-white tw:flex tw:flex-col tw:shrink-0 tw:min-w-[200px]"
+          >
           {/* Quick Filters */}
           <div className="tw:p-3 tw:border-b tw:border-gray-100 tw:bg-slate-50/50 tw:space-y-2 tw:shrink-0">
             {/* Search Input */}
@@ -1147,7 +1181,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                         className="tw:font-bold tw:text-xs tw:text-indigo-600 tw:hover:text-indigo-850 tw:flex tw:items-center tw:gap-1 tw:cursor-pointer tw:hover:underline"
                         title="Ir al versículo en Texto"
                       >
-                        📖 {thread.book} {thread.chapter}:{thread.verse}
+                        {thread.book} {thread.chapter}:{thread.verse}
                       </span>
                       <span className="tw:text-[10px] tw:text-gray-400">
                         {new Date(thread.latestDate).toLocaleDateString('es', {
@@ -1170,12 +1204,12 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                     </div>
 
                     <div className="tw:flex tw:gap-1.5 tw:items-center tw:mt-1">
-                      <span className="tw:text-[9px] tw:bg-slate-100 tw:border tw:text-slate-600 tw:px-1 tw:py-0.2 tw:rounded">
-                        💬 {thread.comments.length}
+                      <span className="tw:text-[9px] tw:bg-slate-100 tw:border tw:text-slate-650 tw:px-1.5 tw:py-0.5 tw:rounded">
+                        {thread.comments.length} resp.
                       </span>
                       {thread.assignedUser && (
-                        <span className="tw:text-[9px] tw:bg-blue-50 tw:text-blue-700 tw:px-1 tw:py-0.2 tw:rounded tw:font-medium">
-                          👤 {thread.assignedUser}
+                        <span className="tw:text-[9px] tw:bg-blue-50 tw:text-blue-700 tw:px-1.5 tw:py-0.5 tw:rounded tw:font-medium">
+                          {thread.assignedUser}
                         </span>
                       )}
                     </div>
@@ -1185,25 +1219,24 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
             )}
           </div>
         </div>
+        )}
 
         {/* Drag Resizer Bar */}
-        <div
-          onPointerDown={handlePointerDown}
-          className="tw:relative tw:w-3 tw:bg-slate-100 tw:hover:bg-indigo-50/70 active:tw:bg-indigo-100/70 tw:cursor-col-resize tw:shrink-0 tw:z-20 tw:transition-all tw:duration-100 tw:h-full tw:flex tw:items-center tw:justify-center tw:select-none tw:border-l tw:border-r tw:border-slate-200"
-          title="Arrastra para cambiar el tamaño"
-        >
-          {/* Visual Divider Line */}
-          <div className="tw:w-[1px] tw:h-full tw:bg-slate-300" />
-
-          {/* Grab Handle Pill in the center */}
-          <div className="tw:absolute tw:w-[16px] tw:h-[28px] tw:bg-white tw:border tw:border-slate-300 tw:rounded-md tw:flex tw:items-center tw:justify-center tw:shadow-sm tw:pointer-events-none tw:z-30">
-            {/* Grab indicator dots */}
-            <div className="tw:flex tw:gap-[2px] tw:h-2.5">
-              <div className="tw:w-[1.5px] tw:h-full tw:bg-slate-400 tw:rounded-full" />
-              <div className="tw:w-[1.5px] tw:h-full tw:bg-slate-400 tw:rounded-full" />
+        {sidebarVisible && (
+          <div
+            onPointerDown={handlePointerDown}
+            className="tw:relative tw:w-3 tw:bg-slate-100 tw:hover:bg-indigo-50/70 active:tw:bg-indigo-100/70 tw:cursor-col-resize tw:shrink-0 tw:z-20 tw:transition-all tw:duration-100 tw:h-full tw:flex tw:items-center tw:justify-center tw:select-none tw:border-l tw:border-r tw:border-slate-200"
+            title="Arrastra para cambiar el tamaño"
+          >
+            <div className="tw:w-[1px] tw:h-full tw:bg-slate-300" />
+            <div className="tw:absolute tw:w-[16px] tw:h-[28px] tw:bg-white tw:border tw:border-slate-300 tw:rounded-md tw:flex tw:items-center tw:justify-center tw:shadow-sm tw:pointer-events-none tw:z-30">
+              <div className="tw:flex tw:gap-[2px] tw:h-2.5">
+                <div className="tw:w-[1.5px] tw:h-full tw:bg-slate-400 tw:rounded-full" />
+                <div className="tw:w-[1.5px] tw:h-full tw:bg-slate-400 tw:rounded-full" />
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Right Column: Thread Detail */}
         <div className="tw:flex-1 tw:flex tw:flex-col tw:bg-slate-50 tw:min-w-0 tw:h-full tw:overflow-hidden">
@@ -1213,7 +1246,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
               <div className="tw:bg-white tw:border-b tw:border-gray-200 tw:p-4 tw:shrink-0 tw:shadow-sm tw:flex tw:flex-col sm:tw:flex-row sm:tw:items-center tw:justify-between tw:gap-3">
                 <div>
                   <h2 className="tw:text-sm tw:font-bold tw:text-slate-800 tw:flex tw:items-center tw:gap-2">
-                    📖 Referencia:{' '}
+                    Referencia:{' '}
                     <span
                       onClick={() => handleNavigateToVerse(selectedThread)}
                       className="tw:text-indigo-600 tw:hover:text-indigo-855 tw:hover:underline tw:cursor-pointer tw:font-semibold tw:inline-flex tw:items-center tw:gap-1"
@@ -1241,11 +1274,11 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                       onClick={() => handleMarkRead(selectedThread)}
                       className="tw:px-2.5 tw:py-1 tw:bg-amber-100 tw:hover:bg-amber-200 tw:text-amber-800 tw:border tw:border-amber-200 tw:rounded tw:text-xs tw:transition-colors tw:cursor-pointer"
                     >
-                      ✓ Marcar como leída
+                      Marcar como leída
                     </button>
                   ) : (
                     <span className="tw:text-gray-400 tw:text-xs tw:bg-slate-100 tw:border tw:border-slate-200 tw:px-2.5 tw:py-0.5 tw:rounded">
-                      ✓ Leída
+                      Leída
                     </span>
                   )}
                 </div>
@@ -1415,23 +1448,34 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                       type="button"
                       onClick={handleAttachClick}
                       disabled={replying || attaching || !currentUser}
-                      className={`tw:p-2 tw:bg-slate-100 tw:hover:bg-slate-200 tw:text-slate-700 tw:border tw:border-slate-200 tw:rounded-lg tw:transition-colors tw:h-[34px] sm:tw:h-[38px] tw:w-[34px] sm:tw:w-[38px] tw:items-center tw:justify-center tw:cursor-pointer ${
+                      className={`tw:p-2 tw:bg-slate-100 tw:hover:bg-slate-200 tw:text-slate-700 tw:border tw:border-slate-200 tw:rounded-lg tw:transition-colors tw:h-[34px] sm:tw:h-[38px] tw:w-[34px] sm:tw:w-[38px] tw:flex tw:items-center tw:justify-center tw:cursor-pointer ${
                         mediaButtonsCollapsed ? 'tw:hidden sm:tw:flex' : 'tw:flex'
                       }`}
                       title="Adjuntar archivo"
                     >
-                      {attaching ? '⏳' : '📎'}
+                      {attaching ? (
+                        <svg className="tw:w-4 tw:h-4 tw:animate-spin tw:text-slate-500" fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <circle className="tw:opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="tw:opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                        </svg>
+                      ) : (
+                        <svg className="tw:w-5 tw:h-5 tw:text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path>
+                        </svg>
+                      )}
                     </button>
                     <button
                       type="button"
                       onClick={startRecording}
                       disabled={replying || attaching || !currentUser}
-                      className={`tw:p-2 tw:bg-slate-100 tw:hover:bg-slate-200 tw:text-slate-700 tw:border tw:border-slate-200 tw:rounded-lg tw:transition-colors tw:h-[34px] sm:tw:h-[38px] tw:w-[34px] sm:tw:w-[38px] tw:items-center tw:justify-center tw:cursor-pointer ${
+                      className={`tw:p-2 tw:bg-slate-100 tw:hover:bg-slate-200 tw:text-slate-700 tw:border tw:border-slate-200 tw:rounded-lg tw:transition-colors tw:h-[34px] sm:tw:h-[38px] tw:w-[34px] sm:tw:w-[38px] tw:flex tw:items-center tw:justify-center tw:cursor-pointer ${
                         mediaButtonsCollapsed ? 'tw:hidden sm:tw:flex' : 'tw:flex'
                       }`}
                       title="Grabar nota de voz"
                     >
-                      🎙️
+                      <svg className="tw:w-5 tw:h-5 tw:text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
+                      </svg>
                     </button>
                     {/* Collapse Toggle Button (visible only on small screens) */}
                     <button
@@ -1444,7 +1488,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                           : 'Ocultar opciones'
                       }
                     >
-                      {mediaButtonsCollapsed ? '＋' : '－'}
+                      {mediaButtonsCollapsed ? '+' : '-'}
                     </button>
                     {/* Send Button */}
                     <button
@@ -1454,15 +1498,24 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                       className="tw:p-2 tw:bg-slate-600 tw:hover:bg-slate-700 tw:text-white tw:rounded-lg tw:transition-all tw:shadow-sm tw:h-[34px] sm:tw:h-[38px] tw:w-[34px] sm:tw:w-[38px] tw:cursor-pointer tw:flex tw:items-center tw:justify-center tw:text-sm tw:disabled:opacity-40 tw:shrink-0"
                       title={replying ? 'Enviando...' : 'Responder'}
                     >
-                      {replying ? '⏳' : '➤'}
+                      {replying ? (
+                        <svg className="tw:w-4 tw:h-4 tw:animate-spin tw:text-white" fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <circle className="tw:opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="tw:opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                        </svg>
+                      ) : (
+                        <svg className="tw:w-4 tw:h-4 tw:text-white" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M2 21l21-9L2 3v7l15 2-15 2v7z"></path>
+                        </svg>
+                      )}
                     </button>
                   </div>
                 </div>
               )}
             </div>
           ) : (
-            <div className="tw:flex-1 tw:flex tw:flex-col tw:items-center tw:justify-center tw:text-gray-400 tw:p-8 tw:text-center">
-              <span className="tw:text-4xl tw:mb-2">💬</span>
+            <div className="tw:flex-grow tw:flex tw:flex-col tw:items-center tw:justify-center tw:text-slate-400 tw:bg-slate-50">
+              <span className="tw:text-4xl tw:mb-2">Visor de Notas</span>
               <p className="tw:text-sm">
                 Selecciona una nota de la lista de la izquierda para ver su conversación.
               </p>

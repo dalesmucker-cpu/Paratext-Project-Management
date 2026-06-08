@@ -707,6 +707,19 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
   // --- Tab state ---
   const [currentTab, setCurrentTab] = useState<'summary' | 'calendar'>('summary');
 
+  const [sidebarVisible, setSidebarVisible] = useState(() => {
+    const saved = localStorage.getItem('project_overview_sidebar_visible');
+    return saved !== 'false';
+  });
+
+  const toggleSidebar = () => {
+    setSidebarVisible((v) => {
+      const next = !v;
+      localStorage.setItem('project_overview_sidebar_visible', String(next));
+      return next;
+    });
+  };
+
   // --- Google Calendar state ---
   const [gcalStatus, setGcalStatus] = useState<GcalStatus>({
     connected: false,
@@ -2136,7 +2149,29 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
 
       {/* Header */}
       <div className="tw:px-3 tw:py-2 tw:bg-white tw:border-b tw:shadow-sm tw:flex tw:items-center tw:justify-between tw:no-print">
-        <span className="tw:font-semibold tw:text-sm tw:text-gray-700">Resumen del Proyecto</span>
+        <div className="tw:flex tw:items-center tw:gap-2">
+          <button
+            onClick={toggleSidebar}
+            className="tw:p-1.5 tw:rounded-md tw:text-slate-600 tw:hover:bg-slate-100 tw:hover:text-slate-800 tw:transition-colors tw:cursor-pointer tw:flex tw:items-center tw:justify-center tw:no-print"
+            title={sidebarVisible ? 'Ocultar ajustes' : 'Mostrar ajustes'}
+          >
+            <svg
+              className="tw:w-5 tw:h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M4 6h16M4 12h16M4 18h16"
+              ></path>
+            </svg>
+          </button>
+          <span className="tw:font-semibold tw:text-sm tw:text-gray-700">Resumen del Proyecto</span>
+        </div>
         <div className="tw:flex tw:items-center tw:gap-2 tw:text-xs tw:text-gray-600 tw:flex-wrap">
           <span className="tw:text-green-600 tw:font-medium">{pctComplete}% completo</span>
           <span>
@@ -2216,820 +2251,719 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         <div className="tw:flex tw:items-center tw:justify-center tw:flex-1 tw:text-gray-400">
           Cargando…
         </div>
-      ) : currentTab === 'summary' ? (
-        <div className="tw:flex-1 tw:overflow-auto tw:p-3 tw:space-y-3">
-          {/* Team Members */}
-          <div className="tw:border tw:border-gray-200 tw:rounded-lg tw:bg-white tw:no-print">
-            <button
-              type="button"
-              className="tw:w-full tw:flex tw:items-center tw:justify-between tw:px-3 tw:py-1.5 tw:hover:bg-gray-50 tw:text-left tw:rounded-t-lg"
-              onClick={() => setShowTeamSection((s) => !s)}
-            >
-              <span className="tw:font-semibold tw:text-xs tw:text-gray-700">
-                👥 Equipo ({teamMembers.length} miembros)
-              </span>
-              <span className="tw:text-gray-400 tw:text-xs">{showTeamSection ? '▲' : '▼'}</span>
-            </button>
+      ) : (
+        <div className="tw:flex tw:flex-1 tw:overflow-hidden">
+          {/* Left Sidebar */}
+          {sidebarVisible && (
+            <div className="tw:w-80 tw:border-r tw:border-gray-200 tw:bg-white tw:p-3 tw:overflow-y-auto tw:flex tw:flex-col tw:gap-3 tw:no-print">
+              {/* Team Members */}
+              <div className="tw:border tw:border-gray-200 tw:rounded-lg tw:bg-white tw:no-print">
+                <button
+                  type="button"
+                  className="tw:w-full tw:flex tw:items-center tw:justify-between tw:px-3 tw:py-1.5 tw:hover:bg-gray-50 tw:text-left tw:rounded-t-lg"
+                  onClick={() => setShowTeamSection((s) => !s)}
+                >
+                  <span className="tw:font-semibold tw:text-xs tw:text-gray-700">
+                    👥 Equipo ({teamMembers.length} miembros)
+                  </span>
+                  <span className="tw:text-gray-400 tw:text-xs">{showTeamSection ? '▲' : '▼'}</span>
+                </button>
 
-            {showTeamSection && (
-              <div className="tw:px-3 tw:pb-3 tw:pt-2 tw:space-y-2">
-                {/* Current members */}
-                <div className="tw:flex tw:flex-wrap tw:gap-1.5">
-                  {teamMembers.map((m) => (
-                    <span
-                      key={m}
-                      className="tw:inline-flex tw:items-center tw:gap-1 tw:bg-slate-100 tw:text-slate-700 tw:text-xs tw:px-2 tw:py-0.5 tw:rounded-full"
-                    >
-                      {m}
-                      <button
-                        type="button"
-                        className="tw:text-slate-400 tw:hover:text-red-500 tw:leading-none tw:font-bold"
-                        title={`Quitar a ${m}`}
-                        onClick={async () => {
-                          const updated = teamMembers.filter((x) => x !== m);
-                          setTeamSaving(true);
-                          setTeamMessage('');
-                          try {
-                            await papi.commands.sendCommand(
-                              'paratextProjectManager.setTeamMembers',
-                              JSON.stringify(updated),
-                            );
-                            setTeamMembers(updated);
-                            setTeamMessage('Guardado ✓');
-                            if (teamMessageRef.current) clearTimeout(teamMessageRef.current);
-                            teamMessageRef.current = setTimeout(() => setTeamMessage(''), 3000);
-                          } catch (e) {
-                            setTeamMessage(`Error: ${e}`);
-                          } finally {
-                            setTeamSaving(false);
-                          }
-                        }}
-                      >
-                        ×
-                      </button>
-                    </span>
-                  ))}
-                </div>
-                <div className="tw:flex tw:gap-2">
-                  <input
-                    className="tw:flex-1 tw:border tw:rounded tw:px-2 tw:py-1 tw:text-xs"
-                    placeholder="Nombre del nuevo miembro…"
-                    value={teamInput}
-                    onChange={(e) => setTeamInput(e.target.value)}
-                    disabled={teamSaving}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleAddMember();
-                      }
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddMember}
-                    className="tw:px-3 tw:py-1 tw:bg-slate-600 tw:text-white tw:text-xs tw:rounded tw:hover:bg-slate-700 tw:disabled:opacity-50"
-                    disabled={teamSaving || !teamInput.trim()}
-                  >
-                    + Agregar
-                  </button>
-                </div>
-                {teamMessage && (
-                  <p
-                    className={`tw:text-xs ${teamMessage.startsWith('tw:Error') ? 'tw:text-red-600' : 'tw:text-green-600'}`}
-                  >
-                    {teamMessage}
-                  </p>
-                )}
-                <p className="tw:text-xs tw:text-gray-400">
-                  Los cambios se reflejan en el Tablero y Mis Tareas al recargar esos paneles.
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* Collaboration */}
-          <div className="tw:border tw:border-gray-200 tw:rounded-lg tw:bg-white tw:no-print">
-            <button
-              type="button"
-              className="tw:w-full tw:flex tw:items-center tw:justify-between tw:px-3 tw:py-1.5 tw:hover:bg-gray-50 tw:text-left tw:rounded-t-lg"
-              onClick={() => setShowCollabSection((s) => !s)}
-            >
-              <span className="tw:font-semibold tw:text-xs tw:text-gray-700 tw:flex tw:items-center tw:gap-1.5">
-                🌐 Colaboración en Tiempo Real
-                {collabRole !== 'none' && (
-                  <span className="tw:w-2 tw:h-2 tw:rounded-full tw:bg-green-500 tw:animate-pulse" />
-                )}
-              </span>
-              <span className="tw:text-gray-400 tw:text-xs">{showCollabSection ? '▲' : '▼'}</span>
-            </button>
-
-            {showCollabSection && (
-              <div className="tw:px-3 tw:pb-3 tw:pt-2 tw:space-y-3 tw:text-xs">
-                {collabStatusMsg && (
-                  <div className="tw:bg-green-50 tw:border tw:border-green-200 tw:text-green-700 tw:p-2 tw:rounded">
-                    {collabStatusMsg}
-                  </div>
-                )}
-                {collabErrorMsg && (
-                  <div className="tw:bg-red-50 tw:border tw:border-red-200 tw:text-red-700 tw:p-2 tw:rounded tw:whitespace-pre-line">
-                    {collabErrorMsg}
-                    {(collabErrorMsg.includes('timeout') ||
-                      collabErrorMsg.includes('ECONNREFUSED') ||
-                      collabErrorMsg.includes('ETIMEDOUT') ||
-                      collabErrorMsg.includes('No se pudo')) && (
-                      <div className="tw:mt-2 tw:pt-2 tw:border-t tw:border-red-200 tw:text-[11px]">
-                        💡 <strong>Si la conexión con el anfitrión falla:</strong>
-                        <ul className="tw:list-disc tw:pl-5 tw:mt-1 tw:space-y-0.5">
-                          <li>
-                            Verifica que el Firewall de Windows permite{' '}
-                            <code>paratext-project-manager</code> o el puerto{' '}
-                            <code>{collabPort}</code>.
-                          </li>
-                          <li>Confirma que ambos equipos están en la misma red.</li>
-                          <li>Prueba hacer ping a la IP del anfitrión.</li>
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {collabRole === 'none' && (
-                  <div className="tw:flex tw:border tw:rounded tw:overflow-hidden tw:bg-white">
-                    <button
-                      type="button"
-                      onClick={() => setCollabType('local')}
-                      className={`tw:flex-1 tw:py-1.5 tw:text-[10px] tw:font-semibold tw:transition-colors ${
-                        collabType === 'local'
-                          ? 'tw:bg-slate-600 tw:text-white'
-                          : 'tw:bg-white tw:text-slate-600 tw:hover:bg-slate-50'
-                      }`}
-                    >
-                      🌐 Red Local (LAN)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCollabType('online')}
-                      className={`tw:flex-1 tw:py-1.5 tw:text-[10px] tw:font-semibold tw:transition-colors ${
-                        collabType === 'online'
-                          ? 'tw:bg-slate-600 tw:text-white'
-                          : 'tw:bg-white tw:text-slate-600 tw:hover:bg-slate-50'
-                      }`}
-                    >
-                      ☁️ En Línea (Internet)
-                    </button>
-                  </div>
-                )}
-
-                {collabRole === 'none' ? (
-                  <div className="tw:grid tw:grid-cols-1 md:tw:grid-cols-2 tw:gap-4 tw:border tw:p-3 tw:rounded tw:bg-gray-50">
-                    {/* Host Mode */}
-                    <div className="tw:space-y-2">
-                      <h4 className="tw:font-semibold tw:text-slate-800">
-                        Modo Anfitrión (Host) {collabType === 'online' ? 'Online' : ''}
-                      </h4>
-                      <p className="tw:text-[10px] tw:text-gray-500">
-                        {collabType === 'online'
-                          ? 'Inicia una sala online en internet para que tu equipo se conecte desde cualquier lugar.'
-                          : 'Inicia un servidor local para que otros se conecten a tu proyecto a través de la red local.'}
-                      </p>
-                      <div>
-                        <label className="tw:block tw:text-[10px] tw:text-gray-400">
-                          Nombre de Usuario
-                        </label>
-                        <input
-                          className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
-                          value={collabUsername}
-                          onChange={(e) => setCollabUsername(e.target.value)}
-                          placeholder="Tu nombre…"
-                        />
-                      </div>
-                      {collabType === 'online' ? (
-                        <>
-                          <div>
-                            <label className="tw:block tw:text-[10px] tw:text-gray-400">
-                              ID de la Sala
-                            </label>
-                            <input
-                              className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:font-mono"
-                              value={collabRoomId}
-                              onChange={(e) => setCollabRoomId(e.target.value.toUpperCase())}
-                              placeholder="e.g. MI-SALA-12"
-                            />
-                          </div>
-                          <div>
-                            <label className="tw:block tw:text-[10px] tw:text-gray-400">
-                              Servidor Relay (Opcional)
-                            </label>
-                            <input
-                              className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:font-mono tw:text-[10px]"
-                              value={collabServerUrl}
-                              onChange={(e) => setCollabServerUrl(e.target.value)}
-                              placeholder="wss://..."
-                            />
-                          </div>
-                        </>
-                      ) : (
-                        <div>
-                          <label className="tw:block tw:text-[10px] tw:text-gray-400">
-                            Puerto (Opcional)
-                          </label>
-                          <input
-                            type="number"
-                            className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
-                            value={collabPort}
-                            onChange={(e) => setCollabPort(parseInt(e.target.value, 10) || 49885)}
-                          />
-                        </div>
-                      )}
-                      <button
-                        type="button"
-                        onClick={handleStartCollabHost}
-                        disabled={collabConnecting}
-                        className="tw:w-full tw:py-1.5 tw:bg-slate-600 tw:hover:bg-slate-700 tw:text-white tw:rounded tw:font-semibold disabled:tw:opacity-50"
-                      >
-                        {collabConnecting ? 'Iniciando...' : 'Iniciar Colaboración'}
-                      </button>
-                    </div>
-
-                    {/* Client Mode */}
-                    <div className="tw:space-y-2 tw:border-t md:tw:border-t-0 md:tw:border-l tw:pt-3 md:tw:pt-0 md:tw:pl-4">
-                      <h4 className="tw:font-semibold tw:text-slate-800">
-                        Modo Invitado (Cliente) {collabType === 'online' ? 'Online' : ''}
-                      </h4>
-                      <p className="tw:text-[10px] tw:text-gray-500">
-                        {collabType === 'online'
-                          ? 'Conéctate a una sala online existente compartida por un anfitrión.'
-                          : 'Conéctate al servidor de un anfitrión local para sincronizar en tiempo real.'}
-                      </p>
-                      <div>
-                        <label className="tw:block tw:text-[10px] tw:text-gray-400">
-                          Nombre de Usuario
-                        </label>
-                        <input
-                          className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
-                          value={collabUsername}
-                          onChange={(e) => setCollabUsername(e.target.value)}
-                          placeholder="Tu nombre…"
-                        />
-                      </div>
-                      {collabType === 'online' ? (
-                        <>
-                          <div>
-                            <label className="tw:block tw:text-[10px] tw:text-gray-400">
-                              ID de la Sala
-                            </label>
-                            <input
-                              className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:font-mono"
-                              value={collabRoomId}
-                              onChange={(e) => setCollabRoomId(e.target.value.toUpperCase())}
-                              placeholder="ID de la sala del anfitrión…"
-                            />
-                          </div>
-                          <div>
-                            <label className="tw:block tw:text-[10px] tw:text-gray-400">
-                              Servidor Relay (Opcional)
-                            </label>
-                            <input
-                              className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:font-mono tw:text-[10px]"
-                              value={collabServerUrl}
-                              onChange={(e) => setCollabServerUrl(e.target.value)}
-                              placeholder="wss://..."
-                            />
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <div>
-                            <label className="tw:block tw:text-[10px] tw:text-gray-400">
-                              IP del Anfitrión
-                            </label>
-                            <input
-                              className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
-                              value={collabHostIp}
-                              onChange={(e) => setCollabHostIp(e.target.value)}
-                              placeholder="e.g. 192.168.1.15"
-                            />
-                          </div>
-                          <div>
-                            <label className="tw:block tw:text-[10px] tw:text-gray-400">
-                              Puerto
-                            </label>
-                            <input
-                              type="number"
-                              className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
-                              value={collabPort}
-                              onChange={(e) => setCollabPort(parseInt(e.target.value, 10) || 49885)}
-                            />
-                          </div>
-                        </>
-                      )}
-                      <button
-                        type="button"
-                        onClick={handleConnectCollabClient}
-                        disabled={collabConnecting}
-                        className="tw:w-full tw:py-1.5 tw:bg-slate-600 tw:hover:bg-slate-700 tw:text-white tw:rounded tw:font-semibold disabled:tw:opacity-50"
-                      >
-                        {collabConnecting ? 'Conectando...' : 'Conectarse'}
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="tw:space-y-3">
-                    {/* Active Session Info */}
-                    <div className="tw:flex tw:justify-between tw:items-start tw:bg-slate-50 tw:border tw:p-3 tw:rounded">
-                      <div className="tw:space-y-1 tw:flex-1 tw:mr-2">
-                        <p className="tw:font-semibold tw:text-slate-800">
-                          Sesión {collabType === 'online' ? 'Online' : 'Local'} Activa:{' '}
-                          {collabRole === 'host' ? 'Anfitrión' : 'Invitado'}
-                        </p>
-                        {collabType === 'online' ? (
-                          <div>
-                            <p className="tw:text-[10px] tw:text-gray-500">
-                              {collabRole === 'host'
-                                ? 'Comparte el ID de la Sala con tu equipo para que se unan:'
-                                : 'Conectado a la sala online:'}
-                            </p>
-                            <div className="tw:flex tw:items-center tw:flex-wrap tw:gap-2 tw:mt-1">
-                              <span className="tw:bg-slate-200 tw:text-slate-700 tw:px-2 tw:py-0.5 tw:rounded tw:text-xs tw:font-mono tw:font-bold">
-                                {collabRoomId}
-                              </span>
-                              <span className="tw:text-[9px] tw:text-gray-400 tw:font-mono">
-                                Relay: {collabServerUrl.replace(/^wss?:\/\//, '')}
-                              </span>
-                            </div>
-                          </div>
-                        ) : collabRole === 'host' ? (
-                          <div>
-                            <p className="tw:text-[10px] tw:text-gray-500">
-                              Comparte tu IP con el equipo para que se conecten:
-                            </p>
-                            <div className="tw:flex tw:flex-wrap tw:gap-1 tw:mt-1">
-                              {collabIps.length > 0 ? (
-                                collabIps.map((ip) => (
-                                  <span
-                                    key={ip}
-                                    className="tw:bg-slate-200 tw:text-slate-700 tw:px-1.5 tw:py-0.5 tw:rounded tw:text-[10px] tw:font-mono"
-                                  >
-                                    {ip}:{collabPort}
-                                  </span>
-                                ))
-                              ) : (
-                                <span className="tw:text-red-500 tw:text-[10px]">
-                                  No se detectaron IPs locales. Verifica tu conexión de red.
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        ) : (
-                          <p className="tw:text-[10px] tw:text-gray-500">
-                            Conectado a:{' '}
-                            <span className="tw:font-mono">
-                              {collabHostIp}:{collabPort}
-                            </span>
-                          </p>
-                        )}
-                        <div className="tw:pt-1">
-                          <span className="tw:text-[10px] tw:text-gray-400">
-                            Usuarios en línea:
-                          </span>
-                          <div className="tw:flex tw:flex-wrap tw:gap-1.5 tw:mt-1">
-                            {collabActiveUsers.map((user) => (
-                              <span
-                                key={user}
-                                className="tw:inline-flex tw:items-center tw:gap-1 tw:bg-green-50 tw:border tw:border-green-100 tw:text-green-800 tw:text-[10px] tw:px-2 tw:py-0.5 tw:rounded-full"
-                              >
-                                <span className="tw:w-1.5 tw:h-1.5 tw:rounded-full tw:bg-green-500" />
-                                {user}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleStopCollab}
-                        className="tw:px-3 tw:py-1 tw:bg-red-600 tw:hover:bg-red-700 tw:text-white tw:rounded tw:font-semibold"
-                      >
-                        Salir
-                      </button>
-                    </div>
-
-                    {/* Reconnecting banner */}
-                    {reconnecting && (
-                      <div className="tw:bg-amber-50 tw:border tw:border-amber-300 tw:text-amber-800 tw:p-2 tw:rounded tw:text-xs tw:flex tw:justify-between tw:items-center">
-                        <span>🔄 Reconectando... (intento #{reconnectAttempts})</span>
-                        <button
-                          type="button"
-                          onClick={handleReconnectCollab}
-                          className="tw:ml-2 tw:px-2 tw:py-0.5 tw:bg-amber-200 hover:tw:bg-amber-300 tw:rounded tw:text-[10px] tw:font-semibold"
+                {showTeamSection && (
+                  <div className="tw:px-3 tw:pb-3 tw:pt-2 tw:space-y-2">
+                    {/* Current members */}
+                    <div className="tw:flex tw:flex-wrap tw:gap-1.5">
+                      {teamMembers.map((m) => (
+                        <span
+                          key={m}
+                          className="tw:inline-flex tw:items-center tw:gap-1 tw:bg-slate-100 tw:text-slate-700 tw:text-xs tw:px-2 tw:py-0.5 tw:rounded-full"
                         >
-                          Reintentar ahora
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Disconnected banner with reconnect */}
-                    {collabRole === 'none' && !reconnecting && hasEverConnected && (
-                      <div className="tw:bg-orange-50 tw:border tw:border-orange-300 tw:text-orange-800 tw:p-2 tw:rounded tw:text-xs tw:flex tw:justify-between tw:items-center">
-                        <span>⚠️ Sesión desconectada</span>
-                        <button
-                          type="button"
-                          onClick={handleReconnectCollab}
-                          className="tw:ml-2 tw:px-2 tw:py-0.5 tw:bg-orange-200 hover:tw:bg-orange-300 tw:rounded tw:text-[10px] tw:font-semibold"
-                        >
-                          🔌 Reconectar
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Group Chat */}
-                    <div className="tw:border tw:rounded tw:bg-white">
-                      <div className="tw:bg-slate-50 tw:border-b tw:px-2 tw:py-1.5 tw:font-semibold tw:text-slate-700">
-                        💬 Chat de Coordinación
-                      </div>
-                      <div className="tw:h-32 tw:overflow-y-auto tw:p-2 tw:space-y-1.5 tw:bg-slate-50/50">
-                        {collabChatMessages.length === 0 ? (
-                          <p className="tw:text-gray-400 tw:italic tw:text-center tw:pt-8 tw:text-[10px]">
-                            No hay mensajes. Envía un mensaje para coordinar con el equipo.
-                          </p>
-                        ) : (
-                          collabChatMessages.map((msg, idx) => (
-                            <div
-                              key={idx}
-                              className="tw:text-[11px] tw:bg-white tw:p-1.5 tw:rounded tw:border tw:shadow-sm"
-                            >
-                              <div className="tw:flex tw:justify-between tw:mb-0.5">
-                                <span className="tw:font-bold tw:text-slate-700">{msg.user}</span>
-                                <span className="tw:text-[9px] tw:text-gray-400">
-                                  {new Date(msg.timestamp).toLocaleTimeString([], {
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                  })}
-                                </span>
-                              </div>
-                              <p className="tw:text-gray-600">{msg.message}</p>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                      <div className="tw:flex tw:border-t">
-                        <input
-                          className="tw:flex-1 tw:px-2 tw:py-1.5 tw:text-xs tw:outline-none"
-                          placeholder="Escribe un mensaje para el equipo…"
-                          value={chatInput}
-                          onChange={(e) => setChatInput(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              handleSendChat();
-                            }
-                          }}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleSendChat()}
-                          disabled={!chatInput.trim()}
-                          className="tw:px-3 tw:py-1.5 tw:bg-slate-600 tw:hover:bg-slate-700 tw:text-white tw:font-semibold disabled:tw:opacity-50"
-                        >
-                          Enviar
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {totalTasks === 0 ? (
-            <div className="tw:flex tw:items-center tw:justify-center tw:py-8 tw:text-gray-400">
-              No hay tareas creadas todavía. Abre el Tablero de Tareas para crear tareas.
-            </div>
-          ) : (
-            <>
-              <table className="tw:border-collapse tw:w-full">
-                <thead>
-                  <tr>
-                    <th className="tw:border tw:border-gray-200 tw:bg-gray-100 tw:px-2 tw:py-1 tw:text-left tw:font-semibold tw:sticky tw:left-0 tw:z-10">
-                      Libro
-                    </th>
-                    {orderedStages.map((stage) => (
-                      <th
-                        key={stage}
-                        className="tw:border tw:border-gray-200 tw:bg-gray-100 tw:px-1 tw:py-1 tw:font-medium tw:whitespace-nowrap tw:max-w-20"
-                        title={getStageLabel(stage, stageConfig)}
-                      >
-                        <div className="tw:truncate tw:max-w-16">
-                          {getStageLabel(stage, stageConfig)}
-                        </div>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {booksInUse.map((book) => (
-                    <tr key={book} className="tw:hover:bg-gray-50">
-                      <td className="tw:border tw:border-gray-200 tw:px-2 tw:py-1 tw:font-semibold tw:bg-white tw:sticky tw:left-0">
-                        {book}
-                      </td>
-                      {orderedStages.map((stage) => {
-                        const cellTasks = grid[book]?.[stage] ?? [];
-                        const status = aggregateStatus(cellTasks);
-                        return (
-                          <td
-                            key={stage}
-                            className={`tw:border tw:border-gray-200 tw:px-1 tw:py-1 tw:text-center ${
-                              status ? CELL_STYLES[status] : 'tw:bg-white'
-                            }`}
-                            title={
-                              cellTasks.length > 0
-                                ? `${cellTasks.length} tarea${cellTasks.length !== 1 ? 's' : ''}`
-                                : ''
-                            }
-                          >
-                            {status ? (
-                              <span className="tw:font-medium">
-                                {CELL_ICONS[status]}
-                                {cellTasks.length > 1 && (
-                                  <sup className="tw:text-gray-500">{cellTasks.length}</sup>
-                                )}
-                              </span>
-                            ) : null}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="tw:bg-gray-100 tw:font-medium">
-                    <td className="tw:border tw:border-gray-200 tw:px-2 tw:py-1 tw:sticky tw:left-0 tw:bg-gray-100">
-                      Total
-                    </td>
-                    {orderedStages.map((stage) => {
-                      const s = stageSummary[stage];
-                      return (
-                        <td
-                          key={stage}
-                          className="tw:border tw:border-gray-200 tw:px-1 tw:py-1 tw:text-center"
-                        >
-                          {s.total > 0 ? (
-                            <span
-                              className={
-                                s.complete === s.total ? 'tw:text-green-600' : 'tw:text-gray-600'
-                              }
-                              title={`${s.complete}/${s.total} completas${s.flagged > 0 ? `, ${s.flagged} banderas` : ''}`}
-                            >
-                              {s.complete}/{s.total}
-                            </span>
-                          ) : (
-                            <span className="tw:text-gray-300">—</span>
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                </tfoot>
-              </table>
-
-              {/* Legend */}
-              <div className="tw:flex tw:gap-4 tw:mt-3 tw:px-1 tw:text-xs tw:text-gray-500 tw:flex-wrap">
-                <span>✓ Completo</span>
-                <span>⟳ En Progreso</span>
-                <span>• Pendiente</span>
-                <span className="tw:flex tw:items-center tw:gap-1">
-                  <span className="tw:w-2 tw:h-2 tw:rounded-full tw:bg-red-500 tw:inline-block" />⚑
-                  Bandera
-                </span>
-              </div>
-            </>
-          )}
-
-          {/* Google Calendar Section */}
-          <div className="tw:mt-4 tw:border tw:border-gray-200 tw:rounded-lg tw:overflow-hidden tw:no-print">
-            <button
-              className="tw:w-full tw:flex tw:items-center tw:justify-between tw:px-3 tw:py-2 tw:bg-gray-50 tw:hover:bg-gray-100 tw:text-left"
-              onClick={() => setShowGcalSection((s) => !s)}
-            >
-              <span className="tw:font-semibold tw:text-xs tw:text-gray-700">
-                📅 Google Calendar
-                {gcalStatus.connected && (
-                  <span className="tw:ml-2 tw:text-green-600 tw:font-normal">● Conectado</span>
-                )}
-              </span>
-              <span className="tw:text-gray-400 tw:text-xs">{showGcalSection ? '▲' : '▼'}</span>
-            </button>
-
-            {showGcalSection && (
-              <div className="tw:p-3 tw:space-y-3">
-                {gcalStatus.connected ? (
-                  <>
-                    <div className="tw:flex tw:items-center tw:justify-between tw:flex-wrap tw:gap-2">
-                      <div className="tw:text-xs tw:text-gray-600 tw:space-y-0.5">
-                        <div>
-                          <span className="tw:text-green-600 tw:font-medium">● Conectado</span>
-                          {gcalStatus.email && (
-                            <span className="tw:ml-1 tw:text-gray-500">({gcalStatus.email})</span>
-                          )}
-                        </div>
-                        {gcalStatus.lastSync && (
-                          <div className="tw:text-gray-400">
-                            Última sync:{' '}
-                            {new Date(gcalStatus.lastSync).toLocaleString('es', {
-                              dateStyle: 'short',
-                              timeStyle: 'short',
-                            })}
-                          </div>
-                        )}
-                      </div>
-                      <div className="tw:flex tw:gap-2 tw:flex-wrap">
-                        <button
-                          className="tw:text-xs tw:px-2 tw:py-1 tw:bg-blue-600 tw:text-white tw:rounded tw:hover:bg-blue-700 tw:disabled:opacity-50"
-                          onClick={gcalSync}
-                          disabled={gcalSyncing || !projectId}
-                        >
-                          {gcalSyncing ? '⟳ Sincronizando…' : '↑ Sincronizar Fechas'}
-                        </button>
-                        <button
-                          className="tw:text-xs tw:px-2 tw:py-1 tw:rounded tw:bg-slate-100 tw:text-slate-700 tw:hover:bg-slate-200"
-                          onClick={flushPendingTime}
-                        >
-                          ⟳ Sincronizar horas pendientes
-                        </button>
-                        <button
-                          className="tw:text-xs tw:px-2 tw:py-1 tw:bg-gray-200 tw:text-gray-700 tw:rounded tw:hover:bg-gray-300"
-                          onClick={gcalDisconnect}
-                        >
-                          Desconectar
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="tw:flex tw:items-center tw:gap-2 tw:text-xs">
-                      <span className="tw:text-gray-500 tw:flex-shrink-0">Calendario:</span>
-                      {gcalCalendars.length > 0 ? (
-                        <select
-                          className="tw:flex-1 tw:border tw:border-gray-300 tw:rounded tw:px-1.5 tw:py-0.5 tw:text-xs tw:max-w-xs"
-                          value={gcalStatus.calendarId}
-                          onChange={(e) => gcalChangeCalendar(e.target.value)}
-                        >
-                          {gcalCalendars.map((cal) => (
-                            <option key={cal.id} value={cal.id}>
-                              {cal.summary}
-                              {cal.primary ? ' (principal)' : ''}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className="tw:text-gray-400">
-                          {gcalStatus.calendarId}
+                          {m}
                           <button
-                            className="tw:ml-2 tw:text-blue-500 tw:hover:text-blue-700 tw:underline"
-                            onClick={gcalLoadCalendars}
+                            type="button"
+                            className="tw:text-slate-400 tw:hover:text-red-500 tw:leading-none tw:font-bold"
+                            title={`Quitar a ${m}`}
+                            onClick={async () => {
+                              const updated = teamMembers.filter((x) => x !== m);
+                              setTeamSaving(true);
+                              setTeamMessage('');
+                              try {
+                                await papi.commands.sendCommand(
+                                  'paratextProjectManager.setTeamMembers',
+                                  JSON.stringify(updated),
+                                );
+                                setTeamMembers(updated);
+                                setTeamMessage('Guardado ✓');
+                                if (teamMessageRef.current) clearTimeout(teamMessageRef.current);
+                                teamMessageRef.current = setTimeout(() => setTeamMessage(''), 3000);
+                              } catch (e) {
+                                setTeamMessage(`Error: ${e}`);
+                              } finally {
+                                setTeamSaving(false);
+                              }
+                            }}
                           >
-                            Cargar calendarios
+                            ×
                           </button>
                         </span>
-                      )}
+                      ))}
                     </div>
-                  </>
-                ) : (
-                  <>
-                    <p className="tw:text-xs tw:text-gray-500">
-                      Conecta Google Calendar para sincronizar fechas límite de tareas como eventos
-                      y ver el calendario del equipo.
+                    <div className="tw:flex tw:gap-2">
+                      <input
+                        className="tw:flex-1 tw:border tw:rounded tw:px-2 tw:py-1 tw:text-xs"
+                        placeholder="Nombre del nuevo miembro…"
+                        value={teamInput}
+                        onChange={(e) => setTeamInput(e.target.value)}
+                        disabled={teamSaving}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddMember();
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddMember}
+                        className="tw:px-3 tw:py-1 tw:bg-slate-600 tw:text-white tw:text-xs tw:rounded tw:hover:bg-slate-700 tw:disabled:opacity-50"
+                        disabled={teamSaving || !teamInput.trim()}
+                      >
+                        + Agregar
+                      </button>
+                    </div>
+                    {teamMessage && (
+                      <p
+                        className={`tw:text-xs ${teamMessage.startsWith('tw:Error') ? 'tw:text-red-600' : 'tw:text-green-600'}`}
+                      >
+                        {teamMessage}
+                      </p>
+                    )}
+                    <p className="tw:text-xs tw:text-gray-400">
+                      Los cambios se reflejan en el Tablero y Mis Tareas al recargar esos paneles.
                     </p>
+                  </div>
+                )}
+              </div>
 
-                    {/* One-click reconnect — shown when credentials are already saved */}
-                    {gcalStatus.hasCredentials && !showGcalSetup && (
-                      <div className="tw:space-y-1.5">
+              {/* Collaboration */}
+              <div className="tw:border tw:border-gray-200 tw:rounded-lg tw:bg-white tw:no-print">
+                <button
+                  type="button"
+                  className="tw:w-full tw:flex tw:items-center tw:justify-between tw:px-3 tw:py-1.5 tw:hover:bg-gray-50 tw:text-left tw:rounded-t-lg"
+                  onClick={() => setShowCollabSection((s) => !s)}
+                >
+                  <span className="tw:font-semibold tw:text-xs tw:text-gray-700 tw:flex tw:items-center tw:gap-1.5">
+                    🌐 Colaboración en Tiempo Real
+                    {collabRole !== 'none' && (
+                      <span className="tw:w-2 tw:h-2 tw:rounded-full tw:bg-green-500 tw:animate-pulse" />
+                    )}
+                  </span>
+                  <span className="tw:text-gray-400 tw:text-xs">{showCollabSection ? '▲' : '▼'}</span>
+                </button>
+
+                {showCollabSection && (
+                  <div className="tw:px-3 tw:pb-3 tw:pt-2 tw:space-y-3 tw:text-xs">
+                    {collabStatusMsg && (
+                      <div className="tw:bg-green-50 tw:border tw:border-green-200 tw:text-green-700 tw:p-2 tw:rounded">
+                        {collabStatusMsg}
+                      </div>
+                    )}
+                    {collabErrorMsg && (
+                      <div className="tw:bg-red-50 tw:border tw:border-red-200 tw:text-red-700 tw:p-2 tw:rounded tw:whitespace-pre-line">
+                        {collabErrorMsg}
+                        {(collabErrorMsg.includes('timeout') ||
+                          collabErrorMsg.includes('ECONNREFUSED') ||
+                          collabErrorMsg.includes('ETIMEDOUT') ||
+                          collabErrorMsg.includes('No se pudo')) && (
+                          <div className="tw:mt-2 tw:pt-2 tw:border-t tw:border-red-200 tw:text-[11px]">
+                            💡 <strong>Si la conexión con el anfitrión falla:</strong>
+                            <ul className="tw:list-disc tw:pl-5 tw:mt-1 tw:space-y-0.5">
+                              <li>
+                                Verifica que el Firewall de Windows permite{' '}
+                                <code>paratext-project-manager</code> o el puerto{' '}
+                                <code>{collabPort}</code>.
+                              </li>
+                              <li>Confirma que ambos equipos están en la misma red.</li>
+                              <li>Prueba hacer ping a la IP del anfitrión.</li>
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {collabRole === 'none' && (
+                      <div className="tw:flex tw:border tw:rounded tw:overflow-hidden tw:bg-white">
                         <button
-                          className="tw:text-xs tw:px-3 tw:py-1.5 tw:bg-blue-600 tw:text-white tw:rounded tw:hover:bg-blue-700 tw:disabled:opacity-50"
-                          onClick={gcalReconnect}
-                          disabled={gcalConnecting}
+                          type="button"
+                          onClick={() => setCollabType('local')}
+                          className={`tw:flex-1 tw:py-1.5 tw:text-[10px] tw:font-semibold tw:transition-colors ${
+                            collabType === 'local'
+                              ? 'tw:bg-slate-600 tw:text-white'
+                              : 'tw:bg-white tw:text-slate-600 tw:hover:bg-slate-50'
+                          }`}
                         >
-                          {gcalConnecting
-                            ? '⟳ Esperando autorización…'
-                            : '🔑 Reconectar Google Calendar'}
+                          🌐 Red Local (LAN)
                         </button>
-                        <p className="tw:text-xs tw:text-gray-400">
-                          Se usarán las credenciales guardadas. El navegador se abrirá para aprobar
-                          el acceso.{' '}
-                          <button
-                            className="tw:underline tw:hover:text-gray-600"
-                            onClick={() => setShowGcalSetup(true)}
-                          >
-                            Usar otras credenciales
-                          </button>
-                        </p>
-                        <p className="tw:text-xs tw:text-amber-700 tw:bg-amber-50 tw:border tw:border-amber-200 tw:rounded tw:px-2 tw:py-1">
-                          💡 Si tienes que reconectar frecuentemente: en Google Cloud Console cambia
-                          la app de <strong>«En prueba»</strong> a <strong>«En producción»</strong>{' '}
-                          (no requiere verificación de Google). Esto evita que el token expire cada
-                          7 días.
-                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setCollabType('online')}
+                          className={`tw:flex-1 tw:py-1.5 tw:text-[10px] tw:font-semibold tw:transition-colors ${
+                            collabType === 'online'
+                              ? 'tw:bg-slate-600 tw:text-white'
+                              : 'tw:bg-white tw:text-slate-600 tw:hover:bg-slate-50'
+                          }`}
+                        >
+                          ☁️ En Línea (Internet)
+                        </button>
                       </div>
                     )}
 
-                    {/* First-time connect or "use other credentials" */}
-                    {(!gcalStatus.hasCredentials || showGcalSetup) && (
-                      <div className="tw:space-y-2">
-                        {!showGcalSetup && (
+                    {collabRole === 'none' ? (
+                      <div className="tw:grid tw:grid-cols-1 md:tw:grid-cols-2 tw:gap-4 tw:border tw:p-3 tw:rounded tw:bg-gray-50">
+                        {/* Host Mode */}
+                        <div className="tw:space-y-2">
+                          <h4 className="tw:font-semibold tw:text-slate-800">
+                            Modo Anfitrión (Host) {collabType === 'online' ? 'Online' : ''}
+                          </h4>
+                          <p className="tw:text-[10px] tw:text-gray-500">
+                            {collabType === 'online'
+                              ? 'Inicia una sala online en internet para que tu equipo se conecte desde cualquier lugar.'
+                              : 'Inicia un servidor local para que otros se conecten a tu proyecto a través de la red local.'}
+                          </p>
+                          <div>
+                            <label className="tw:block tw:text-[10px] tw:text-gray-400">
+                              Nombre de Usuario
+                            </label>
+                            <input
+                              className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
+                              value={collabUsername}
+                              onChange={(e) => setCollabUsername(e.target.value)}
+                              placeholder="Tu nombre…"
+                            />
+                          </div>
+                          {collabType === 'online' ? (
+                            <>
+                              <div>
+                                <label className="tw:block tw:text-[10px] tw:text-gray-400">
+                                  ID de la Sala
+                                </label>
+                                <input
+                                  className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:font-mono"
+                                  value={collabRoomId}
+                                  onChange={(e) => setCollabRoomId(e.target.value.toUpperCase())}
+                                  placeholder="e.g. MI-SALA-12"
+                                />
+                              </div>
+                              <div>
+                                <label className="tw:block tw:text-[10px] tw:text-gray-400">
+                                  Servidor Relay (Opcional)
+                                </label>
+                                <input
+                                  className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:font-mono tw:text-[10px]"
+                                  value={collabServerUrl}
+                                  onChange={(e) => setCollabServerUrl(e.target.value)}
+                                  placeholder="wss://..."
+                                />
+                              </div>
+                            </>
+                          ) : (
+                            <div>
+                              <label className="tw:block tw:text-[10px] tw:text-gray-400">
+                                Puerto (Opcional)
+                              </label>
+                              <input
+                                type="number"
+                                className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
+                                value={collabPort}
+                                onChange={(e) => setCollabPort(parseInt(e.target.value, 10) || 49885)}
+                              />
+                            </div>
+                          )}
                           <button
-                            className="tw:text-xs tw:px-3 tw:py-1.5 tw:bg-blue-600 tw:text-white tw:rounded tw:hover:bg-blue-700"
-                            onClick={() => setShowGcalSetup(true)}
+                            type="button"
+                            onClick={handleStartCollabHost}
+                            disabled={collabConnecting}
+                            className="tw:w-full tw:py-1.5 tw:bg-slate-600 tw:hover:bg-slate-700 tw:text-white tw:rounded tw:font-semibold disabled:tw:opacity-50"
                           >
-                            Conectar Google Calendar
+                            {collabConnecting ? 'Iniciando...' : 'Iniciar Colaboración'}
                           </button>
-                        )}
-                        {showGcalSetup && (
-                          <>
-                            <div className="tw:text-xs tw:bg-blue-50 tw:border tw:border-blue-200 tw:rounded tw:p-2 tw:space-y-1.5">
-                              <p className="tw:font-semibold tw:text-blue-700">
-                                Configuración en Google Cloud Console:
-                              </p>
-                              <ol className="tw:list-decimal tw:list-inside tw:space-y-1 tw:text-blue-800">
-                                <li>
-                                  Ve a{' '}
-                                  <span className="tw:font-mono tw:bg-blue-100 tw:px-0.5 tw:rounded">
-                                    console.cloud.google.com
+                        </div>
+
+                        {/* Client Mode */}
+                        <div className="tw:space-y-2 tw:border-t md:tw:border-t-0 md:tw:border-l tw:pt-3 md:tw:pt-0 md:tw:pl-4">
+                          <h4 className="tw:font-semibold tw:text-slate-800">
+                            Modo Invitado (Cliente) {collabType === 'online' ? 'Online' : ''}
+                          </h4>
+                          <p className="tw:text-[10px] tw:text-gray-500">
+                            {collabType === 'online'
+                              ? 'Conéctate a una sala online existente compartida por un anfitrión.'
+                              : 'Conéctate al servidor de un anfitrión local para sincronizar en tiempo real.'}
+                          </p>
+                          <div>
+                            <label className="tw:block tw:text-[10px] tw:text-gray-400">
+                              Nombre de Usuario
+                            </label>
+                            <input
+                              className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
+                              value={collabUsername}
+                              onChange={(e) => setCollabUsername(e.target.value)}
+                              placeholder="Tu nombre…"
+                            />
+                          </div>
+                          {collabType === 'online' ? (
+                            <>
+                              <div>
+                                <label className="tw:block tw:text-[10px] tw:text-gray-400">
+                                  ID de la Sala
+                                </label>
+                                <input
+                                  className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:font-mono"
+                                  value={collabRoomId}
+                                  onChange={(e) => setCollabRoomId(e.target.value.toUpperCase())}
+                                  placeholder="ID de la sala del anfitrión…"
+                                />
+                              </div>
+                              <div>
+                                <label className="tw:block tw:text-[10px] tw:text-gray-400">
+                                  Servidor Relay (Opcional)
+                                </label>
+                                <input
+                                  className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:font-mono tw:text-[10px]"
+                                  value={collabServerUrl}
+                                  onChange={(e) => setCollabServerUrl(e.target.value)}
+                                  placeholder="wss://..."
+                                />
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <div>
+                                <label className="tw:block tw:text-[10px] tw:text-gray-400">
+                                  IP del Anfitrión
+                                </label>
+                                <input
+                                  className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
+                                  value={collabHostIp}
+                                  onChange={(e) => setCollabHostIp(e.target.value)}
+                                  placeholder="e.g. 192.168.1.15"
+                                />
+                              </div>
+                              <div>
+                                <label className="tw:block tw:text-[10px] tw:text-gray-400">
+                                  Puerto
+                                </label>
+                                <input
+                                  type="number"
+                                  className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
+                                  value={collabPort}
+                                  onChange={(e) => setCollabPort(parseInt(e.target.value, 10) || 49885)}
+                                />
+                              </div>
+                            </>
+                          )}
+                          <button
+                            type="button"
+                            onClick={handleConnectCollabClient}
+                            disabled={collabConnecting}
+                            className="tw:w-full tw:py-1.5 tw:bg-slate-600 tw:hover:bg-slate-700 tw:text-white tw:rounded tw:font-semibold disabled:tw:opacity-50"
+                          >
+                            {collabConnecting ? 'Conectando...' : 'Conectarse'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="tw:space-y-3">
+                        {/* Active Session Info */}
+                        <div className="tw:flex tw:justify-between tw:items-start tw:bg-slate-50 tw:border tw:p-3 tw:rounded">
+                          <div className="tw:space-y-1 tw:flex-1 tw:mr-2">
+                            <p className="tw:font-semibold tw:text-slate-800">
+                              Sesión {collabType === 'online' ? 'Online' : 'Local'} Activa:{' '}
+                              {collabRole === 'host' ? 'Anfitrión' : 'Invitado'}
+                            </p>
+                            {collabType === 'online' ? (
+                              <div>
+                                <p className="tw:text-[10px] tw:text-gray-500">
+                                  {collabRole === 'host'
+                                    ? 'Comparte el ID de la Sala con tu equipo para que se unan:'
+                                    : 'Conectado a la sala online:'}
+                                </p>
+                                <div className="tw:flex tw:items-center tw:flex-wrap tw:gap-2 tw:mt-1">
+                                  <span className="tw:bg-slate-200 tw:text-slate-700 tw:px-2 tw:py-0.5 tw:rounded tw:text-xs tw:font-mono tw:font-bold">
+                                    {collabRoomId}
                                   </span>
-                                </li>
-                                <li>Crea o selecciona un proyecto</li>
-                                <li>
-                                  <strong>APIs y servicios → Biblioteca</strong> → busca{' '}
-                                  <em>Google Calendar API</em> → Habilitar
-                                </li>
-                                <li>
-                                  <strong>
-                                    APIs y servicios → Pantalla de consentimiento OAuth
-                                  </strong>{' '}
-                                  → Tipo: <strong>Externo</strong> → crea, llena nombre y correo →
-                                  agrega tu correo en &quot;Usuarios de prueba&quot;
-                                </li>
-                                <li>
-                                  <strong>
-                                    APIs y servicios → Credenciales → Crear credenciales → ID de
-                                    cliente de OAuth 2.0
-                                  </strong>
-                                </li>
-                                <li>
-                                  Tipo de aplicación: <strong>Aplicación de escritorio</strong> (no
-                                  &quot;Aplicación web&quot;)
-                                </li>
-                                <li>
-                                  Copia el <strong>ID de cliente</strong> y{' '}
-                                  <strong>Secreto de cliente</strong>
-                                </li>
-                              </ol>
-                              <p className="tw:text-orange-700 tw:font-medium tw:mt-1">
-                                ⚠ Error 400 = elegiste &quot;Aplicación web&quot; en vez de
-                                &quot;Aplicación de escritorio&quot;, o falta configurar la pantalla
-                                de consentimiento.
+                                  <span className="tw:text-[9px] tw:text-gray-400 tw:font-mono">
+                                    Relay: {collabServerUrl.replace(/^wss?:\/\//, '')}
+                                  </span>
+                                </div>
+                              </div>
+                            ) : collabRole === 'host' ? (
+                              <div>
+                                <p className="tw:text-[10px] tw:text-gray-500">
+                                  Comparte tu IP con el equipo para que se conecten:
+                                </p>
+                                <div className="tw:flex tw:flex-wrap tw:gap-1 tw:mt-1">
+                                  {collabIps.length > 0 ? (
+                                    collabIps.map((ip) => (
+                                      <span
+                                        key={ip}
+                                        className="tw:bg-slate-200 tw:text-slate-700 tw:px-1.5 tw:py-0.5 tw:rounded tw:text-[10px] tw:font-mono"
+                                      >
+                                        {ip}:{collabPort}
+                                      </span>
+                                    ))
+                                  ) : (
+                                    <span className="tw:text-red-500 tw:text-[10px]">
+                                      No se detectaron IPs locales. Verifica tu conexión de red.
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            ) : (
+                              <p className="tw:text-[10px] tw:text-gray-500">
+                                Conectado a:{' '}
+                                <span className="tw:font-mono">
+                                  {collabHostIp}:{collabPort}
+                                </span>
                               </p>
+                            )}
+                            <div className="tw:pt-1">
+                              <span className="tw:text-[10px] tw:text-gray-400">
+                                Usuarios en línea:
+                              </span>
+                              <div className="tw:flex tw:flex-wrap tw:gap-1.5 tw:mt-1">
+                                {collabActiveUsers.map((user) => (
+                                  <span
+                                    key={user}
+                                    className="tw:inline-flex tw:items-center tw:gap-1 tw:bg-green-50 tw:border tw:border-green-100 tw:text-green-800 tw:text-[10px] tw:px-2 tw:py-0.5 tw:rounded-full"
+                                  >
+                                    <span className="tw:w-1.5 tw:h-1.5 tw:rounded-full tw:bg-green-500" />
+                                    {user}
+                                  </span>
+                                ))}
+                              </div>
                             </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleStopCollab}
+                            className="tw:px-3 tw:py-1 tw:bg-red-600 tw:hover:bg-red-700 tw:text-white tw:rounded tw:font-semibold"
+                          >
+                            Salir
+                          </button>
+                        </div>
 
-                            <div className="tw:flex tw:flex-col tw:gap-1.5">
-                              <input
-                                type="text"
-                                placeholder="Client ID (termina en .apps.googleusercontent.com)"
-                                value={gcalClientId}
-                                onChange={(e) => setGcalClientId(e.target.value)}
-                                className="tw:w-full tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:text-xs"
-                              />
-                              <input
-                                type="password"
-                                placeholder="Client Secret"
-                                value={gcalClientSecret}
-                                onChange={(e) => setGcalClientSecret(e.target.value)}
-                                className="tw:w-full tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:text-xs"
-                                onKeyDown={(e) => e.key === 'Enter' && gcalConnect()}
-                              />
-                            </div>
-
-                            <div className="tw:flex tw:gap-2">
-                              <button
-                                className="tw:text-xs tw:px-3 tw:py-1.5 tw:bg-green-600 tw:text-white tw:rounded tw:hover:bg-green-700 tw:disabled:opacity-50"
-                                onClick={gcalConnect}
-                                disabled={gcalConnecting}
-                              >
-                                {gcalConnecting ? '⟳ Esperando…' : 'Autorizar con Google'}
-                              </button>
-                              <button
-                                className="tw:text-xs tw:px-3 tw:py-1.5 tw:bg-gray-200 tw:text-gray-700 tw:rounded tw:hover:bg-gray-300"
-                                onClick={() => {
-                                  setShowGcalSetup(false);
-                                  setGcalError('');
-                                  setGcalMessage('');
-                                }}
-                              >
-                                Cancelar
-                              </button>
-                            </div>
-                          </>
+                        {/* Reconnecting banner */}
+                        {reconnecting && (
+                          <div className="tw:bg-amber-50 tw:border tw:border-amber-300 tw:text-amber-800 tw:p-2 tw:rounded tw:text-xs tw:flex tw:justify-between tw:items-center">
+                            <span>🔄 Reconectando... (intento #{reconnectAttempts})</span>
+                            <button
+                              type="button"
+                              onClick={handleReconnectCollab}
+                              className="tw:ml-2 tw:px-2 tw:py-0.5 tw:bg-amber-200 hover:tw:bg-amber-300 tw:rounded tw:text-[10px] tw:font-semibold"
+                            >
+                              Reintentar ahora
+                            </button>
+                          </div>
                         )}
+
+                        {/* Disconnected banner with reconnect */}
+                        {collabRole === 'none' && !reconnecting && hasEverConnected && (
+                          <div className="tw:bg-orange-50 tw:border tw:border-orange-300 tw:text-orange-800 tw:p-2 tw:rounded tw:text-xs tw:flex tw:justify-between tw:items-center">
+                            <span>⚠️ Sesión desconectada</span>
+                            <button
+                              type="button"
+                              onClick={handleReconnectCollab}
+                              className="tw:ml-2 tw:px-2 tw:py-0.5 tw:bg-orange-200 hover:tw:bg-orange-300 tw:rounded tw:text-[10px] tw:font-semibold"
+                            >
+                              🔌 Reconectar
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Group Chat */}
+                        <div className="tw:border tw:rounded tw:bg-white">
+                          <div className="tw:bg-slate-50 tw:border-b tw:px-2 tw:py-1.5 tw:font-semibold tw:text-slate-700">
+                            💬 Chat de Coordinación
+                          </div>
+                          <div className="tw:h-32 tw:overflow-y-auto tw:p-2 tw:space-y-1.5 tw:bg-slate-50/50">
+                            {collabChatMessages.length === 0 ? (
+                              <p className="tw:text-gray-400 tw:italic tw:text-center tw:pt-8 tw:text-[10px]">
+                                No hay mensajes. Envía un mensaje para coordinar con el equipo.
+                              </p>
+                            ) : (
+                              collabChatMessages.map((msg, idx) => (
+                                <div
+                                  key={idx}
+                                  className="tw:text-[11px] tw:bg-white tw:p-1.5 tw:rounded tw:border tw:shadow-sm"
+                                >
+                                  <div className="tw:flex tw:justify-between tw:mb-0.5">
+                                    <span className="tw:font-bold tw:text-slate-700">{msg.user}</span>
+                                    <span className="tw:text-[9px] tw:text-gray-400">
+                                      {new Date(msg.timestamp).toLocaleTimeString([], {
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                      })}
+                                    </span>
+                                  </div>
+                                  <p className="tw:text-gray-600">{msg.message}</p>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                          <div className="tw:flex tw:border-t">
+                            <input
+                              className="tw:flex-1 tw:px-2 tw:py-1.5 tw:text-xs tw:outline-none"
+                              placeholder="Escribe un mensaje para el equipo…"
+                              value={chatInput}
+                              onChange={(e) => setChatInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleSendChat();
+                                }
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleSendChat()}
+                              disabled={!chatInput.trim()}
+                              className="tw:px-3 tw:py-1.5 tw:bg-slate-600 tw:hover:bg-slate-700 tw:text-white tw:font-semibold disabled:tw:opacity-50"
+                            >
+                              Enviar
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     )}
+                  </div>
+                )}
+              </div>
+
+              {/* Google Calendar Section */}
+              <div className="tw:border tw:border-gray-200 tw:rounded-lg tw:overflow-hidden tw:no-print">
+                <button
+                  className="tw:w-full tw:flex tw:items-center tw:justify-between tw:px-3 tw:py-2 tw:bg-gray-50 tw:hover:bg-gray-100 tw:text-left"
+                  onClick={() => setShowGcalSection((s) => !s)}
+                >
+                  <span className="tw:font-semibold tw:text-xs tw:text-gray-700">
+                    📅 Google Calendar
+                    {gcalStatus.connected && (
+                      <span className="tw:ml-2 tw:text-green-600 tw:font-normal">● Conectado</span>
+                    )}
+                  </span>
+                  <span className="tw:text-gray-400 tw:text-xs">{showGcalSection ? '▲' : '▼'}</span>
+                </button>
+
+                {showGcalSection && (
+                  <div className="tw:p-3 tw:space-y-3">
+                    {gcalStatus.connected ? (
+                      <>
+                        <div className="tw:flex tw:items-center tw:justify-between tw:flex-wrap tw:gap-2">
+                          <div className="tw:text-xs tw:text-gray-600 tw:space-y-0.5">
+                            <div>
+                              <span className="tw:text-green-600 tw:font-medium">● Conectado</span>
+                              {gcalStatus.email && (
+                                <span className="tw:ml-1 tw:text-gray-500">({gcalStatus.email})</span>
+                              )}
+                            </div>
+                            {gcalStatus.lastSync && (
+                              <div className="tw:text-gray-400">
+                                Última sync:{' '}
+                                {new Date(gcalStatus.lastSync).toLocaleString('es', {
+                                  dateStyle: 'short',
+                                  timeStyle: 'short',
+                                })}
+                              </div>
+                            )}
+                          </div>
+                          <div className="tw:flex tw:gap-2 tw:flex-wrap">
+                            <button
+                              className="tw:text-xs tw:px-2 tw:py-1 tw:bg-blue-600 tw:text-white tw:rounded tw:hover:bg-blue-700 tw:disabled:opacity-50"
+                              onClick={gcalSync}
+                              disabled={gcalSyncing || !projectId}
+                            >
+                              {gcalSyncing ? '⟳ Sincronizando…' : '↑ Sincronizar Fechas'}
+                            </button>
+                            <button
+                              className="tw:text-xs tw:px-2 tw:py-1 tw:rounded tw:bg-slate-100 tw:text-slate-700 tw:hover:bg-slate-200"
+                              onClick={flushPendingTime}
+                            >
+                              ⟳ Sincronizar horas pendientes
+                            </button>
+                            <button
+                              className="tw:text-xs tw:px-2 tw:py-1 tw:bg-gray-200 tw:text-gray-700 tw:rounded tw:hover:bg-gray-300"
+                              onClick={gcalDisconnect}
+                            >
+                              Desconectar
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="tw:flex tw:items-center tw:gap-2 tw:text-xs">
+                          <span className="tw:text-gray-500 tw:flex-shrink-0">Calendario:</span>
+                          {gcalCalendars.length > 0 ? (
+                            <select
+                              className="tw:flex-1 tw:border tw:border-gray-300 tw:rounded tw:px-1.5 tw:py-0.5 tw:text-xs tw:max-w-xs"
+                              value={gcalStatus.calendarId}
+                              onChange={(e) => gcalChangeCalendar(e.target.value)}
+                            >
+                              {gcalCalendars.map((cal) => (
+                                <option key={cal.id} value={cal.id}>
+                                  {cal.summary}
+                                  {cal.primary ? ' (principal)' : ''}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <span className="tw:text-gray-400">
+                              {gcalStatus.calendarId}
+                              <button
+                                className="tw:ml-2 tw:text-blue-500 tw:hover:text-blue-700 tw:underline"
+                                onClick={gcalLoadCalendars}
+                              >
+                                Cargar calendarios
+                              </button>
+                            </span>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <p className="tw:text-xs tw:text-gray-500">
+                          Conecta Google Calendar para sincronizar fechas límite de tareas como eventos
+                          y ver el calendario del equipo.
+                        </p>
+
+                        {/* One-click reconnect — shown when credentials are already saved */}
+                        {gcalStatus.hasCredentials && !showGcalSetup && (
+                          <div className="tw:space-y-1.5">
+                            <button
+                              className="tw:text-xs tw:px-3 tw:py-1.5 tw:bg-blue-600 tw:text-white tw:rounded tw:hover:bg-blue-700 tw:disabled:opacity-50"
+                              onClick={gcalReconnect}
+                              disabled={gcalConnecting}
+                            >
+                              {gcalConnecting
+                                ? '⟳ Esperando autorización…'
+                                : '🔑 Reconectar Google Calendar'}
+                            </button>
+                            <p className="tw:text-xs tw:text-gray-400">
+                              Se usarán las credenciales guardadas. El navegador se abrirá para aprobar
+                              el acceso.{' '}
+                              <button
+                                className="tw:underline tw:hover:text-gray-600"
+                                onClick={() => setShowGcalSetup(true)}
+                              >
+                                Usar otras credenciales
+                              </button>
+                            </p>
+                            <p className="tw:text-xs tw:text-amber-700 tw:bg-amber-50 tw:border tw:border-amber-200 tw:rounded tw:px-2 tw:py-1">
+                              💡 Si tienes que reconectar frecuentemente: en Google Cloud Console cambia
+                              la app de <strong>«En prueba»</strong> a <strong>«En producción»</strong>{' '}
+                              (no requiere verificación de Google). Esto evita que el token expire cada
+                              7 días.
+                            </p>
+                          </div>
+                        )}
+
+                        {/* First-time connect or "use other credentials" */}
+                        {(!gcalStatus.hasCredentials || showGcalSetup) && (
+                          <div className="tw:space-y-2">
+                            {!showGcalSetup && (
+                              <button
+                                className="tw:text-xs tw:px-3 tw:py-1.5 tw:bg-blue-600 tw:text-white tw:rounded tw:hover:bg-blue-700"
+                                onClick={() => setShowGcalSetup(true)}
+                              >
+                                Conectar Google Calendar
+                              </button>
+                            )}
+                            {showGcalSetup && (
+                              <>
+                                <div className="tw:text-xs tw:bg-blue-50 tw:border tw:border-blue-200 tw:rounded tw:p-2 tw:space-y-1.5">
+                                  <p className="tw:font-semibold tw:text-blue-700">
+                                    Configuración en Google Cloud Console:
+                                  </p>
+                                  <ol className="tw:list-decimal tw:list-inside tw:space-y-1 tw:text-blue-800">
+                                    <li>
+                                      Ve a{' '}
+                                      <span className="tw:font-mono tw:bg-blue-100 tw:px-0.5 tw:rounded">
+                                        console.cloud.google.com
+                                      </span>
+                                    </li>
+                                    <li>Crea o selecciona un proyecto</li>
+                                    <li>
+                                      <strong>APIs y servicios → Biblioteca</strong> → busca{' '}
+                                      <em>Google Calendar API</em> → Habilitar
+                                    </li>
+                                    <li>
+                                      <strong>
+                                        APIs y servicios → Pantalla de consentimiento OAuth
+                                      </strong>{' '}
+                                      → Tipo: <strong>Externo</strong> → crea, llena nombre y correo →
+                                      agrega tu correo en &quot;Usuarios de prueba&quot;
+                                    </li>
+                                    <li>
+                                      <strong>
+                                        APIs y servicios → Credenciales → Crear credenciales → ID de
+                                        cliente de OAuth 2.0
+                                      </strong>
+                                    </li>
+                                    <li>
+                                      Tipo de aplicación: <strong>Aplicación de escritorio</strong> (no
+                                      &quot;Aplicación web&quot;)
+                                    </li>
+                                    <li>
+                                      Copia el <strong>ID de cliente</strong> y{' '}
+                                      <strong>Secreto de cliente</strong>
+                                    </li>
+                                  </ol>
+                                  <p className="tw:text-orange-700 tw:font-medium tw:mt-1">
+                                    ⚠ Error 400 = elegiste &quot;Aplicación web&quot; en vez de
+                                    &quot;Aplicación de escritorio&quot;, o falta configurar la pantalla
+                                    de consentimiento.
+                                  </p>
+                                </div>
+
+                                <div className="tw:flex tw:flex-col tw:gap-1.5">
+                                  <input
+                                    type="text"
+                                    placeholder="Client ID (termina en .apps.googleusercontent.com)"
+                                    value={gcalClientId}
+                                    onChange={(e) => setGcalClientId(e.target.value)}
+                                    className="tw:w-full tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:text-xs"
+                                  />
+                                  <input
+                                    type="password"
+                                    placeholder="Client Secret"
+                                    value={gcalClientSecret}
+                                    onChange={(e) => setGcalClientSecret(e.target.value)}
+                                    className="tw:w-full tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:text-xs"
+                                    onKeyDown={(e) => e.key === 'Enter' && gcalConnect()}
+                                  />
+                                </div>
+
+                                <div className="tw:flex tw:gap-2">
+                                  <button
+                                    className="tw:text-xs tw:px-3 tw:py-1.5 tw:bg-green-600 tw:text-white tw:rounded tw:hover:bg-green-700 tw:disabled:opacity-50"
+                                    onClick={gcalConnect}
+                                    disabled={gcalConnecting}
+                                  >
+                                    {gcalConnecting ? '⟳ Esperando…' : 'Autorizar con Google'}
+                                  </button>
+                                  <button
+                                    className="tw:text-xs tw:px-3 tw:py-1.5 tw:bg-gray-200 tw:text-gray-700 tw:rounded tw:hover:bg-gray-300"
+                                    onClick={() => {
+                                      setShowGcalSetup(false);
+                                      setGcalError('');
+                                      setGcalMessage('');
+                                    }}
+                                  >
+                                    Cancelar
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        )}
                   </>
                 )}
 
@@ -3048,7 +2982,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
           </div>
 
           {/* Drive Task Sync Section */}
-          <div className="tw:mt-4 tw:border tw:border-gray-200 tw:rounded-lg tw:overflow-hidden tw:no-print">
+          <div className="tw:border tw:border-gray-200 tw:rounded-lg tw:overflow-hidden tw:no-print">
             <button
               className="tw:w-full tw:flex tw:items-center tw:justify-between tw:px-3 tw:py-2 tw:bg-gray-50 tw:hover:bg-gray-100 tw:text-left"
               onClick={() => setShowDriveSection((s) => !s)}
@@ -3319,42 +3253,155 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
               </div>
             )}
           </div>
+            </div>
+          )}
+
+          {/* Right Main Content */}
+          {currentTab === 'summary' ? (
+            <div className="tw:flex-1 tw:overflow-auto tw:p-3 tw:space-y-3">
+              {totalTasks === 0 ? (
+                <div className="tw:flex tw:items-center tw:justify-center tw:py-8 tw:text-gray-400">
+                  No hay tareas creadas todavía. Abre el Tablero de Tareas para crear tareas.
+                </div>
+              ) : (
+                <>
+                  <table className="tw:border-collapse tw:w-full">
+                    <thead>
+                      <tr>
+                        <th className="tw:border tw:border-gray-200 tw:bg-gray-100 tw:px-2 tw:py-1 tw:text-left tw:font-semibold tw:sticky tw:left-0 tw:z-10">
+                          Libro
+                        </th>
+                        {orderedStages.map((stage) => (
+                          <th
+                            key={stage}
+                            className="tw:border tw:border-gray-200 tw:bg-gray-100 tw:px-1 tw:py-1 tw:font-medium tw:whitespace-nowrap tw:max-w-20"
+                            title={getStageLabel(stage, stageConfig)}
+                          >
+                            <div className="tw:truncate tw:max-w-16">
+                              {getStageLabel(stage, stageConfig)}
+                            </div>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {booksInUse.map((book) => (
+                        <tr key={book} className="tw:hover:bg-gray-50">
+                          <td className="tw:border tw:border-gray-200 tw:px-2 tw:py-1 tw:font-semibold tw:bg-white tw:sticky tw:left-0">
+                            {book}
+                          </td>
+                          {orderedStages.map((stage) => {
+                            const cellTasks = grid[book]?.[stage] ?? [];
+                            const status = aggregateStatus(cellTasks);
+                            return (
+                              <td
+                                key={stage}
+                                className={`tw:border tw:border-gray-200 tw:px-1 tw:py-1 tw:text-center ${
+                                  status ? CELL_STYLES[status] : 'tw:bg-white'
+                                }`}
+                                title={
+                                  cellTasks.length > 0
+                                    ? `${cellTasks.length} tarea${cellTasks.length !== 1 ? 's' : ''}`
+                                    : ''
+                                }
+                              >
+                                {status ? (
+                                  <span className="tw:font-medium">
+                                    {CELL_ICONS[status]}
+                                    {cellTasks.length > 1 && (
+                                      <sup className="tw:text-gray-500">{cellTasks.length}</sup>
+                                    )}
+                                  </span>
+                                ) : null}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="tw:bg-gray-100 tw:font-medium">
+                        <td className="tw:border tw:border-gray-200 tw:px-2 tw:py-1 tw:sticky tw:left-0 tw:bg-gray-100">
+                          Total
+                        </td>
+                        {orderedStages.map((stage) => {
+                          const s = stageSummary[stage];
+                          return (
+                            <td
+                              key={stage}
+                              className="tw:border tw:border-gray-200 tw:px-1 tw:py-1 tw:text-center"
+                            >
+                              {s.total > 0 ? (
+                                <span
+                                  className={
+                                    s.complete === s.total ? 'tw:text-green-600' : 'tw:text-gray-600'
+                                  }
+                                  title={`${s.complete}/${s.total} completas${s.flagged > 0 ? `, ${s.flagged} banderas` : ''}`}
+                                >
+                                  {s.complete}/{s.total}
+                                </span>
+                              ) : (
+                                <span className="tw:text-gray-300">—</span>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    </tfoot>
+                  </table>
+
+                  {/* Legend */}
+                  <div className="tw:flex tw:gap-4 tw:mt-3 tw:px-1 tw:text-xs tw:text-gray-500 tw:flex-wrap">
+                    <span>✓ Completo</span>
+                    <span>⟳ En Progreso</span>
+                    <span>• Pendiente</span>
+                    <span className="tw:flex tw:items-center tw:gap-1">
+                      <span className="tw:w-2 tw:h-2 tw:rounded-full tw:bg-red-500 tw:inline-block" />⚑
+                      Bandera
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            /* Calendar tab */
+            <div className="tw:flex-1 tw:flex tw:flex-col tw:overflow-hidden">
+              <CalendarTabContent
+                tasks={tasks}
+                stageConfig={stageConfig}
+                projectId={projectId}
+                calMonth={calMonth}
+                setCalMonth={setCalMonth}
+                selectedDay={selectedDay}
+                setSelectedDay={setSelectedDay}
+                gcalEvents={gcalEvents}
+                gcalEventsLoading={gcalEventsLoading}
+                gcalConnected={gcalStatus.connected}
+                calendarDays={calendarDays}
+                tasksByDeadline={tasksByDeadline}
+                gcalEventsByDate={gcalEventsByDate}
+                timeEntriesByDate={timeEntriesByDate}
+                teamMembers={teamMembers}
+                logTimeUser={logTimeUser}
+                setLogTimeUser={setLogTimeUser}
+                logTimeTask={logTimeTask}
+                setLogTimeTask={setLogTimeTask}
+                logTimeHours={logTimeHours}
+                setLogTimeHours={setLogTimeHours}
+                logTimeNote={logTimeNote}
+                setLogTimeNote={setLogTimeNote}
+                logTimeCustomLabel={logTimeCustomLabel}
+                setLogTimeCustomLabel={setLogTimeCustomLabel}
+                logTimeSaving={logTimeSaving}
+                logTimeError={logTimeError}
+                logTimeSuccess={logTimeSuccess}
+                saveTimeEntry={saveTimeEntry}
+                deleteTimeEntry={deleteTimeEntry}
+                deleteGcalEvent={deleteGcalEvent}
+              />
+            </div>
+          )}
         </div>
-      ) : (
-        /* Calendar tab */
-        <CalendarTabContent
-          tasks={tasks}
-          stageConfig={stageConfig}
-          projectId={projectId}
-          calMonth={calMonth}
-          setCalMonth={setCalMonth}
-          selectedDay={selectedDay}
-          setSelectedDay={setSelectedDay}
-          gcalEvents={gcalEvents}
-          gcalEventsLoading={gcalEventsLoading}
-          gcalConnected={gcalStatus.connected}
-          calendarDays={calendarDays}
-          tasksByDeadline={tasksByDeadline}
-          gcalEventsByDate={gcalEventsByDate}
-          timeEntriesByDate={timeEntriesByDate}
-          teamMembers={teamMembers}
-          logTimeUser={logTimeUser}
-          setLogTimeUser={setLogTimeUser}
-          logTimeTask={logTimeTask}
-          setLogTimeTask={setLogTimeTask}
-          logTimeHours={logTimeHours}
-          setLogTimeHours={setLogTimeHours}
-          logTimeNote={logTimeNote}
-          setLogTimeNote={setLogTimeNote}
-          logTimeCustomLabel={logTimeCustomLabel}
-          setLogTimeCustomLabel={setLogTimeCustomLabel}
-          logTimeSaving={logTimeSaving}
-          logTimeError={logTimeError}
-          logTimeSuccess={logTimeSuccess}
-          saveTimeEntry={saveTimeEntry}
-          deleteTimeEntry={deleteTimeEntry}
-          deleteGcalEvent={deleteGcalEvent}
-        />
       )}
     </div>
   );

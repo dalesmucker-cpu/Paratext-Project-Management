@@ -499,11 +499,11 @@ function StageConfigPanel({
                 </span>
               ) : (
                 <button
-                  className="tw:text-red-400 tw:hover:text-red-600 tw:px-1 tw:text-sm tw:flex-shrink-0"
+                  className="tw:text-red-500 tw:hover:text-red-650 tw:px-1.5 tw:py-0.5 tw:border tw:border-red-200 tw:bg-red-50 tw:rounded tw:text-[10px] tw:font-semibold tw:flex-shrink-0 tw:cursor-pointer"
                   title="Eliminar etapa"
                   onClick={() => deleteStage(stage)}
                 >
-                  🗑
+                  Eliminar
                 </button>
               )}
             </div>
@@ -627,7 +627,7 @@ const ACTION_ICONS: Record<ActivityLogEntry['action'], string> = {
   created: '✚',
   'status-changed': '⟳',
   'stage-moved': '→',
-  deleted: '🗑',
+  deleted: '✖',
   edited: '✎',
 };
 
@@ -730,7 +730,7 @@ function TaskCard({
       )}
       {task.deadline && (
         <div className={`tw:mt-0.5 ${dlClass}`}>
-          ⏰ {new Date(task.deadline).toLocaleDateString('es')}
+          Plazo: {new Date(task.deadline).toLocaleDateString('es')}
         </div>
       )}
       {(task.estimatedHours !== undefined || task.loggedHours !== undefined) && (
@@ -1068,6 +1068,19 @@ globalThis.webViewComponent = function TaskBoardWebView({
   const [hideCompleted, setHideCompleted] = useWebViewState<boolean>('hideCompleted', false);
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
   const [dragOverStage, setDragOverStage] = useState<string | null>(null);
+
+  const [sidebarVisible, setSidebarVisible] = useState(() => {
+    const saved = localStorage.getItem('task_board_sidebar_visible');
+    return saved !== 'false';
+  });
+
+  const toggleSidebar = () => {
+    setSidebarVisible((v) => {
+      const next = !v;
+      localStorage.setItem('task_board_sidebar_visible', String(next));
+      return next;
+    });
+  };
 
   const selectProject = useDialogCallback(
     'platform.selectProject',
@@ -1509,100 +1522,123 @@ globalThis.webViewComponent = function TaskBoardWebView({
     <div className="tw:flex tw:flex-col tw:h-full tw:bg-gray-50 tw:text-sm">
       {/* Header */}
       <div className="tw:flex tw:items-center tw:flex-wrap tw:gap-2 tw:px-3 tw:py-2 tw:bg-white tw:border-b tw:shadow-sm">
+        <button
+          onClick={toggleSidebar}
+          className="tw:p-1.5 tw:rounded-md tw:text-slate-600 tw:hover:bg-slate-100 tw:hover:text-slate-800 tw:transition-colors tw:cursor-pointer tw:flex tw:items-center tw:justify-center"
+          title={sidebarVisible ? 'Ocultar filtros' : 'Mostrar filtros'}
+        >
+          <svg
+            className="tw:w-5 tw:h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              d="M4 6h16M4 12h16M4 18h16"
+            ></path>
+          </svg>
+        </button>
         <span className="tw:font-semibold tw:text-gray-700">Tablero de Tareas</span>
-        <div className="tw:flex tw:gap-1 tw:items-center tw:ml-auto tw:flex-wrap">
-          <button
-            className="tw:px-2 tw:py-0.5 tw:bg-gray-100 tw:rounded tw:text-xs tw:hover:bg-gray-200"
-            onClick={selectProject}
-            title="Cambiar proyecto"
+        {saving && <span className="tw:text-gray-400 tw:text-xs tw:ml-2">Guardando…</span>}
+        {!saving && syncPending && (
+          <span
+            className="tw:text-amber-600 tw:text-xs tw:ml-2"
+            title="Sin conexión a Drive — se sincronizará automáticamente cuando haya internet"
           >
-            ⇄
-          </button>
-          {saving && <span className="tw:text-gray-400 tw:text-xs">Guardando…</span>}
-          {!saving && syncPending && (
-            <span
-              className="tw:text-amber-600 tw:text-xs"
-              title="Sin conexión a Drive — se sincronizará automáticamente cuando haya internet"
+            Pendiente de sincronizar
+          </span>
+        )}
+
+        {sidebarVisible && (
+          <div className="tw:flex tw:gap-1.5 tw:items-center tw:ml-auto tw:flex-wrap">
+            <button
+              className="tw:px-2.5 tw:py-1 tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:border-slate-200 tw:rounded tw:text-xs tw:font-medium tw:text-slate-700 tw:cursor-pointer"
+              onClick={selectProject}
+              title="Cambiar proyecto"
             >
-              ☁ Pendiente
-            </span>
-          )}
-          <select
-            className="tw:border tw:rounded tw:px-2 tw:py-0.5 tw:text-xs"
-            value={filterAssignee}
-            onChange={(e) => setFilterAssignee(e.target.value)}
-          >
-            <option value="all">Todos los miembros</option>
-            {teamMembers.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
-          <select
-            className="tw:border tw:rounded tw:px-2 tw:py-0.5 tw:text-xs"
-            value={filterBook}
-            onChange={(e) => setFilterBook(e.target.value)}
-          >
-            <option value="all">Todos los libros</option>
-            {usedBooks.map((b) => (
-              <option key={b} value={b}>
-                {b}
-              </option>
-            ))}
-          </select>
-          <button
-            className={`tw:px-2 tw:py-0.5 tw:rounded tw:text-xs tw:border ${
-              hideCompleted
-                ? 'tw:bg-slate-100 tw:text-slate-700 tw:border-slate-300'
-                : 'tw:bg-gray-100 tw:text-gray-500 tw:hover:bg-gray-200 tw:border-transparent'
-            }`}
-            onClick={() => setHideCompleted(!hideCompleted)}
-            title={hideCompleted ? 'Mostrar completas' : 'Esconder completas'}
-          >
-            {hideCompleted ? '🙈 Completas' : '👁 Completas'}
-          </button>
-          <button
-            className="tw:px-2 tw:py-0.5 tw:bg-slate-600 tw:text-white tw:rounded tw:text-xs tw:hover:bg-slate-700"
-            onClick={() => setShowNewTask(true)}
-          >
-            + Nueva
-          </button>
-          <button
-            className={`tw:px-2 tw:py-0.5 tw:rounded tw:text-xs tw:border ${
-              showStageConfig
-                ? 'tw:bg-slate-100 tw:text-slate-700 tw:border-slate-300'
-                : 'tw:bg-gray-100 tw:hover:bg-gray-200 tw:border-transparent'
-            }`}
-            onClick={() => setShowStageConfig((v) => !v)}
-            title="Configurar etapas"
-          >
-            ⚙ Etapas
-          </button>
-          <button
-            className={`tw:px-2 tw:py-0.5 tw:rounded tw:text-xs tw:border tw:relative ${
-              showActivityLog
-                ? 'tw:bg-slate-100 tw:text-slate-700 tw:border-slate-300'
-                : 'tw:bg-gray-100 tw:hover:bg-gray-200 tw:border-transparent'
-            }`}
-            onClick={() => setShowActivityLog((v) => !v)}
-            title="Registro de actividad"
-          >
-            📋 Registro
-            {activityLog.length > 0 && !showActivityLog && (
-              <span className="tw:absolute tw:-top-1 tw:-right-1 tw:bg-slate-500 tw:text-white tw:text-xs tw:rounded-full tw:w-4 tw:h-4 tw:flex tw:items-center tw:justify-center tw:leading-none tw:text-[10px]">
-                {activityLog.length > 99 ? '99+' : activityLog.length}
-              </span>
-            )}
-          </button>
-          <button
-            className="tw:px-2 tw:py-0.5 tw:bg-gray-100 tw:rounded tw:text-xs tw:hover:bg-gray-200"
-            onClick={loadTasks}
-            title="Actualizar"
-          >
-            ↻
-          </button>
-        </div>
+              Cambiar Proyecto
+            </button>
+            <select
+              className="tw:border tw:rounded tw:px-2 tw:py-0.5 tw:text-xs"
+              value={filterAssignee}
+              onChange={(e) => setFilterAssignee(e.target.value)}
+            >
+              <option value="all">Todos los miembros</option>
+              {teamMembers.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+            <select
+              className="tw:border tw:rounded tw:px-2 tw:py-0.5 tw:text-xs"
+              value={filterBook}
+              onChange={(e) => setFilterBook(e.target.value)}
+            >
+              <option value="all">Todos los libros</option>
+              {usedBooks.map((b) => (
+                <option key={b} value={b}>
+                  {b}
+                </option>
+              ))}
+            </select>
+            <button
+              className={`tw:px-2.5 tw:py-1 tw:rounded tw:text-xs tw:font-medium tw:border tw:cursor-pointer ${
+                hideCompleted
+                  ? 'tw:bg-slate-100 tw:text-slate-700 tw:border-slate-300'
+                  : 'tw:bg-gray-100 tw:text-gray-500 tw:hover:bg-gray-200 tw:border-transparent'
+              }`}
+              onClick={() => setHideCompleted(!hideCompleted)}
+              title={hideCompleted ? 'Mostrar completas' : 'Esconder completas'}
+            >
+              {hideCompleted ? 'Mostrar completadas' : 'Ocultar completadas'}
+            </button>
+            <button
+              className="tw:px-2.5 tw:py-1 tw:bg-slate-600 tw:text-white tw:rounded tw:text-xs tw:font-medium tw:hover:bg-slate-700 tw:cursor-pointer"
+              onClick={() => setShowNewTask(true)}
+            >
+              + Nueva Tarea
+            </button>
+            <button
+              className={`tw:px-2.5 tw:py-1 tw:rounded tw:text-xs tw:font-medium tw:border tw:cursor-pointer ${
+                showStageConfig
+                  ? 'tw:bg-slate-100 tw:text-slate-700 tw:border-slate-300'
+                  : 'tw:bg-gray-100 tw:hover:bg-gray-200 tw:border-transparent'
+              }`}
+              onClick={() => setShowStageConfig((v) => !v)}
+              title="Configurar etapas"
+            >
+              Etapas
+            </button>
+            <button
+              className={`tw:px-2.5 tw:py-1 tw:rounded tw:text-xs tw:font-medium tw:border tw:relative tw:cursor-pointer ${
+                showActivityLog
+                  ? 'tw:bg-slate-100 tw:text-slate-700 tw:border-slate-300'
+                  : 'tw:bg-gray-100 tw:hover:bg-gray-200 tw:border-transparent'
+              }`}
+              onClick={() => setShowActivityLog((v) => !v)}
+              title="Registro de actividad"
+            >
+              Registro
+              {activityLog.length > 0 && !showActivityLog && (
+                <span className="tw:absolute tw:-top-1 tw:-right-1 tw:bg-slate-500 tw:text-white tw:text-[10px] tw:rounded-full tw:w-4 tw:h-4 tw:flex tw:items-center tw:justify-center tw:leading-none">
+                  {activityLog.length > 99 ? '99+' : activityLog.length}
+                </span>
+              )}
+            </button>
+            <button
+              className="tw:px-2.5 tw:py-1 tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:border-slate-200 tw:rounded tw:text-xs tw:font-medium tw:text-slate-700 tw:cursor-pointer"
+              onClick={loadTasks}
+              title="Actualizar"
+            >
+              Actualizar
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Stage config panel */}
@@ -1679,8 +1715,8 @@ globalThis.webViewComponent = function TaskBoardWebView({
                   <span className="tw:truncate">{getStageLabel(stage, stageConfig)}</span>
                   <div className="tw:flex tw:items-center tw:gap-0.5 tw:flex-shrink-0 tw:ml-1">
                     {noAssignees && (
-                      <span className="tw:text-yellow-600" title="Sin responsables configurados">
-                        ⚠
+                      <span className="tw:text-yellow-600 tw:font-bold" title="Sin responsables configurados">
+                        (!)
                       </span>
                     )}
                     <span className="tw:bg-white tw:rounded-full tw:px-1.5 tw:text-gray-500">

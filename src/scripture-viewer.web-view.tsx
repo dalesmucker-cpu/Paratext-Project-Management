@@ -457,6 +457,19 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   const [selectedChapter, setSelectedChapter] = useState<number>(1);
   const [totalChapters, setTotalChapters] = useState<number>(1);
 
+  const [controlsVisible, setControlsVisible] = useState(() => {
+    const saved = localStorage.getItem('scripture_viewer_controls_visible');
+    return saved !== 'false';
+  });
+
+  const toggleControls = () => {
+    setControlsVisible((v) => {
+      const next = !v;
+      localStorage.setItem('scripture_viewer_controls_visible', String(next));
+      return next;
+    });
+  };
+
   // Scroll group integration
   const [scrRef, setScrRef, scrollGroupId, setScrollGroupId] = useWebViewScrollGroupScrRef
     ? useWebViewScrollGroupScrRef()
@@ -2198,98 +2211,129 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       />
 
       {/* Left Pane: Scripture Text */}
-      <div className="tw:flex-1 tw:flex tw:flex-col tw:bg-white tw:min-w-0 tw:h-full tw:w-full">
+      <div className="tw:flex-1 tw:flex tw:flex-col tw:bg-white tw:min-w-0 tw:h-full tw:overflow-hidden">
         {/* Toolbar */}
         <div className="tw:px-4 tw:py-2 tw:bg-white tw:border-b tw:border-gray-200 tw:flex tw:flex-wrap tw:items-center tw:justify-between tw:gap-2 tw:shrink-0 tw:shadow-sm">
           <div className="tw:flex tw:items-center tw:gap-2">
-            <span className="tw:font-bold tw:text-slate-800 tw:text-base">📖 Lector</span>
-            <select
-              value={selectedBook}
-              onChange={(e) => {
-                navigateToReference(e.target.value, 1, 1);
-              }}
-              className="tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:text-xs tw:font-semibold tw:text-slate-700 focus:tw:outline-none focus:tw:border-indigo-500"
+            <button
+              onClick={toggleControls}
+              className="tw:p-1.5 tw:rounded-md tw:text-slate-600 tw:hover:bg-slate-100 tw:hover:text-slate-800 tw:transition-colors tw:cursor-pointer tw:flex tw:items-center tw:justify-center"
+              title={controlsVisible ? 'Ocultar controles' : 'Mostrar controles'}
             >
-              {books.map((b) => (
-                <option key={b.code} value={b.code}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
+              <svg
+                className="tw:w-5 tw:h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M4 6h16M4 12h16M4 18h16"
+                ></path>
+              </svg>
+            </button>
+            <span className="tw:font-bold tw:text-slate-800 tw:text-base">Lector</span>
+            {!controlsVisible && (
+              <span className="tw:text-xs tw:font-semibold tw:text-slate-700 tw:bg-slate-100 tw:border tw:px-2.5 tw:py-1 tw:rounded-md tw:ml-2">
+                {books.find((b) => b.code === selectedBook)?.name || selectedBook} {selectedChapter}
+              </span>
+            )}
+            {controlsVisible && (
+              <>
+                <select
+                  value={selectedBook}
+                  onChange={(e) => {
+                    navigateToReference(e.target.value, 1, 1);
+                  }}
+                  className="tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:text-xs tw:font-semibold tw:text-slate-700 focus:tw:outline-none focus:tw:border-indigo-500"
+                >
+                  {books.map((b) => (
+                    <option key={b.code} value={b.code}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
 
-            {/* Chapter Selection */}
-            <div className="tw:flex tw:items-center tw:gap-1">
-              <button
-                disabled={selectedChapter <= 1}
-                onClick={() => navigateToReference(selectedBook, selectedChapter - 1, 1)}
-                className="tw:px-2 tw:py-1 tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:rounded tw:text-xs tw:disabled:opacity-40 tw:cursor-pointer"
-              >
-                ◀
-              </button>
-              <select
-                value={selectedChapter}
-                onChange={(e) => navigateToReference(selectedBook, Number(e.target.value), 1)}
-                className="tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:text-xs tw:font-semibold tw:text-slate-700 focus:tw:outline-none focus:tw:border-indigo-500"
-              >
-                {Array.from({ length: totalChapters }, (_, idx) => idx + 1).map((ch) => (
-                  <option key={ch} value={ch}>
-                    Cap {ch}
-                  </option>
-                ))}
-              </select>
-              <button
-                disabled={selectedChapter >= totalChapters}
-                onClick={() => navigateToReference(selectedBook, selectedChapter + 1, 1)}
-                className="tw:px-2 tw:py-1 tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:rounded tw:text-xs tw:disabled:opacity-40 tw:cursor-pointer"
-              >
-                ▶
-              </button>
-            </div>
+                {/* Chapter Selection */}
+                <div className="tw:flex tw:items-center tw:gap-1">
+                  <button
+                    disabled={selectedChapter <= 1}
+                    onClick={() => navigateToReference(selectedBook, selectedChapter - 1, 1)}
+                    className="tw:px-2 tw:py-1 tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:rounded tw:text-xs tw:disabled:opacity-40 tw:cursor-pointer"
+                  >
+                    ◀
+                  </button>
+                  <select
+                    value={selectedChapter}
+                    onChange={(e) => navigateToReference(selectedBook, Number(e.target.value), 1)}
+                    className="tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:text-xs tw:font-semibold tw:text-slate-700 focus:tw:outline-none focus:tw:border-indigo-500"
+                  >
+                    {Array.from({ length: totalChapters }, (_, idx) => idx + 1).map((ch) => (
+                      <option key={ch} value={ch}>
+                        Cap {ch}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    disabled={selectedChapter >= totalChapters}
+                    onClick={() => navigateToReference(selectedBook, selectedChapter + 1, 1)}
+                    className="tw:px-2 tw:py-1 tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:rounded tw:text-xs tw:disabled:opacity-40 tw:cursor-pointer"
+                  >
+                    ▶
+                  </button>
+                </div>
+              </>
+            )}
           </div>
 
           <div className="tw:flex tw:items-center tw:gap-2">
             {/* User picker */}
-            {currentUser ? (
-              <span
-                className="tw:text-xs tw:font-semibold tw:text-slate-700 tw:bg-slate-100 tw:border tw:px-2 tw:py-1 tw:rounded tw:cursor-pointer hover:tw:bg-slate-200 tw:transition-colors tw:flex tw:items-center tw:gap-1"
-                onClick={() => setCurrentUser('')}
-                title="Haga clic para cambiar de usuario"
-              >
-                👤 {currentUser}
-              </span>
-            ) : (
-              <div className="tw:flex tw:items-center tw:gap-1 tw:bg-amber-50 tw:border tw:border-amber-200 tw:px-2 tw:py-1 tw:rounded">
-                <span className="tw:text-amber-800 tw:font-medium tw:text-[10px]">
-                  ⚠️ ¿Quién eres?
-                </span>
-                <select
-                  className="tw:border tw:rounded tw:px-1.5 tw:py-0.5 tw:bg-white tw:text-[10px] focus:tw:outline-none"
-                  value={currentUser}
-                  onChange={async (e) => {
-                    const val = e.target.value;
-                    if (val) {
-                      setCurrentUser(val);
-                      try {
-                        await papi.commands.sendCommand(
-                          'paratextProjectManager.setCurrentUser',
-                          val,
-                        );
-                      } catch (_) {}
-                    }
-                  }}
+            {controlsVisible && (
+              currentUser ? (
+                <span
+                  className="tw:text-xs tw:font-semibold tw:text-slate-700 tw:bg-slate-100 tw:border tw:px-2 tw:py-1 tw:rounded tw:cursor-pointer hover:tw:bg-slate-200 tw:transition-colors tw:flex tw:items-center tw:gap-1"
+                  onClick={() => setCurrentUser('')}
+                  title="Haga clic para cambiar de usuario"
                 >
-                  <option value="">Seleccionar...</option>
-                  {teamMembers.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                  Usuario: {currentUser}
+                </span>
+              ) : (
+                <div className="tw:flex tw:items-center tw:gap-1 tw:bg-amber-50 tw:border tw:border-amber-200 tw:px-2 tw:py-1 tw:rounded">
+                  <span className="tw:text-amber-800 tw:font-medium tw:text-[10px]">
+                    ¿Quién eres?
+                  </span>
+                  <select
+                    className="tw:border tw:rounded tw:px-1.5 tw:py-0.5 tw:bg-white tw:text-[10px] focus:tw:outline-none"
+                    value={currentUser}
+                    onChange={async (e) => {
+                      const val = e.target.value;
+                      if (val) {
+                        setCurrentUser(val);
+                        try {
+                          await papi.commands.sendCommand(
+                            'paratextProjectManager.setCurrentUser',
+                            val,
+                          );
+                        } catch (_) {}
+                      }
+                    }}
+                  >
+                    <option value="">Seleccionar...</option>
+                    {teamMembers.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )
             )}
 
             {/* Scroll Group Selector */}
-            {useWebViewScrollGroupScrRef && (
+            {controlsVisible && useWebViewScrollGroupScrRef && (
               <div className="tw:inline-flex tw:items-center tw:scale-90">
                 <ScrollGroupSelector
                   availableScrollGroupIds={[undefined, ...Array(5).keys()]}
@@ -2332,14 +2376,14 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                 title="Deshacer (Ctrl+Z)"
                 className="tw:px-2.5 tw:py-1 tw:bg-amber-50 tw:hover:bg-amber-100 tw:border tw:border-amber-300 tw:text-amber-800 tw:rounded tw:text-xs tw:font-semibold tw:cursor-pointer disabled:tw:opacity-40 disabled:tw:cursor-not-allowed tw:flex tw:items-center tw:gap-1 tw:transition-all"
               >
-                ↶ Deshacer
+                Deshacer
               </button>
             )}
             <button
               onClick={() => loadChapter(selectedBook, selectedChapter)}
               className="tw:px-3 tw:py-1 tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:border-slate-200 tw:text-slate-700 tw:rounded tw:text-xs tw:font-semibold tw:cursor-pointer"
             >
-              {loading ? 'Cargando...' : '↻ Actualizar'}
+              {loading ? 'Cargando...' : 'Actualizar'}
             </button>
           </div>
         </div>
@@ -2540,7 +2584,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
             }}
             className="tw:w-full tw:text-left tw:px-3 tw:py-2 tw:hover:bg-slate-100 tw:text-slate-700 tw:font-semibold tw:flex tw:items-center tw:gap-1.5 tw:cursor-pointer tw:border-none tw:bg-white"
           >
-            💬 Agregar nota
+            Agregar nota
           </button>
         </div>
       )}
@@ -2552,7 +2596,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
             {/* Header */}
             <div className="tw:pb-3 tw:border-b tw:border-gray-200 tw:flex tw:items-center tw:justify-between tw:shrink-0">
               <h3 className="tw:font-bold tw:text-slate-800 tw:text-base">
-                📖 Notas en {selectedBook} {selectedChapter}:{notesPopupVerseNum}
+                Notas en {selectedBook} {selectedChapter}:{notesPopupVerseNum}
               </h3>
               <button
                 onClick={() => setNotesPopupVerseNum(null)}
@@ -2580,7 +2624,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                   onClick={() => setShowNewNoteForm(true)}
                   className="tw:w-full tw:py-2 tw:bg-slate-600 tw:hover:bg-slate-700 tw:text-white tw:font-semibold tw:rounded-lg tw:text-xs tw:shadow-sm tw:transition-colors tw:cursor-pointer tw:border-none"
                 >
-                  ＋ Nueva nota en versículo
+                  Nueva nota en versículo
                 </button>
               )}
 
@@ -2733,7 +2777,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                           </span>
                           {thread.assignedUser && (
                             <span className="tw:bg-blue-50 tw:text-blue-700 tw:border tw:border-blue-100 tw:px-1.5 tw:py-0.2 tw:rounded tw:text-[9px] tw:font-semibold">
-                              👤 {thread.assignedUser}
+                              Asignado a: {thread.assignedUser}
                             </span>
                           )}
                         </div>
