@@ -1,5 +1,6 @@
 import { WebViewProps } from '@papi/core';
 import papi from '@papi/frontend';
+import { useDialogCallback } from '@papi/frontend/react';
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import type { ParatextNoteThread, ParatextComment } from './types/note.types';
 import { ScrollGroupSelector } from 'platform-bible-react';
@@ -450,8 +451,26 @@ const renderFootnotes = (node: React.ReactNode): React.ReactNode => {
 
 globalThis.webViewComponent = function ScriptureViewerWebView({
   projectId,
+  updateWebViewDefinition,
   useWebViewScrollGroupScrRef,
 }: WebViewProps) {
+  const selectProject = useDialogCallback(
+    'platform.selectProject',
+    useMemo(
+      () => ({
+        title: 'Seleccionar Proyecto o Recurso',
+        prompt: 'Elige un proyecto o recurso de lectura:',
+        includeProjectInterfaces: ['platformScripture.USJ_Chapter'],
+      }),
+      [],
+    ),
+    useCallback(
+      (selectedId) => {
+        if (selectedId) updateWebViewDefinition({ projectId: selectedId });
+      },
+      [updateWebViewDefinition],
+    ),
+  );
   const [books, setBooks] = useState<BookInfo[]>([]);
   const [selectedBook, setSelectedBook] = useState<string>('');
   const [selectedChapter, setSelectedChapter] = useState<number>(1);
@@ -2236,6 +2255,13 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
               </svg>
             </button>
             <span className="tw:font-bold tw:text-slate-800 tw:text-base">Lector</span>
+            <button
+              onClick={selectProject}
+              className="tw:px-2 tw:py-1 tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:border-slate-350 tw:rounded tw:text-xs tw:font-semibold tw:text-slate-700 tw:cursor-pointer"
+              title="Cambiar de proyecto o recurso"
+            >
+              {projectId}
+            </button>
             <select
               value={selectedBook}
               onChange={(e) => {
