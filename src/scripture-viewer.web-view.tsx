@@ -2260,7 +2260,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
               className="tw:px-2 tw:py-1 tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:border-slate-350 tw:rounded tw:text-xs tw:font-semibold tw:text-slate-700 tw:cursor-pointer"
               title="Cambiar de proyecto o recurso"
             >
-              {projectId}
+              Recurso
             </button>
             <select
               value={selectedBook}
