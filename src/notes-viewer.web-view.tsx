@@ -212,31 +212,48 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
-    e.currentTarget.setPointerCapture(e.pointerId);
     isResizingRef.current = true;
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
-  };
 
-  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isResizingRef.current || !containerRef.current) return;
-    const containerRect = containerRef.current.getBoundingClientRect();
-    const newWidth = e.clientX - containerRect.left;
-    const minW = 200;
-    const maxW = Math.min(600, containerRect.width * 0.6);
-    const boundedWidth = Math.max(minW, Math.min(maxW, newWidth));
-    setLeftWidth(boundedWidth);
-  };
+    const handlePointerMoveGlobal = (moveEvent: PointerEvent) => {
+      if (!isResizingRef.current || !containerRef.current) return;
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const newWidth = moveEvent.clientX - containerRect.left;
+      const minW = 200;
+      const maxW = Math.max(minW, containerRect.width - 250);
+      const boundedWidth = Math.max(minW, Math.min(maxW, newWidth));
+      setLeftWidth(boundedWidth);
+    };
 
-  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (isResizingRef.current) {
+    const handlePointerUpGlobal = () => {
       isResizingRef.current = false;
-      e.currentTarget.releasePointerCapture(e.pointerId);
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
       localStorage.setItem('notes_viewer_sidebar_width', String(leftWidthRef.current));
-    }
+
+      window.removeEventListener('pointermove', handlePointerMoveGlobal);
+      window.removeEventListener('pointerup', handlePointerUpGlobal);
+    };
+
+    window.addEventListener('pointermove', handlePointerMoveGlobal);
+    window.addEventListener('pointerup', handlePointerUpGlobal);
   };
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const containerWidth = entry.contentRect.width;
+        const maxW = Math.max(200, containerWidth - 250);
+        if (leftWidthRef.current > maxW) {
+          setLeftWidth(Math.max(200, maxW));
+        }
+      }
+    });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
 
   const [mediaButtonsCollapsed, setMediaButtonsCollapsed] = useState(() => window.innerWidth < 640);
 
@@ -1172,8 +1189,6 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
         {/* Drag Resizer Bar */}
         <div
           onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
           className="tw:w-2 tw:bg-transparent tw:hover:bg-indigo-200/50 active:tw:bg-indigo-400/50 tw:cursor-col-resize tw:shrink-0 tw:z-20 tw:transition-all tw:duration-100 tw:h-full tw:flex tw:items-center tw:justify-center tw:select-none"
           title="Arrastra para cambiar el tamaño"
         >
