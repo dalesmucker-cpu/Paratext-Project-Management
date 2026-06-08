@@ -210,63 +210,33 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
 
   const isResizingRef = useRef(false);
 
-  const startResizing = () => {
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
     isResizingRef.current = true;
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
   };
 
-  const handleMouseDown = (e: React.MouseEvent) => {
-    e.preventDefault();
-    startResizing();
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isResizingRef.current || !containerRef.current) return;
+    const containerRect = containerRef.current.getBoundingClientRect();
+    const newWidth = e.clientX - containerRect.left;
+    const minW = 200;
+    const maxW = Math.min(600, containerRect.width * 0.6);
+    const boundedWidth = Math.max(minW, Math.min(maxW, newWidth));
+    setLeftWidth(boundedWidth);
   };
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    startResizing();
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (isResizingRef.current) {
+      isResizingRef.current = false;
+      e.currentTarget.releasePointerCapture(e.pointerId);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      localStorage.setItem('notes_viewer_sidebar_width', String(leftWidthRef.current));
+    }
   };
-
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizingRef.current || !containerRef.current) return;
-      const containerRect = containerRef.current.getBoundingClientRect();
-      const newWidth = e.clientX - containerRect.left;
-      const minW = 200;
-      const maxW = Math.min(600, containerRect.width * 0.6);
-      const boundedWidth = Math.max(minW, Math.min(maxW, newWidth));
-      setLeftWidth(boundedWidth);
-    };
-
-    const handleTouchMove = (e: TouchEvent) => {
-      if (!isResizingRef.current || !containerRef.current || e.touches.length === 0) return;
-      const containerRect = containerRef.current.getBoundingClientRect();
-      const newWidth = e.touches[0].clientX - containerRect.left;
-      const minW = 200;
-      const maxW = Math.min(600, containerRect.width * 0.6);
-      const boundedWidth = Math.max(minW, Math.min(maxW, newWidth));
-      setLeftWidth(boundedWidth);
-    };
-
-    const handleMouseUp = () => {
-      if (isResizingRef.current) {
-        isResizingRef.current = false;
-        document.body.style.cursor = '';
-        document.body.style.userSelect = '';
-        localStorage.setItem('notes_viewer_sidebar_width', String(leftWidthRef.current));
-      }
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    window.addEventListener('touchmove', handleTouchMove);
-    window.addEventListener('touchend', handleMouseUp);
-
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-      window.removeEventListener('touchmove', handleTouchMove);
-      window.removeEventListener('touchend', handleMouseUp);
-    };
-  }, []);
 
   const [mediaButtonsCollapsed, setMediaButtonsCollapsed] = useState(() => window.innerWidth < 640);
 
@@ -1201,11 +1171,14 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
 
         {/* Drag Resizer Bar */}
         <div
-          onMouseDown={handleMouseDown}
-          onTouchStart={handleTouchStart}
-          className="tw:w-[3px] tw:hover:w-1.5 tw:bg-slate-200 tw:hover:bg-indigo-400 active:tw:bg-indigo-650 tw:cursor-col-resize tw:shrink-0 tw:z-20 tw:transition-all tw:duration-150 tw:h-full"
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          className="tw:w-2 tw:bg-transparent tw:hover:bg-indigo-200/50 active:tw:bg-indigo-400/50 tw:cursor-col-resize tw:shrink-0 tw:z-20 tw:transition-all tw:duration-100 tw:h-full tw:flex tw:items-center tw:justify-center tw:select-none"
           title="Arrastra para cambiar el tamaño"
-        />
+        >
+          <div className="tw:w-[1px] tw:h-full tw:bg-gray-300" />
+        </div>
 
         {/* Right Column: Thread Detail */}
         <div className="tw:flex-1 tw:flex tw:flex-col tw:bg-slate-50 tw:min-w-0 tw:h-full tw:overflow-hidden">
@@ -1453,9 +1426,10 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                       type="button"
                       onClick={() => handleReply(selectedThread)}
                       disabled={replying || attaching || !replyText.trim() || !currentUser}
-                      className="tw:px-3 sm:tw:px-4 tw:py-1.5 sm:tw:py-2 tw:bg-slate-600 tw:hover:bg-slate-700 tw:text-white tw:font-semibold tw:rounded-lg tw:text-[11px] sm:tw:text-xs tw:disabled:opacity-40 tw:whitespace-nowrap tw:transition-all tw:shadow-sm tw:h-[34px] sm:tw:h-[38px] tw:cursor-pointer tw:flex tw:items-center tw:justify-center"
+                      className="tw:p-2 tw:bg-slate-600 tw:hover:bg-slate-700 tw:text-white tw:rounded-lg tw:transition-all tw:shadow-sm tw:h-[34px] sm:tw:h-[38px] tw:w-[34px] sm:tw:w-[38px] tw:cursor-pointer tw:flex tw:items-center tw:justify-center tw:text-sm tw:disabled:opacity-40 tw:shrink-0"
+                      title={replying ? 'Enviando...' : 'Responder'}
                     >
-                      {replying ? '⏳' : 'Responder'}
+                      {replying ? '⏳' : '➤'}
                     </button>
                   </div>
                 </div>
