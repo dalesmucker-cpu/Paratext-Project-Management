@@ -1189,10 +1189,20 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
         {/* Drag Resizer Bar */}
         <div
           onPointerDown={handlePointerDown}
-          className="tw:w-2 tw:bg-transparent tw:hover:bg-indigo-200/50 active:tw:bg-indigo-400/50 tw:cursor-col-resize tw:shrink-0 tw:z-20 tw:transition-all tw:duration-100 tw:h-full tw:flex tw:items-center tw:justify-center tw:select-none"
+          className="tw:relative tw:w-3 tw:bg-slate-100 tw:hover:bg-indigo-50/70 active:tw:bg-indigo-100/70 tw:cursor-col-resize tw:shrink-0 tw:z-20 tw:transition-all tw:duration-100 tw:h-full tw:flex tw:items-center tw:justify-center tw:select-none tw:border-l tw:border-r tw:border-slate-200"
           title="Arrastra para cambiar el tamaño"
         >
-          <div className="tw:w-[1px] tw:h-full tw:bg-gray-300" />
+          {/* Visual Divider Line */}
+          <div className="tw:w-[1px] tw:h-full tw:bg-slate-300" />
+
+          {/* Grab Handle Pill in the center */}
+          <div className="tw:absolute tw:w-[16px] tw:h-[28px] tw:bg-white tw:border tw:border-slate-300 tw:rounded-md tw:flex tw:items-center tw:justify-center tw:shadow-sm tw:pointer-events-none tw:z-30">
+            {/* Grab indicator dots */}
+            <div className="tw:flex tw:gap-[2px] tw:h-2.5">
+              <div className="tw:w-[1.5px] tw:h-full tw:bg-slate-400 tw:rounded-full" />
+              <div className="tw:w-[1.5px] tw:h-full tw:bg-slate-400 tw:rounded-full" />
+            </div>
+          </div>
         </div>
 
         {/* Right Column: Thread Detail */}
