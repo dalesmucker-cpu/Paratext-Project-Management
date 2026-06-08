@@ -2236,57 +2236,48 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
               </svg>
             </button>
             <span className="tw:font-bold tw:text-slate-800 tw:text-base">Lector</span>
-            {!controlsVisible && (
-              <span className="tw:text-xs tw:font-semibold tw:text-slate-700 tw:bg-slate-100 tw:border tw:px-2.5 tw:py-1 tw:rounded-md tw:ml-2">
-                {books.find((b) => b.code === selectedBook)?.name || selectedBook} {selectedChapter}
-              </span>
-            )}
-            {controlsVisible && (
-              <>
-                <select
-                  value={selectedBook}
-                  onChange={(e) => {
-                    navigateToReference(e.target.value, 1, 1);
-                  }}
-                  className="tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:text-xs tw:font-semibold tw:text-slate-700 focus:tw:outline-none focus:tw:border-indigo-500"
-                >
-                  {books.map((b) => (
-                    <option key={b.code} value={b.code}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
+            <select
+              value={selectedBook}
+              onChange={(e) => {
+                navigateToReference(e.target.value, 1, 1);
+              }}
+              className="tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:text-xs tw:font-semibold tw:text-slate-700 focus:tw:outline-none focus:tw:border-indigo-500"
+            >
+              {books.map((b) => (
+                <option key={b.code} value={b.code}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
 
-                {/* Chapter Selection */}
-                <div className="tw:flex tw:items-center tw:gap-1">
-                  <button
-                    disabled={selectedChapter <= 1}
-                    onClick={() => navigateToReference(selectedBook, selectedChapter - 1, 1)}
-                    className="tw:px-2 tw:py-1 tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:rounded tw:text-xs tw:disabled:opacity-40 tw:cursor-pointer"
-                  >
-                    ◀
-                  </button>
-                  <select
-                    value={selectedChapter}
-                    onChange={(e) => navigateToReference(selectedBook, Number(e.target.value), 1)}
-                    className="tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:text-xs tw:font-semibold tw:text-slate-700 focus:tw:outline-none focus:tw:border-indigo-500"
-                  >
-                    {Array.from({ length: totalChapters }, (_, idx) => idx + 1).map((ch) => (
-                      <option key={ch} value={ch}>
-                        Cap {ch}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    disabled={selectedChapter >= totalChapters}
-                    onClick={() => navigateToReference(selectedBook, selectedChapter + 1, 1)}
-                    className="tw:px-2 tw:py-1 tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:rounded tw:text-xs tw:disabled:opacity-40 tw:cursor-pointer"
-                  >
-                    ▶
-                  </button>
-                </div>
-              </>
-            )}
+            {/* Chapter Selection */}
+            <div className="tw:flex tw:items-center tw:gap-1">
+              <button
+                disabled={selectedChapter <= 1}
+                onClick={() => navigateToReference(selectedBook, selectedChapter - 1, 1)}
+                className="tw:px-2 tw:py-1 tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:rounded tw:text-xs tw:disabled:opacity-40 tw:cursor-pointer"
+              >
+                ◀
+              </button>
+              <select
+                value={selectedChapter}
+                onChange={(e) => navigateToReference(selectedBook, Number(e.target.value), 1)}
+                className="tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:text-xs tw:font-semibold tw:text-slate-700 focus:tw:outline-none focus:tw:border-indigo-500"
+              >
+                {Array.from({ length: totalChapters }, (_, idx) => idx + 1).map((ch) => (
+                  <option key={ch} value={ch}>
+                    Cap {ch}
+                  </option>
+                ))}
+              </select>
+              <button
+                disabled={selectedChapter >= totalChapters}
+                onClick={() => navigateToReference(selectedBook, selectedChapter + 1, 1)}
+                className="tw:px-2 tw:py-1 tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:rounded tw:text-xs tw:disabled:opacity-40 tw:cursor-pointer"
+              >
+                ▶
+              </button>
+            </div>
           </div>
 
           <div className="tw:flex tw:items-center tw:gap-2">
