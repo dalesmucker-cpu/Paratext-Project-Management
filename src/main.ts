@@ -1766,6 +1766,23 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     },
   );
 
+  // Network Event Emitter for key term selection
+  const selectKeyTermEmitter = papi.network.createNetworkEventEmitter<{
+    projectId: string;
+    termId: string;
+  }>('paratextProjectManager.onSelectKeyTerm');
+
+  const selectKeyTermPromise = papi.commands.registerCommand(
+    'paratextProjectManager.selectKeyTerm',
+    async (
+      projectId: string,
+      termId: string,
+    ): Promise<string> => {
+      selectKeyTermEmitter.emit({ projectId, termId });
+      return 'ok';
+    },
+  );
+
   const openNotesViewerPromise = papi.commands.registerCommand(
     'paratextProjectManager.openNotesViewer',
     async (projectId?: string) => {
@@ -3112,6 +3129,8 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     await keyTermsAnalyticsProviderPromise,
     await openKeyTermsPromise,
     await openKeyTermsAnalyticsPromise,
+    await selectKeyTermPromise,
+    selectKeyTermEmitter,
     collabEventEmitter,
   );
 

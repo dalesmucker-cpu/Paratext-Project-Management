@@ -791,7 +791,17 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
           return (
             <span
               key={index}
-              className={`key-term-hover-container tw:relative tw:inline-block tw:cursor-help ${underlineClass}`}
+              className={`key-term-hover-container tw:relative tw:inline-block tw:cursor-pointer ${underlineClass}`}
+              onClick={async (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                try {
+                  await papi.commands.sendCommand('paratextProjectManager.openKeyTerms', projectId);
+                  await papi.commands.sendCommand('paratextProjectManager.selectKeyTerm', projectId, match.termId);
+                } catch (err) {
+                  console.error('Failed to open/select key term on word click:', err);
+                }
+              }}
             >
               {part}
               <span className="key-term-tooltip-content tw:invisible tw:absolute tw:bottom-full tw:left-1/2 tw:-translate-x-1/2 tw:mb-1 tw:bg-slate-800 tw:text-white tw:text-[10px] tw:p-2 tw:rounded-lg tw:shadow-md tw:w-48 tw:whitespace-normal tw:z-50 tw:opacity-0 tw:transition-opacity tw:duration-200 pointer-events-none">
@@ -828,7 +838,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     }
 
     return node;
-  }, [keyTermsOverlayEnabled, chapterKeyTermsMatches, selectedChapter]);
+  }, [keyTermsOverlayEnabled, chapterKeyTermsMatches, selectedChapter, projectId]);
 
   // Load key terms matches automatically when overlay is enabled or book/chapter changes
   useEffect(() => {
@@ -2829,6 +2839,22 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                   <div className="tw:space-y-0.5">
                     <div className="tw:font-bold tw:text-xs tw:text-slate-700">{m.gloss}</div>
                     <div className="tw:text-[10px] tw:text-slate-400 tw:font-serif">{m.lemma}</div>
+                    {m.expectedRenderings && m.expectedRenderings.length > 0 ? (
+                      <div className="tw:flex tw:flex-wrap tw:gap-1 tw:mt-1.5">
+                        {m.expectedRenderings.map((r: string, rIdx: number) => (
+                          <span
+                            key={rIdx}
+                            className="tw:text-[9px] tw:bg-indigo-50 tw:text-indigo-700 tw:px-1.5 tw:py-0.5 tw:rounded tw:border tw:border-indigo-100 tw:font-medium"
+                          >
+                            {r}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="tw:text-[10px] tw:text-amber-600 tw:italic tw:mt-1">
+                        Sin renderings aprobados
+                      </div>
+                    )}
                   </div>
                   <div className="tw:flex tw:items-center tw:gap-2">
                     {m.matchResult.found ? (
@@ -2845,6 +2871,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                         setActiveVersePopup(null);
                         try {
                           await papi.commands.sendCommand('paratextProjectManager.openKeyTerms', projectId);
+                          await papi.commands.sendCommand('paratextProjectManager.selectKeyTerm', projectId, m.termId);
                         } catch (e) {
                           console.error('Failed to open key terms from popup:', e);
                         }

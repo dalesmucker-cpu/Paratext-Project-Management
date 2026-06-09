@@ -46,6 +46,19 @@ globalThis.webViewComponent = function KeyTermsWebView({
     }
   }, [selectedTermId]);
 
+  // Listen to external key term selection events
+  useEffect(() => {
+    if (!papi.network || !papi.network.getNetworkEvent) return undefined;
+    const unsubscribe = papi.network.getNetworkEvent<any>('paratextProjectManager.onSelectKeyTerm')((event) => {
+      if (event && event.projectId === projectId && event.termId) {
+        setSelectedTermId(event.termId);
+      }
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [projectId, setSelectedTermId]);
+
   // Sidebar visibility
   const [sidebarVisible, setSidebarVisible] = useState(true);
 
