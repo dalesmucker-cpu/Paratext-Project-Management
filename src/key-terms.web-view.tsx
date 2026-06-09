@@ -89,6 +89,8 @@ globalThis.webViewComponent = function KeyTermsWebView({
   const [newPrefixLabel, setNewPrefixLabel] = useState('');
   const [newSuffix, setNewSuffix] = useState('');
   const [newSuffixLabel, setNewSuffixLabel] = useState('');
+  const [newInfix, setNewInfix] = useState('');
+  const [newInfixLabel, setNewInfixLabel] = useState('');
 
   // Scanning results
   const [verseMatches, setVerseMatches] = useState<Record<string, VerseMatchStatus>>({});
@@ -286,29 +288,56 @@ globalThis.webViewComponent = function KeyTermsWebView({
     await persistStore(updatedStore);
   }, [store, newSuffix, newSuffixLabel, persistStore]);
 
+  // Add Infix Affix Rule
+  const addInfixRule = useCallback(async () => {
+    if (!store || !newInfix.trim()) return;
+    const newRule: AffixRule = {
+      id: `i-${Date.now()}`,
+      affix: newInfix.trim(),
+      label: newInfixLabel.trim() || 'Infijo',
+      enabled: true
+    };
+    const updatedStore = {
+      ...store,
+      morphologyConfig: {
+        ...store.morphologyConfig,
+        infixes: [...(store.morphologyConfig.infixes || []), newRule]
+      }
+    };
+    setNewInfix('');
+    setNewInfixLabel('');
+    await persistStore(updatedStore);
+  }, [store, newInfix, newInfixLabel, persistStore]);
+
   // Toggle Affix Rule
-  const toggleRule = useCallback(async (ruleId: string, type: 'prefix' | 'suffix') => {
+  const toggleRule = useCallback(async (ruleId: string, type: 'prefix' | 'suffix' | 'infix') => {
     if (!store) return;
     const config = store.morphologyConfig;
     if (type === 'prefix') {
       const prefixes = (config.prefixes || []).map(r => r.id === ruleId ? { ...r, enabled: !r.enabled } : r);
       await persistStore({ ...store, morphologyConfig: { ...config, prefixes } });
-    } else {
+    } else if (type === 'suffix') {
       const suffixes = (config.suffixes || []).map(r => r.id === ruleId ? { ...r, enabled: !r.enabled } : r);
       await persistStore({ ...store, morphologyConfig: { ...config, suffixes } });
+    } else {
+      const infixes = (config.infixes || []).map(r => r.id === ruleId ? { ...r, enabled: !r.enabled } : r);
+      await persistStore({ ...store, morphologyConfig: { ...config, infixes } });
     }
   }, [store, persistStore]);
 
   // Delete Affix Rule
-  const deleteRule = useCallback(async (ruleId: string, type: 'prefix' | 'suffix') => {
+  const deleteRule = useCallback(async (ruleId: string, type: 'prefix' | 'suffix' | 'infix') => {
     if (!store) return;
     const config = store.morphologyConfig;
     if (type === 'prefix') {
       const prefixes = (config.prefixes || []).filter(r => r.id !== ruleId);
       await persistStore({ ...store, morphologyConfig: { ...config, prefixes } });
-    } else {
+    } else if (type === 'suffix') {
       const suffixes = (config.suffixes || []).filter(r => r.id !== ruleId);
       await persistStore({ ...store, morphologyConfig: { ...config, suffixes } });
+    } else {
+      const infixes = (config.infixes || []).filter(r => r.id !== ruleId);
+      await persistStore({ ...store, morphologyConfig: { ...config, infixes } });
     }
   }, [store, persistStore]);
 
@@ -1017,7 +1046,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
                   </div>
 
                   {/* Affix rules builders */}
-                  <div className="tw:grid tw:grid-cols-1 md:tw:grid-cols-2 tw:gap-6 tw:pt-2">
+                  <div className="tw:grid tw:grid-cols-1 lg:tw:grid-cols-3 tw:gap-6 tw:pt-2">
                     {/* Prefixes list */}
                     <div className="tw:space-y-2">
                       <span className="tw:font-bold tw:text-xs tw:text-slate-700">Prefijos comunes a ignorar</span>
@@ -1113,6 +1142,58 @@ globalThis.webViewComponent = function KeyTermsWebView({
                             </label>
                             <button
                               onClick={() => deleteRule(rule.id, 'suffix')}
+                              className="tw:text-slate-400 hover:tw:text-red-500 font-bold"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Infixes list */}
+                    <div className="tw:space-y-2">
+                      <span className="tw:font-bold tw:text-xs tw:text-slate-700">Infijos comunes a ignorar</span>
+                      
+                      {/* Input form */}
+                      <div className="tw:flex tw:gap-1">
+                        <input
+                          type="text"
+                          placeholder="-in-"
+                          value={newInfix}
+                          onChange={(e) => setNewInfix(e.target.value)}
+                          className="tw:border tw:border-slate-200 tw:rounded-lg tw:px-2 tw:py-1 tw:text-xs tw:w-16"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Etiqueta..."
+                          value={newInfixLabel}
+                          onChange={(e) => setNewInfixLabel(e.target.value)}
+                          className="tw:flex-1 tw:border tw:border-slate-200 tw:rounded-lg tw:px-2 tw:py-1 tw:text-xs"
+                        />
+                        <button
+                          onClick={addInfixRule}
+                          className="tw:px-3 tw:py-1 tw:bg-indigo-600 tw:text-white tw:rounded-lg tw:text-xs tw:hover:bg-indigo-700"
+                        >
+                          +
+                        </button>
+                      </div>
+
+                      {/* Infixes List */}
+                      <div className="tw:space-y-1 tw:max-h-36 tw:overflow-y-auto">
+                        {store.morphologyConfig.infixes && store.morphologyConfig.infixes.map(rule => (
+                          <div key={rule.id} className="tw:flex tw:items-center tw:justify-between tw:p-1.5 tw:bg-slate-50 tw:rounded tw:text-xs">
+                            <label className="tw:flex tw:items-center tw:gap-2 tw:cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={rule.enabled}
+                                onChange={() => toggleRule(rule.id, 'infix')}
+                              />
+                              <span className="tw:font-bold">{rule.affix}</span>
+                              <span className="tw:text-slate-400">({rule.label})</span>
+                            </label>
+                            <button
+                              onClick={() => deleteRule(rule.id, 'infix')}
                               className="tw:text-slate-400 hover:tw:text-red-500 font-bold"
                             >
                               ✕

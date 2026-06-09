@@ -141,6 +141,43 @@ export function matchRendering(
     }
   }
 
+  // 3.5 Infix matching (if enabled and configuration has active infixes)
+  const activeInfixes = morphConfig.infixes ? morphConfig.infixes.filter(i => i.enabled) : [];
+  if (activeInfixes.length > 0) {
+    const rawInfixes = activeInfixes.map(i => i.affix.replace(/^-|-$/g, '').trim()).filter(Boolean);
+    if (rawInfixes.length > 0) {
+      // Build a pattern that allows infixes to optionally appear between any characters of the rendering.
+      // E.g., for "dawan" and infix "in", it produces "d(?:in)?a(?:in)?w(?:in)?a(?:in)?n"
+      const escapedChars = [...cleanRendering].map(c => escapeRegex(c));
+      const infixPattern = `(?:${rawInfixes.map(escapeRegex).join('|')})`;
+      
+      // Join characters with the optional infix pattern
+      const infixRegexStr = `(?<![\\p{L}\\p{N}_])${escapedChars.join(`${infixPattern}?`)}(?![\\p{L}\\p{N}_])`;
+      
+      try {
+        const infixRegex = new RegExp(infixRegexStr, 'iu');
+        const infixMatch = verseText.match(infixRegex);
+        if (infixMatch) {
+          return {
+            found: true,
+            matchType: 'affix',
+            matchedText: infixMatch[0],
+            confidence: 0.85
+          };
+        }
+      } catch (_) {
+        // Fallback without Unicode property escapes
+        try {
+          const fallbackInfixRegex = new RegExp(`\\b${escapedChars.join(`${infixPattern}?`)}\\b`, 'i');
+          const infixMatch = verseText.match(fallbackInfixRegex);
+          if (infixMatch) {
+            return { found: true, matchType: 'affix', matchedText: infixMatch[0], confidence: 0.85 };
+          }
+        } catch (_) {}
+      }
+    }
+  }
+
   // 4. Levenshtein Fuzzy matching (if enabled)
   if (morphConfig.enableFuzzyMatch) {
     const words = verseText.split(/[\s.,;:!?"'()\[\]“”‘’]+/);
