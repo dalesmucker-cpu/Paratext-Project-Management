@@ -775,14 +775,14 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     if (!keyTermsOverlayEnabled) return node;
 
     const matches = Object.values(chapterKeyTermsMatches).filter(
-      (m: any) => isVerseInRef(bookCode, selectedChapter, verseNum, m.reference) && m.matchResult.found
+      (m: any) => isVerseInRef(bookCode, selectedChapter, verseNum, m.reference) && m.matchResult?.found
     );
 
     if (matches.length === 0) return node;
 
     if (typeof node === 'string') {
       const matchRenderings = matches
-        .map((m: any) => m.matchResult.matchedText || '')
+        .map((m: any) => m.matchResult?.matchedText || '')
         .filter(Boolean);
       
       // Split multi-word matches so each word is matched and underlined separately
@@ -810,13 +810,13 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
 
       return parts.map((part, index) => {
         const match: any = matches.find((m: any) => {
-          if (!m.matchResult.matchedText) return false;
+          if (!m.matchResult?.matchedText) return false;
           const words = m.matchResult.matchedText.toLowerCase().split(/\s+/);
           return words.includes(part.toLowerCase());
         });
 
         if (match) {
-          const isExact = match.matchResult.matchType === 'exact';
+          const isExact = match.matchResult?.matchType === 'exact';
           const underlineClass = isExact
             ? 'tw:border-b-2 tw:border-dashed tw:border-emerald-500 tw:bg-emerald-50/20'
             : 'tw:border-b-2 tw:border-dashed tw:border-amber-500 tw:bg-amber-50/20';
@@ -2724,7 +2724,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                             );
                             if (verseMatches.length === 0) return null;
                             const totalExpected = verseMatches.length;
-                            const totalFound = verseMatches.filter((m: any) => m.matchResult.found).length;
+                            const totalFound = verseMatches.filter((m: any) => m.matchResult?.found).length;
                             return (
                               <span
                                 onClick={(e) => {
@@ -2735,16 +2735,20 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                                     expected: verseMatches,
                                   });
                                 }}
-                                className={`tw:inline-block tw:w-1.5 tw:h-1.5 tw:rounded-full tw:mr-1 tw:align-middle tw:cursor-pointer hover:tw:scale-125 tw:transition-transform ${
-                                  totalFound === totalExpected
-                                    ? 'tw:bg-emerald-500'
-                                    : totalFound > 0
-                                    ? 'tw:bg-amber-500'
-                                    : 'tw:bg-rose-500'
-                                }`}
+                                className="tw:inline-flex tw:items-center tw:justify-center tw:w-5 tw:h-5 tw:cursor-pointer tw:mr-0.5 tw:align-middle"
                                 title={`Términos clave: ${totalFound}/${totalExpected} encontrados. Haga clic para ver detalles.`}
-                                style={{ verticalAlign: 'baseline', position: 'relative', top: '-1px' }}
-                              />
+                                style={{ position: 'relative', top: '-1px' }}
+                              >
+                                <span
+                                  className={`tw:w-2.5 tw:h-2.5 tw:rounded-full tw:transition-transform hover:tw:scale-125 ${
+                                    totalFound === totalExpected
+                                      ? 'tw:bg-emerald-500'
+                                      : totalFound > 0
+                                      ? 'tw:bg-amber-500'
+                                      : 'tw:bg-rose-500'
+                                  }`}
+                                />
+                              </span>
                             );
                           })()}
                           <sup
@@ -2891,8 +2895,8 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                       </div>
                     )}
                   </div>
-                  <div className="tw:flex tw:items-center tw:gap-2">
-                    {m.matchResult.found ? (
+                   <div className="tw:flex tw:items-center tw:gap-2">
+                    {m.matchResult?.found ? (
                       <span className="tw:text-[10px] tw:bg-emerald-50 tw:text-emerald-700 tw:px-2 tw:py-0.5 tw:border tw:border-emerald-200 tw:rounded-full tw:font-semibold">
                         ✓ Encontrado
                       </span>

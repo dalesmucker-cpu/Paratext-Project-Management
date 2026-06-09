@@ -1194,51 +1194,106 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     },
   );
 
+  // Helper to load, patch, and automatically sync custom project terms from ProjectBiblicalTerms.xml if needed
+  async function loadOrUpdateKeyTermsStore(projectId: string, projectDir: string): Promise<KeyTermsStore> {
+    const keyTermsPath = `${projectDir}${SEP}${KEY_TERMS_FILENAME}`;
+    const exists = await runFileHelper('exists', keyTermsPath);
+    
+    let store: KeyTermsStore;
+    let modified = false;
+    const pt9ListsDir = 'C:\\Program Files\\Paratext 9\\Terms\\Lists';
+
+    if (exists.trim() === 'true') {
+      store = JSON.parse(await runFileHelper('read', keyTermsPath));
+      
+      // Check if we need to merge custom project terms.
+      // If ProjectBiblicalTerms.xml exists, but the JSON file has fewer than 15000 terms,
+      // it means it was loaded from the smaller global list. We merge the custom project terms list.
+      const projectXmlExists = await runFileHelper('exists', `${projectDir}${SEP}ProjectBiblicalTerms.xml`);
+      if (projectXmlExists.trim() === 'true' && (!store.terms || store.terms.length < 15000)) {
+        logger.info(`Key terms store for "${projectId}" has ${store.terms?.length || 0} terms, but ProjectBiblicalTerms.xml exists. Merging custom terms...`);
+        try {
+          const newStore = await loadLegacyKeyTermsAsync(pt9ListsDir, projectDir, 'es', runFileHelper);
+          const existingMap = new Map(store.terms.map(t => [t.id, t]));
+          
+          // Merge: keep existing term data (with voting/tags/renderings) if it exists, otherwise add the new term
+          const mergedTerms = newStore.terms.map(nt => {
+            if (existingMap.has(nt.id)) {
+              return existingMap.get(nt.id)!;
+            }
+            return nt;
+          });
+          
+          store.terms = mergedTerms;
+          modified = true;
+        } catch (err) {
+          logger.warn(`Failed to merge custom terms: ${err}`);
+        }
+      }
+    } else {
+      store = await loadLegacyKeyTermsAsync(pt9ListsDir, projectDir, 'es', runFileHelper);
+      modified = true;
+    }
+
+    // Patch any renderings that are missing IDs (from legacy Paratext 9 import)
+    const now = new Date().toISOString();
+    store.terms = store.terms.map((term) => {
+      let termPatched = false;
+      const renderings = term.renderings.map((r, idx) => {
+        if (!r.id) {
+          termPatched = true;
+          modified = true;
+          return {
+            ...r,
+            id: `r-legacy-${term.id}-${idx}-${Date.now()}`,
+            votes: r.votes || [],
+            contextTags: r.contextTags || [],
+            proposedBy: r.proposedBy || 'Paratext',
+            createdAt: r.createdAt || now,
+            updatedAt: r.updatedAt || now,
+          };
+        }
+        return r;
+      });
+      return termPatched ? { ...term, renderings } : term;
+    });
+
+    if (modified) {
+      await runFileHelper('write', keyTermsPath, JSON.stringify(store, null, 2));
+    }
+    
+    return store;
+  }
+
+  // Helper to extract plain text from all verses within a reference (handling ranges like "1-2" or single verses like "1a")
+  function getVerseTextForRef(verseStr: string, verseMap: Map<number, string>): string {
+    const cleanVerseStr = verseStr.replace(/[a-zA-Z]/g, '');
+    
+    if (cleanVerseStr.includes('-')) {
+      const parts = cleanVerseStr.split('-');
+      const start = parseInt(parts[0], 10);
+      const end = parseInt(parts[1], 10);
+      if (!isNaN(start) && !isNaN(end)) {
+        const texts: string[] = [];
+        for (let v = start; v <= end; v++) {
+          const t = verseMap.get(v);
+          if (t) texts.push(t);
+        }
+        return texts.join(' ');
+      }
+    }
+    
+    const vNum = parseInt(cleanVerseStr, 10);
+    return isNaN(vNum) ? '' : (verseMap.get(vNum) || '');
+  }
+
   const getKeyTermsDataPromise = papi.commands.registerCommand(
     'paratextProjectManager.getKeyTermsData',
     async (projectId: string): Promise<string> => {
       try {
         const projectDir = await resolveProjectDir(projectId);
-        const keyTermsPath = `${projectDir}${SEP}${KEY_TERMS_FILENAME}`;
-        const exists = await runFileHelper('exists', keyTermsPath);
-        
-        let store: KeyTermsStore;
-        if (exists.trim() === 'true') {
-          store = JSON.parse(await runFileHelper('read', keyTermsPath));
-        } else {
-          // If it doesn't exist, load legacy XML data and merge
-          const pt9ListsDir = 'C:\\Program Files\\Paratext 9\\Terms\\Lists';
-          store = await loadLegacyKeyTermsAsync(pt9ListsDir, projectDir, 'es', runFileHelper);
-        }
-
-        // Patch any renderings that are missing IDs (from legacy Paratext 9 import)
-        let patched = false;
-        const now = new Date().toISOString();
-        store.terms = store.terms.map((term) => {
-          const renderings = term.renderings.map((r, idx) => {
-            if (!r.id) {
-              patched = true;
-              return {
-                ...r,
-                id: `r-legacy-${term.id}-${idx}-${Date.now()}`,
-                votes: r.votes || [],
-                contextTags: r.contextTags || [],
-                proposedBy: r.proposedBy || 'Paratext',
-                createdAt: r.createdAt || now,
-                updatedAt: r.updatedAt || now,
-              };
-            }
-            return r;
-          });
-          return { ...term, renderings };
-        });
-
-        const storeJson = JSON.stringify(store, null, 2);
-        // Write back if we patched anything or file was missing
-        if (patched || exists.trim() !== 'true') {
-          await runFileHelper('write', keyTermsPath, storeJson);
-        }
-        return storeJson;
+        const store = await loadOrUpdateKeyTermsStore(projectId, projectDir);
+        return JSON.stringify(store, null, 2);
       } catch (e: any) {
         logger.warn(`getKeyTermsData failed for "${projectId}": ${e}`);
         return JSON.stringify({ schemaVersion: 1, morphologyConfig: { languageName: 'Español', prefixes: [], suffixes: [], enableFuzzyMatch: true, maxEditDistance: 2 }, terms: [] });
@@ -1275,15 +1330,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         const projectDir = await resolveProjectDir(projectId);
         const keyTermsPath = `${projectDir}${SEP}${KEY_TERMS_FILENAME}`;
         
-        let store: KeyTermsStore;
-        const exists = await runFileHelper('exists', keyTermsPath);
-        if (exists.trim() === 'true') {
-          store = JSON.parse(await runFileHelper('read', keyTermsPath));
-        } else {
-          const pt9ListsDir = 'C:\\Program Files\\Paratext 9\\Terms\\Lists';
-          store = await loadLegacyKeyTermsAsync(pt9ListsDir, projectDir, 'es', runFileHelper);
-          await runFileHelper('write', keyTermsPath, JSON.stringify(store, null, 2));
-        }
+        const store = await loadOrUpdateKeyTermsStore(projectId, projectDir);
 
         // Fetch target chapter text
         const textRes = await papi.commands.sendCommand(
@@ -1334,8 +1381,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
             if (book !== bookCode || chap !== chapter) continue;
 
             const verseStr = chapVerse[1];
-            const verseNum = parseInt(verseStr, 10);
-            const verseText = verseMap.get(verseNum) || '';
+            const verseText = getVerseTextForRef(verseStr, verseMap);
 
             let bestMatch: MatchResult = { found: false, matchType: 'none', confidence: 0 };
             
@@ -1376,15 +1422,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         const projectDir = await resolveProjectDir(projectId);
         const keyTermsPath = `${projectDir}${SEP}${KEY_TERMS_FILENAME}`;
         
-        let store: KeyTermsStore;
-        const exists = await runFileHelper('exists', keyTermsPath);
-        if (exists.trim() === 'true') {
-          store = JSON.parse(await runFileHelper('read', keyTermsPath));
-        } else {
-          const pt9ListsDir = 'C:\\Program Files\\Paratext 9\\Terms\\Lists';
-          store = await loadLegacyKeyTermsAsync(pt9ListsDir, projectDir, 'es', runFileHelper);
-          await runFileHelper('write', keyTermsPath, JSON.stringify(store, null, 2));
-        }
+        const store = await loadOrUpdateKeyTermsStore(projectId, projectDir);
 
         const prefix = `${bookCode} `;
         const relevantTerms = store.terms.filter((term) =>

@@ -236,7 +236,45 @@ if (action === 'read' || action === 'readfile') {
         return renderingsMap;
       }
 
-      const mainXmlPath = path.join(pt9ListsDir, 'BiblicalTerms.xml');
+      // Resolve main XML path based on Project settings or file presence
+      let mainXmlPath = path.join(pt9ListsDir, 'BiblicalTerms.xml');
+      const fallbackProjectXml = path.join(projectDir, 'ProjectBiblicalTerms.xml');
+      try {
+        const settingsPath = path.join(projectDir, 'Settings.xml');
+        if (fs.existsSync(settingsPath)) {
+          const settingsXml = fs.readFileSync(settingsPath, 'utf8');
+          const settingMatch = /<BiblicalTermsListSetting>([^<]+)<\/BiblicalTermsListSetting>/i.exec(settingsXml);
+          if (settingMatch) {
+            const settingVal = settingMatch[1].trim();
+            const parts = settingVal.split(':');
+            if (parts.length >= 3) {
+              const type = parts[0].toLowerCase();
+              const filename = parts[2];
+              if (type === 'project') {
+                const projectXmlPath = path.join(projectDir, filename);
+                if (fs.existsSync(projectXmlPath)) {
+                  mainXmlPath = projectXmlPath;
+                }
+              } else {
+                const globalXmlPath = path.join(pt9ListsDir, filename);
+                if (fs.existsSync(globalXmlPath)) {
+                  mainXmlPath = globalXmlPath;
+                }
+              }
+            }
+          }
+        }
+      } catch (err) {
+        // Ignore settings read errors
+      }
+
+      // General fallback if mainXmlPath doesn't exist or is still global but project has custom file
+      if (!fs.existsSync(mainXmlPath) || mainXmlPath === path.join(pt9ListsDir, 'BiblicalTerms.xml')) {
+        if (fs.existsSync(fallbackProjectXml)) {
+          mainXmlPath = fallbackProjectXml;
+        }
+      }
+
       const locXmlPath = path.join(pt9ListsDir, languageCode === 'es' ? 'BiblicalTermsEs.xml' : 'BiblicalTermsEn.xml');
       const renderingsXmlPath = path.join(projectDir, 'TermRenderings.xml');
 
