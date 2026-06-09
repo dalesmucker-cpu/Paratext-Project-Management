@@ -52,6 +52,31 @@ function renderTextWithLinks(text: string, baseKey: string): React.ReactNode[] |
   return parts.length > 0 ? parts : text;
 }
 
+function isVerseInRef(bookCode: string, chapterNum: number, verseNum: number, ref: string): boolean {
+  if (!ref) return false;
+  const parts = ref.split(' ');
+  if (parts.length < 2) return false;
+  const book = parts[0];
+  if (book !== bookCode) return false;
+  const chapVerse = parts[1].split(':');
+  if (chapVerse.length < 2) return false;
+  const chap = parseInt(chapVerse[0], 10);
+  if (chap !== chapterNum) return false;
+
+  const verseStr = chapVerse[1]; // e.g. "1" or "1-2" or "1a"
+  const cleanVerseStr = verseStr.replace(/[a-zA-Z]/g, '');
+  
+  if (cleanVerseStr.includes('-')) {
+    const [startStr, endStr] = cleanVerseStr.split('-');
+    const start = parseInt(startStr, 10);
+    const end = parseInt(endStr, 10);
+    return verseNum >= start && verseNum <= end;
+  }
+  
+  const parsedVerse = parseInt(cleanVerseStr, 10);
+  return parsedVerse === verseNum;
+}
+
 function CommentText({ text, projectId }: { text: string; projectId: string }) {
   let cleanText = text.replace(
     /\s*Escuchar audio:\s*(https:\/\/drive\.google\.com\/\S*|http:\/\/localhost:\d+\/play\S*)/g,
@@ -749,9 +774,8 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   ): React.ReactNode => {
     if (!keyTermsOverlayEnabled) return node;
 
-    const ref = `${bookCode} ${selectedChapter}:${verseNum}`;
     const matches = Object.values(chapterKeyTermsMatches).filter(
-      (m: any) => m.reference === ref && m.matchResult.found
+      (m: any) => isVerseInRef(bookCode, selectedChapter, verseNum, m.reference) && m.matchResult.found
     );
 
     if (matches.length === 0) return node;
@@ -2683,9 +2707,8 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                         >
                           {/* Verse number tag */}
                           {keyTermsOverlayEnabled && (() => {
-                            const verseRef = `${selectedBook} ${selectedChapter}:${child.number}`;
                             const verseMatches = Object.values(chapterKeyTermsMatches).filter(
-                              (m: any) => m.reference === verseRef
+                              (m: any) => isVerseInRef(selectedBook, selectedChapter, child.number, m.reference)
                             );
                             if (verseMatches.length === 0) return null;
                             const totalExpected = verseMatches.length;

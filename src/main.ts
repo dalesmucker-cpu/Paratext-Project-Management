@@ -987,7 +987,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
       if (!pid) return undefined;
       pendingProjectId[KEY_TERMS_TYPE] = pid;
       return papi.webViews.openWebView(KEY_TERMS_TYPE, undefined, {
-        existingId: `key-terms-${pid}`,
+        existingId: 'key-terms-singleton',
       });
     },
   );
@@ -1006,7 +1006,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
       if (!pid) return undefined;
       pendingProjectId[KEY_TERMS_ANALYTICS_TYPE] = pid;
       return papi.webViews.openWebView(KEY_TERMS_ANALYTICS_TYPE, undefined, {
-        existingId: `key-terms-analytics-${pid}`,
+        existingId: 'key-terms-analytics-singleton',
       });
     },
   );
@@ -1281,9 +1281,16 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         }
 
         const matches: VerseMatchStatus[] = [];
-        const prefix = `${bookCode} ${chapter}:`;
         const relevantTerms = store.terms.filter((term) =>
-          term.references.some((ref) => ref.startsWith(prefix)),
+          term.references.some((ref) => {
+            const parts = ref.split(' ');
+            if (parts.length < 2) return false;
+            const book = parts[0];
+            const chapVerse = parts[1].split(':');
+            if (chapVerse.length < 2) return false;
+            const chap = parseInt(chapVerse[0], 10);
+            return book === bookCode && chap === chapter;
+          }),
         );
 
         for (const term of relevantTerms) {
@@ -1291,8 +1298,15 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
           const approvedRenderings = term.renderings.filter((r) => r.status === 'approved');
           
           for (const ref of term.references) {
-            if (!ref.startsWith(prefix)) continue;
-            const verseStr = ref.split(':')[1];
+            const parts = ref.split(' ');
+            if (parts.length < 2) continue;
+            const book = parts[0];
+            const chapVerse = parts[1].split(':');
+            if (chapVerse.length < 2) continue;
+            const chap = parseInt(chapVerse[0], 10);
+            if (book !== bookCode || chap !== chapter) continue;
+
+            const verseStr = chapVerse[1];
             const verseNum = parseInt(verseStr, 10);
             const verseText = verseMap.get(verseNum) || '';
 
