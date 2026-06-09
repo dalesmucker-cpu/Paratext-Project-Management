@@ -32,9 +32,19 @@ globalThis.webViewComponent = function KeyTermsWebView({
   const [filterDomain, setFilterDomain] = useState('all');
   const [filterCompletion, setFilterCompletion] = useState<'all' | 'complete' | 'missing' | 'partial'>('all');
   const [newRenderingText, setNewRenderingText] = useState('');
-  const [newContextTag, setNewContextTag] = useState('');
+  const [newContextTags, setNewContextTags] = useState<Record<string, string>>({});
   const [newNoteText, setNewNoteText] = useState('');
   const [currentUser, setCurrentUser] = useState('Traductor');
+
+  // Sidebar resizable width & selected button scroll tracking
+  const [sidebarWidth, setSidebarWidth] = useState(320);
+  const selectedButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (selectedTermId && selectedButtonRef.current) {
+      selectedButtonRef.current.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }, [selectedTermId]);
 
   // Sidebar visibility
   const [sidebarVisible, setSidebarVisible] = useState(true);
@@ -353,9 +363,10 @@ globalThis.webViewComponent = function KeyTermsWebView({
 
   // Add context tag to rendering
   const addContextTag = useCallback(async (renderingId: string) => {
-    if (!store || !selectedTermId || !newContextTag.trim()) return;
+    const rawTag = newContextTags[renderingId] || '';
+    if (!store || !selectedTermId || !rawTag.trim()) return;
     const now = new Date().toISOString();
-    const tag = newContextTag.trim().toLowerCase();
+    const tag = rawTag.trim().toLowerCase();
     
     const terms = store.terms.map(t => {
       if (t.id === selectedTermId) {
@@ -371,9 +382,9 @@ globalThis.webViewComponent = function KeyTermsWebView({
       return t;
     });
 
-    setNewContextTag('');
+    setNewContextTags(prev => ({ ...prev, [renderingId]: '' }));
     await persistStore({ ...store, terms });
-  }, [store, selectedTermId, newContextTag, persistStore]);
+  }, [store, selectedTermId, newContextTags, persistStore]);
 
   // Remove context tag from rendering
   const removeContextTag = useCallback(async (renderingId: string, tag: string) => {
@@ -536,7 +547,10 @@ globalThis.webViewComponent = function KeyTermsWebView({
     <div className="tw:flex tw:h-full tw:bg-slate-50 tw:text-slate-800 tw:font-sans">
       {/* Sidebar - Terms list */}
       {sidebarVisible && (
-        <div className="tw:w-80 tw:bg-white tw:border-r tw:border-slate-200 tw:flex tw:flex-col tw:h-full tw:flex-shrink-0">
+        <div
+          style={{ width: `${sidebarWidth}px` }}
+          className="tw:bg-white tw:border-r tw:border-slate-200 tw:flex tw:flex-col tw:h-full tw:flex-shrink-0"
+        >
           {/* Header search & filters */}
           <div className="tw:p-3 tw:border-b tw:border-slate-100 tw:space-y-2.5">
             <div className="tw:flex tw:items-center tw:justify-between">
@@ -631,6 +645,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
               return (
                 <button
                   key={term.id}
+                  ref={isSelected ? selectedButtonRef : null}
                   onClick={() => setSelectedTermId(term.id)}
                   className={`tw:w-full tw:text-left tw:p-3 tw:flex tw:flex-col tw:gap-1.5 tw:transition-colors tw:cursor-pointer ${
                     isSelected ? 'tw:bg-indigo-50/70' : 'tw:hover:bg-slate-50'
@@ -657,6 +672,26 @@ globalThis.webViewComponent = function KeyTermsWebView({
             )}
           </div>
         </div>
+      )}
+      {sidebarVisible && (
+        <div
+          className="tw:w-1 tw:cursor-col-resize tw:bg-slate-200 hover:tw:bg-indigo-400 tw:transition-colors tw:h-full tw:flex-shrink-0"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            const startX = e.clientX;
+            const startWidth = sidebarWidth;
+            const handleMouseMove = (moveEvent: MouseEvent) => {
+              const currentWidth = startWidth + (moveEvent.clientX - startX);
+              setSidebarWidth(Math.max(200, Math.min(600, currentWidth)));
+            };
+            const handleMouseUp = () => {
+              document.removeEventListener('mousemove', handleMouseMove);
+              document.removeEventListener('mouseup', handleMouseUp);
+            };
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
+          }}
+        />
       )}
 
       {/* Main panel - Detail view */}
@@ -823,8 +858,8 @@ globalThis.webViewComponent = function KeyTermsWebView({
                             <input
                               type="text"
                               placeholder="+tag"
-                              value={newContextTag}
-                              onChange={(e) => setNewContextTag(e.target.value)}
+                              value={newContextTags[rend.id] || ''}
+                              onChange={(e) => setNewContextTags(prev => ({ ...prev, [rend.id]: e.target.value }))}
                               onKeyDown={(e) => e.key === 'Enter' && addContextTag(rend.id)}
                               className="tw:border tw:border-slate-200 tw:rounded tw:px-1 tw:py-0.5 tw:text-[10px] tw:w-16"
                             />

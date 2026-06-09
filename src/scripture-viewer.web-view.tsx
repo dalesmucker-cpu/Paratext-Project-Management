@@ -543,6 +543,11 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   // Key Terms integration states
   const [keyTermsOverlayEnabled, setKeyTermsOverlayEnabled] = useState(() => localStorage.getItem('key_terms_overlay_enabled') === 'true');
   const [chapterKeyTermsMatches, setChapterKeyTermsMatches] = useState<Record<string, any>>({});
+  const [activeVersePopup, setActiveVersePopup] = useState<{
+    verseNum: number;
+    reference: string;
+    expected: any[];
+  } | null>(null);
 
 
   const getCursorColors = (user: string) => {
@@ -755,7 +760,14 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       const matchRenderings = matches
         .map((m: any) => m.matchResult.matchedText || '')
         .filter(Boolean);
-      const uniqueRends = Array.from(new Set(matchRenderings));
+      
+      // Split multi-word matches so each word is matched and underlined separately
+      const individualWords: string[] = [];
+      for (const rend of matchRenderings) {
+        const words = rend.split(/\s+/).filter(Boolean);
+        individualWords.push(...words);
+      }
+      const uniqueRends = Array.from(new Set(individualWords));
       if (uniqueRends.length === 0) return node;
 
       const sortedRends = uniqueRends.sort((a, b) => b.length - a.length);
@@ -764,9 +776,11 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       const parts = node.split(regex);
 
       return parts.map((part, index) => {
-        const match: any = matches.find(
-          (m: any) => m.matchResult.matchedText && m.matchResult.matchedText.toLowerCase() === part.toLowerCase()
-        );
+        const match: any = matches.find((m: any) => {
+          if (!m.matchResult.matchedText) return false;
+          const words = m.matchResult.matchedText.toLowerCase().split(/\s+/);
+          return words.includes(part.toLowerCase());
+        });
 
         if (match) {
           const isExact = match.matchResult.matchType === 'exact';
@@ -2668,14 +2682,22 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                             const totalFound = verseMatches.filter((m: any) => m.matchResult.found).length;
                             return (
                               <span
-                                className={`tw:inline-block tw:w-1.5 tw:h-1.5 tw:rounded-full tw:mr-1 tw:align-middle ${
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveVersePopup({
+                                    verseNum: child.number,
+                                    reference: verseRef,
+                                    expected: verseMatches,
+                                  });
+                                }}
+                                className={`tw:inline-block tw:w-1.5 tw:h-1.5 tw:rounded-full tw:mr-1 tw:align-middle tw:cursor-pointer hover:tw:scale-125 tw:transition-transform ${
                                   totalFound === totalExpected
                                     ? 'tw:bg-emerald-500'
                                     : totalFound > 0
                                     ? 'tw:bg-amber-500'
                                     : 'tw:bg-rose-500'
                                 }`}
-                                title={`Términos clave: ${totalFound}/${totalExpected} encontrados`}
+                                title={`Términos clave: ${totalFound}/${totalExpected} encontrados. Haga clic para ver detalles.`}
                                 style={{ verticalAlign: 'baseline', position: 'relative', top: '-1px' }}
                               />
                             );
@@ -2774,6 +2796,68 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
           >
             Agregar nota
           </button>
+        </div>
+      )}
+
+      {/* Floating Key Terms Details Popup */}
+      {activeVersePopup && (
+        <div
+          className="tw:fixed tw:inset-0 tw:z-[9999] tw:flex tw:items-center tw:justify-center tw:bg-slate-900/40 tw:backdrop-blur-sm"
+          onClick={() => setActiveVersePopup(null)}
+        >
+          <div
+            className="tw:bg-white tw:rounded-xl tw:shadow-2xl tw:border tw:border-slate-200 tw:w-96 tw:max-w-[90vw] tw:p-4 tw:space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="tw:flex tw:items-center tw:justify-between tw:border-b tw:border-slate-100 tw:pb-2">
+              <span className="tw:font-bold tw:text-slate-800 tw:text-sm">
+                Términos Clave: {activeVersePopup.reference}
+              </span>
+              <button
+                onClick={() => setActiveVersePopup(null)}
+                className="tw:text-slate-400 tw:hover:text-slate-600 tw:text-sm tw:cursor-pointer tw:bg-transparent tw:border-none"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="tw:space-y-2.5 tw:max-h-60 tw:overflow-y-auto">
+              {activeVersePopup.expected.map((m: any) => (
+                <div
+                  key={m.termId}
+                  className="tw:flex tw:items-center tw:justify-between tw:gap-2 tw:p-2 tw:bg-slate-50 tw:rounded-lg tw:border tw:border-slate-100"
+                >
+                  <div className="tw:space-y-0.5">
+                    <div className="tw:font-bold tw:text-xs tw:text-slate-700">{m.gloss}</div>
+                    <div className="tw:text-[10px] tw:text-slate-400 tw:font-serif">{m.lemma}</div>
+                  </div>
+                  <div className="tw:flex tw:items-center tw:gap-2">
+                    {m.matchResult.found ? (
+                      <span className="tw:text-[10px] tw:bg-emerald-50 tw:text-emerald-700 tw:px-2 tw:py-0.5 tw:border tw:border-emerald-200 tw:rounded-full tw:font-semibold">
+                        ✓ Encontrado
+                      </span>
+                    ) : (
+                      <span className="tw:text-[10px] tw:bg-rose-50 tw:text-rose-700 tw:px-2 tw:py-0.5 tw:border tw:border-rose-200 tw:rounded-full tw:font-semibold">
+                        ✗ Faltante
+                      </span>
+                    )}
+                    <button
+                      onClick={async () => {
+                        setActiveVersePopup(null);
+                        try {
+                          await papi.commands.sendCommand('paratextProjectManager.openKeyTerms', projectId);
+                        } catch (e) {
+                          console.error('Failed to open key terms from popup:', e);
+                        }
+                      }}
+                      className="tw:text-[10px] tw:text-indigo-600 tw:hover:underline tw:font-medium tw:cursor-pointer tw:bg-transparent tw:border-none"
+                    >
+                      Editar
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
