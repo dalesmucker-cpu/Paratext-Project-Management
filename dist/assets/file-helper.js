@@ -142,6 +142,172 @@ if (action === 'read' || action === 'readfile') {
     process.stderr.write(e.message);
     process.exit(1);
   }
+} else if (action === 'loadlegacykeyterms') {
+  // Read params from stdin
+  let stdinContent = '';
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', (chunk) => {
+    stdinContent += chunk;
+  });
+  process.stdin.on('end', () => {
+    try {
+      const params = JSON.parse(stdinContent);
+      const pt9ListsDir = params.pt9ListsDir;
+      const projectDir = targetPath;
+      const languageCode = params.languageCode || 'es';
+
+      const BIBLE_BOOKS = [
+        "GEN", "EXO", "LEV", "NUM", "DEU", "JOS", "JDG", "RUT", "1SA", "2SA", "1KI", "2KI", "1CH", "2CH", "EZR", "NEH", "EST", "JOB", "PSA", "PRO", "ECC", "SNG", "ISA", "JER", "LAM", "EZK", "DAN", "HOS", "JOL", "AMO", "OBD", "JON", "MIC", "NAM", "HAB", "ZEP", "HAG", "ZEC", "MAL",
+        "MAT", "MRK", "LUK", "JHN", "ACT", "ROM", "1CO", "2CO", "GAL", "EPH", "PHP", "COL", "1TH", "2TH", "1TI", "2TI", "TIT", "PHM", "HEB", "JAS", "1PE", "2PE", "1JN", "2JN", "3JN", "JUD", "REV"
+      ];
+
+      function convertVerseRef(verseRef14) {
+        if (verseRef14.length < 9) return verseRef14;
+        const bookNum = parseInt(verseRef14.substring(0, 3), 10);
+        const chapterNum = parseInt(verseRef14.substring(3, 6), 10);
+        const verseNum = parseInt(verseRef14.substring(6, 9), 10);
+        
+        const bookCode = BIBLE_BOOKS[bookNum - 1];
+        if (!bookCode) return `${bookNum} ${chapterNum}:${verseNum}`;
+        return `${bookCode} ${chapterNum}:${verseNum}`;
+      }
+
+      function parseBiblicalTermsXml(xmlContent) {
+        const termsMap = new Map();
+        const termRegex = /<Term\s+Id="([^"]+)">([\s\S]*?)<\/Term>/g;
+        let match;
+        while ((match = termRegex.exec(xmlContent)) !== null) {
+          const id = match[1];
+          const body = match[2];
+          const strongMatch = /<Strong>([^<]*)<\/Strong>/i.exec(body);
+          const translitMatch = /<Transliteration>([^<]*)<\/Transliteration>/i.exec(body);
+          const catMatch = /<Category>([^<]*)<\/Category>/i.exec(body);
+          const domMatch = /<Domain>([^<]*)<\/Domain>/i.exec(body);
+          const glossMatch = /<Gloss>([^<]*)<\/Gloss>/i.exec(body);
+          const defMatch = /<Definition>([^<]*)<\/Definition>/i.exec(body);
+          const refs = [];
+          const refRegex = /<Verse>([^<]+)<\/Verse>/g;
+          let refMatch;
+          while ((refMatch = refRegex.exec(body)) !== null) {
+            refs.push(refMatch[1]);
+          }
+          termsMap.set(id, {
+            strongs: strongMatch ? strongMatch[1].trim() : undefined,
+            transliteration: translitMatch ? translitMatch[1].trim() : undefined,
+            category: catMatch ? catMatch[1].trim() : undefined,
+            domain: domMatch ? domMatch[1].trim() : undefined,
+            gloss: glossMatch ? glossMatch[1].trim() : '',
+            definition: defMatch ? defMatch[1].trim() : undefined,
+            references: refs
+          });
+        }
+        return termsMap;
+      }
+
+      function parseLocalizationsXml(xmlContent) {
+        const locMap = new Map();
+        const locRegex = /<Localization\s+Id="([^"]+)"\s+Gloss="([^"]*)"[^>]*>([\s\S]*?)<\/Localization>/g;
+        let match;
+        while ((match = locRegex.exec(xmlContent)) !== null) {
+          const id = match[1];
+          const gloss = match[2];
+          const definition = match[3].trim();
+          locMap.set(id, { gloss, definition });
+        }
+        return locMap;
+      }
+
+      function parseTermRenderingsXml(xmlContent) {
+        const renderingsMap = new Map();
+        const trRegex = /<TermRendering\s+Id="([^"]+)"[^>]*>([\s\S]*?)<\/TermRendering>/g;
+        let match;
+        while ((match = trRegex.exec(xmlContent)) !== null) {
+          const id = match[1];
+          const body = match[2];
+          const rMatch = /<Renderings>([^<]*)<\/Renderings>/i.exec(body);
+          if (rMatch) {
+            const rendsStr = rMatch[1].trim();
+            if (rendsStr) {
+              const list = rendsStr.split('||').map(r => r.trim()).filter(Boolean);
+              renderingsMap.set(id, list);
+            }
+          }
+        }
+        return renderingsMap;
+      }
+
+      const mainXmlPath = path.join(pt9ListsDir, 'BiblicalTerms.xml');
+      const locXmlPath = path.join(pt9ListsDir, languageCode === 'es' ? 'BiblicalTermsEs.xml' : 'BiblicalTermsEn.xml');
+      const renderingsXmlPath = path.join(projectDir, 'TermRenderings.xml');
+
+      let termsMap = new Map();
+      let locMap = new Map();
+      let renderingsMap = new Map();
+
+      if (fs.existsSync(mainXmlPath)) {
+        termsMap = parseBiblicalTermsXml(fs.readFileSync(mainXmlPath, 'utf8'));
+      }
+      if (fs.existsSync(locXmlPath)) {
+        locMap = parseLocalizationsXml(fs.readFileSync(locXmlPath, 'utf8'));
+      }
+      if (fs.existsSync(renderingsXmlPath)) {
+        renderingsMap = parseTermRenderingsXml(fs.readFileSync(renderingsXmlPath, 'utf8'));
+      }
+
+      const terms = [];
+      termsMap.forEach((termData, id) => {
+        const loc = locMap.get(id);
+        const gloss = loc ? loc.gloss : termData.gloss;
+        const projectRenderings = renderingsMap.get(id) || [];
+        
+        const renderings = projectRenderings.map((text, idx) => ({
+          id: `r-${idx}-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+          text,
+          status: 'approved',
+          contextTags: [],
+          votes: [],
+          proposedBy: 'Legacy Import',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }));
+
+        const cleanRefs = (termData.references || []).map(convertVerseRef);
+
+        terms.push({
+          id,
+          lemma: id.replace(/-\d+$/, ''),
+          strongs: termData.strongs,
+          transliteration: termData.transliteration,
+          gloss,
+          domains: termData.domain ? termData.domain.split(';').map(d => d.trim()).filter(Boolean) : [],
+          references: cleanRefs,
+          renderings,
+          notes: [],
+          updatedAt: new Date().toISOString()
+        });
+      });
+
+      const store = {
+        schemaVersion: 1,
+        morphologyConfig: {
+          languageName: languageCode === 'es' ? 'Español' : 'English',
+          prefixes: [],
+          suffixes: [],
+          enableFuzzyMatch: true,
+          maxEditDistance: 2
+        },
+        terms
+      };
+
+      const resultJson = JSON.stringify(store, null, 2);
+      process.stdout.write(resultJson);
+      process.exit(0);
+    } catch (e) {
+      process.stderr.write(e.message);
+      process.exit(1);
+    }
+  });
+  process.stdin.resume();
 } else {
   process.stderr.write('Unknown action: ' + action);
   process.exit(1);
