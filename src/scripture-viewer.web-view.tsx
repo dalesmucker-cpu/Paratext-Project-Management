@@ -2725,6 +2725,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                             if (verseMatches.length === 0) return null;
                             const totalExpected = verseMatches.length;
                             const totalFound = verseMatches.filter((m: any) => m.matchResult?.found).length;
+                            const verseRef = `${selectedBook} ${selectedChapter}:${child.number}`;
                             return (
                               <span
                                 onClick={(e) => {
