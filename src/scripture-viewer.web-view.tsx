@@ -539,6 +539,11 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     >
   >({});
   const [teamMembers, setTeamMembers] = useState<string[]>([]);
+  
+  // Key Terms integration states
+  const [keyTermsOverlayEnabled, setKeyTermsOverlayEnabled] = useState(() => localStorage.getItem('key_terms_overlay_enabled') === 'true');
+  const [chapterKeyTermsMatches, setChapterKeyTermsMatches] = useState<Record<string, any>>({});
+
 
   const getCursorColors = (user: string) => {
     const userHash = user.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
@@ -710,6 +715,115 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     }
   }, [projectId, currentUser]);
 
+  const loadKeyTermsMatches = useCallback(async (bookCode: string, chapterNum: number) => {
+    if (!projectId || !keyTermsOverlayEnabled) return;
+    try {
+      const res = await papi.commands.sendCommand(
+        'paratextProjectManager.scanChapterRenderings',
+        projectId,
+        bookCode,
+        chapterNum,
+      ) as string;
+      const parsed = JSON.parse(res) as { matches: any[] };
+      if (parsed && parsed.matches) {
+        const matchesMap: Record<string, any> = {};
+        for (const m of parsed.matches) {
+          matchesMap[`${m.termId}-${m.reference}`] = m;
+        }
+        setChapterKeyTermsMatches(matchesMap);
+      }
+    } catch (e) {
+      console.error('Failed to load key terms matches:', e);
+    }
+  }, [projectId, keyTermsOverlayEnabled]);
+
+  const highlightKeyTermsInNode = useCallback((
+    node: React.ReactNode,
+    verseNum: number,
+    bookCode: string
+  ): React.ReactNode => {
+    if (!keyTermsOverlayEnabled) return node;
+
+    const ref = `${bookCode} ${selectedChapter}:${verseNum}`;
+    const matches = Object.values(chapterKeyTermsMatches).filter(
+      (m: any) => m.reference === ref && m.matchResult.found
+    );
+
+    if (matches.length === 0) return node;
+
+    if (typeof node === 'string') {
+      const matchRenderings = matches
+        .map((m: any) => m.matchResult.matchedText || '')
+        .filter(Boolean);
+      const uniqueRends = Array.from(new Set(matchRenderings));
+      if (uniqueRends.length === 0) return node;
+
+      const escaped = uniqueRends.map((r: string) => r.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
+      const regex = new RegExp(`\\b(${escaped.join('|')})\\b`, 'gi');
+      const parts = node.split(regex);
+
+      return parts.map((part, index) => {
+        const match: any = matches.find(
+          (m: any) => m.matchResult.matchedText && m.matchResult.matchedText.toLowerCase() === part.toLowerCase()
+        );
+
+        if (match) {
+          const isExact = match.matchResult.matchType === 'exact';
+          const underlineClass = isExact
+            ? 'tw:border-b-2 tw:border-dashed tw:border-emerald-500 tw:bg-emerald-50/20'
+            : 'tw:border-b-2 tw:border-dashed tw:border-amber-500 tw:bg-amber-50/20';
+
+          return (
+            <span
+              key={index}
+              className={`key-term-hover-container tw:relative tw:inline-block tw:cursor-help ${underlineClass}`}
+            >
+              {part}
+              <span className="key-term-tooltip-content tw:invisible tw:absolute tw:bottom-full tw:left-1/2 tw:-translate-x-1/2 tw:mb-1 tw:bg-slate-800 tw:text-white tw:text-[10px] tw:p-2 tw:rounded-lg tw:shadow-md tw:w-48 tw:whitespace-normal tw:z-50 tw:opacity-0 tw:transition-opacity tw:duration-200 pointer-events-none">
+                <div className="tw:font-bold tw:text-indigo-300 tw:font-serif tw:text-xs">{match.lemma}</div>
+                <div className="tw:text-[9px] tw:text-slate-400 tw:italic">({match.gloss})</div>
+                <div className="tw:mt-1 tw:border-t tw:border-slate-700 tw:pt-1">
+                  <strong>Aprobados:</strong> {match.expectedRenderings.join(', ') || 'Ninguno'}
+                </div>
+              </span>
+            </span>
+          );
+        }
+        return part;
+      });
+    }
+
+    if (React.isValidElement(node)) {
+      const element = node as React.ReactElement<any>;
+      if (element.props && element.props.children) {
+        const children = React.Children.map(element.props.children, (child) =>
+          highlightKeyTermsInNode(child, verseNum, bookCode)
+        );
+        return React.cloneElement(element, { ...element.props, key: element.key }, children);
+      }
+      return node;
+    }
+
+    if (Array.isArray(node)) {
+      return node.map((child, idx) => (
+        <React.Fragment key={idx}>
+          {highlightKeyTermsInNode(child, verseNum, bookCode)}
+        </React.Fragment>
+      ));
+    }
+
+    return node;
+  }, [keyTermsOverlayEnabled, chapterKeyTermsMatches, selectedChapter]);
+
+  // Load key terms matches automatically when overlay is enabled or book/chapter changes
+  useEffect(() => {
+    if (keyTermsOverlayEnabled && selectedBook && selectedChapter && projectId) {
+      loadKeyTermsMatches(selectedBook, selectedChapter).catch((err) => {
+        console.error('Failed to load key terms matches in useEffect:', err);
+      });
+    }
+  }, [keyTermsOverlayEnabled, selectedBook, selectedChapter, projectId, loadKeyTermsMatches]);
+
   const loadChapter = useCallback(
     async (bookCode: string, chapterNum: number) => {
       if (!bookCode) return;
@@ -735,9 +849,12 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
           setError('');
         }
 
-        // Load notes asynchronously to speed up chapter switching
+        // Load notes and key terms matches asynchronously to speed up chapter switching
         loadNotes().catch((err) => {
           console.error('Failed to load notes in background:', err);
+        });
+        loadKeyTermsMatches(bookCode, chapterNum).catch((err) => {
+          console.error('Failed to load key terms matches in background:', err);
         });
       } catch (err) {
         // Auto-retry once after 3s — handles papi timeouts after long idle
@@ -765,6 +882,9 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
           loadNotes().catch((nErr) => {
             console.error('Failed to load notes in background on retry:', nErr);
           });
+          loadKeyTermsMatches(bookCode, chapterNum).catch((ktErr) => {
+            console.error('Failed to load key terms matches in background on retry:', ktErr);
+          });
         } catch (retryErr) {
           console.error(retryErr);
           setError('Error al cargar texto o notas.');
@@ -773,7 +893,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
         setLoading(false);
       }
     },
-    [projectId, loadNotes],
+    [projectId, loadNotes, loadKeyTermsMatches],
   );
 
   const lastBroadcastTimeRef = useRef<number>(0);
@@ -1133,6 +1253,8 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   loadChapterRef.current = loadChapter;
   const loadNotesRef = useRef(loadNotes);
   loadNotesRef.current = loadNotes;
+  const loadKeyTermsMatchesRef = useRef(loadKeyTermsMatches);
+  loadKeyTermsMatchesRef.current = loadKeyTermsMatches;
 
   // Listen to collaboration events
   useEffect(() => {
@@ -1232,6 +1354,12 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                   return block;
                 }),
               );
+            }
+          } else if (type === 'key_terms_update') {
+            if (payload.projectId === currentProjId) {
+              loadKeyTermsMatchesRef.current(currentBook, currentChapter).catch((err) => {
+                console.error('Failed to load key terms matches in collab event:', err);
+              });
             }
           } else if (type === 'user_changed') {
             if (payload.username) {
@@ -2377,6 +2505,22 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
             >
               A+
             </button>
+            <button
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                const nextVal = !keyTermsOverlayEnabled;
+                setKeyTermsOverlayEnabled(nextVal);
+                localStorage.setItem('key_terms_overlay_enabled', nextVal ? 'true' : 'false');
+              }}
+              className={`tw:px-2.5 tw:py-1 tw:border tw:rounded tw:text-xs tw:cursor-pointer tw:flex tw:items-center tw:gap-1 tw:transition-all ${
+                keyTermsOverlayEnabled
+                  ? 'tw:bg-indigo-600 tw:hover:bg-indigo-700 tw:border-indigo-600 tw:text-white'
+                  : 'tw:bg-slate-50 tw:hover:bg-slate-100 tw:border-slate-300 tw:text-slate-700'
+              }`}
+              title="Alternar resaltado de Términos Clave"
+            >
+              🔑 Términos Clave
+            </button>
             {isEditingVerse && (
               <button
                 type="button"
@@ -2513,6 +2657,28 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                           }}
                         >
                           {/* Verse number tag */}
+                          {keyTermsOverlayEnabled && (() => {
+                            const verseRef = `${selectedBook} ${selectedChapter}:${child.number}`;
+                            const verseMatches = Object.values(chapterKeyTermsMatches).filter(
+                              (m: any) => m.reference === verseRef
+                            );
+                            if (verseMatches.length === 0) return null;
+                            const totalExpected = verseMatches.length;
+                            const totalFound = verseMatches.filter((m: any) => m.matchResult.found).length;
+                            return (
+                              <span
+                                className={`tw:inline-block tw:w-1.5 tw:h-1.5 tw:rounded-full tw:mr-1 tw:align-middle ${
+                                  totalFound === totalExpected
+                                    ? 'tw:bg-emerald-500'
+                                    : totalFound > 0
+                                    ? 'tw:bg-amber-500'
+                                    : 'tw:bg-rose-500'
+                                }`}
+                                title={`Términos clave: ${totalFound}/${totalExpected} encontrados`}
+                                style={{ verticalAlign: 'baseline', position: 'relative', top: '-1px' }}
+                              />
+                            );
+                          })()}
                           <sup
                             className={`tw:select-none tw:font-bold tw:mr-1 tw:px-1 tw:rounded ${
                               flashVerseNum === child.number
@@ -2551,26 +2717,30 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                             />
                           ) : (
                             <span>
-                              {renderFootnotes(
-                                injectCursorsIntoElements(
-                                  selectionForThisVerse
-                                    ? wrapRangeInMark(
-                                        highlightText(
+                              {highlightKeyTermsInNode(
+                                renderFootnotes(
+                                  injectCursorsIntoElements(
+                                    selectionForThisVerse
+                                      ? wrapRangeInMark(
+                                          highlightText(
+                                            child.text,
+                                            chapterNotesByVerse[child.number] ?? [],
+                                            child.number,
+                                          ),
+                                          selectionForThisVerse.start,
+                                          selectionForThisVerse.end,
+                                          `v${child.number}`,
+                                        )
+                                      : highlightText(
                                           child.text,
                                           chapterNotesByVerse[child.number] ?? [],
                                           child.number,
                                         ),
-                                        selectionForThisVerse.start,
-                                        selectionForThisVerse.end,
-                                        `v${child.number}`,
-                                      )
-                                    : highlightText(
-                                        child.text,
-                                        chapterNotesByVerse[child.number] ?? [],
-                                        child.number,
-                                      ),
-                                  editorsWithCursors,
+                                    editorsWithCursors,
+                                  ),
                                 ),
+                                child.number,
+                                selectedBook,
                               )}
                             </span>
                           )}

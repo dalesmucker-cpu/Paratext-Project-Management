@@ -50,6 +50,20 @@
         "group": "paratextProjectManager.projectManagerGroup",
         "order": 5,
         "command": "paratextProjectManager.openNotesViewer"
+      },
+      {
+        "label": "%mainMenu_openKeyTerms%",
+        "localizeNotes": "Application main menu > Project > Project Manager > Open Key Terms",
+        "group": "paratextProjectManager.projectManagerGroup",
+        "order": 6,
+        "command": "paratextProjectManager.openKeyTerms"
+      },
+      {
+        "label": "%mainMenu_openKeyTermsAnalytics%",
+        "localizeNotes": "Application main menu > Project > Project Manager > Open Key Terms Analytics",
+        "group": "paratextProjectManager.projectManagerGroup",
+        "order": 7,
+        "command": "paratextProjectManager.openKeyTermsAnalytics"
       }
     ]
   },

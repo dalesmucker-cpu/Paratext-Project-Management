@@ -154,5 +154,25 @@ declare module 'papi-shared-types' {
     ) => Promise<{ projectId: string; bookCode: string; chapter: number; verse: number } | null>;
     /** Gets the update status notice if an update was recently applied */
     'paratextProjectManager.getUpdateStatus': () => Promise<string | null>;
+    /** Opens the Key Terms Checker web view for a project */
+    'paratextProjectManager.openKeyTerms': (projectId?: string) => Promise<string | undefined>;
+    /** Gets all key terms data for a project */
+    'paratextProjectManager.getKeyTermsData': (projectId: string) => Promise<string>;
+    /** Saves key terms data for a project */
+    'paratextProjectManager.saveKeyTermsData': (projectId: string, dataJson: string) => Promise<string>;
+    /** Scans a chapter's USFM for key terms and renderings match status */
+    'paratextProjectManager.scanChapterRenderings': (
+      projectId: string,
+      bookCode: string,
+      chapter: number,
+    ) => Promise<string>;
+    /** Scans an entire book's USFM for key terms and renderings match status */
+    'paratextProjectManager.scanBookRenderings': (
+      projectId: string,
+      bookCode: string,
+    ) => Promise<string>;
+    /** Opens the Key Terms Analytics dashboard web view for a project */
+    'paratextProjectManager.openKeyTermsAnalytics': (projectId?: string) => Promise<string | undefined>;
   }
 }
+

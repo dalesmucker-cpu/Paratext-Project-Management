@@ -21,14 +21,26 @@ import notesViewerWebView from './notes-viewer.web-view?inline';
 import notesViewerStyles from './notes-viewer.web-view.scss?inline';
 import scriptureViewerWebView from './scripture-viewer.web-view?inline';
 import scriptureViewerStyles from './scripture-viewer.web-view.scss?inline';
+import keyTermsWebView from './key-terms.web-view?inline';
+import keyTermsStyles from './key-terms.web-view.scss?inline';
+import keyTermsAnalyticsWebView from './key-terms-analytics.web-view?inline';
+import keyTermsAnalyticsStyles from './key-terms-analytics.web-view.scss?inline';
+
 import type { PendingTimeSyncEntry } from './types/task.types';
+import type { KeyTermsStore, KeyTerm, Rendering, VerseMatchStatus, ChapterScanResult } from './types/key-terms.types';
+import { loadLegacyKeyTermsAsync } from './utils/key-terms-parser';
+import { matchRendering } from './utils/key-terms-matcher';
 
 const TASK_BOARD_TYPE = 'paratextProjectManager.taskBoard';
 const MY_TASKS_TYPE = 'paratextProjectManager.myTasks';
 const PROJECT_OVERVIEW_TYPE = 'paratextProjectManager.projectOverview';
 const NOTES_VIEWER_TYPE = 'paratextProjectManager.notesViewer';
 const SCRIPTURE_VIEWER_TYPE = 'paratextProjectManager.scriptureViewer';
+const KEY_TERMS_TYPE = 'paratextProjectManager.keyTerms';
+const KEY_TERMS_ANALYTICS_TYPE = 'paratextProjectManager.keyTermsAnalytics';
 const TASKS_FILENAME = 'project-tasks.json';
+const KEY_TERMS_FILENAME = 'key-terms-data.json';
+
 
 // Resolve the current user's home directory from the environment.
 // USERPROFILE is set on Windows (e.g. "C:\Users\Dale").
@@ -812,6 +824,39 @@ const scriptureViewerProvider: IWebViewProvider = {
   },
 };
 
+const keyTermsProvider: IWebViewProvider = {
+  async getWebView(savedWebView: SavedWebViewDefinition): Promise<WebViewDefinition | undefined> {
+    if (savedWebView.webViewType !== KEY_TERMS_TYPE)
+      throw new Error(`Wrong webview type: ${savedWebView.webViewType}`);
+    const projectId = savedWebView.projectId ?? pendingProjectId[KEY_TERMS_TYPE];
+    pendingProjectId[KEY_TERMS_TYPE] = undefined;
+    return {
+      ...savedWebView,
+      projectId,
+      title: 'Verificador de Términos Clave',
+      content: keyTermsWebView,
+      styles: keyTermsStyles,
+    };
+  },
+};
+
+const keyTermsAnalyticsProvider: IWebViewProvider = {
+  async getWebView(savedWebView: SavedWebViewDefinition): Promise<WebViewDefinition | undefined> {
+    if (savedWebView.webViewType !== KEY_TERMS_ANALYTICS_TYPE)
+      throw new Error(`Wrong webview type: ${savedWebView.webViewType}`);
+    const projectId = savedWebView.projectId ?? pendingProjectId[KEY_TERMS_ANALYTICS_TYPE];
+    pendingProjectId[KEY_TERMS_ANALYTICS_TYPE] = undefined;
+    return {
+      ...savedWebView,
+      projectId,
+      title: 'Análisis de Términos Clave',
+      content: keyTermsAnalyticsWebView,
+      styles: keyTermsAnalyticsStyles,
+    };
+  },
+};
+
+
 // --- Extension Lifecycle ---
 
 export async function activate(context: ExecutionActivationContext): Promise<void> {
@@ -862,6 +907,15 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     SCRIPTURE_VIEWER_TYPE,
     scriptureViewerProvider,
   );
+  const keyTermsProviderPromise = papi.webViewProviders.registerWebViewProvider(
+    KEY_TERMS_TYPE,
+    keyTermsProvider,
+  );
+  const keyTermsAnalyticsProviderPromise = papi.webViewProviders.registerWebViewProvider(
+    KEY_TERMS_ANALYTICS_TYPE,
+    keyTermsAnalyticsProvider,
+  );
+
 
   // --- Open commands ---
 
@@ -920,7 +974,46 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     },
   );
 
+  const openKeyTermsPromise = papi.commands.registerCommand(
+    'paratextProjectManager.openKeyTerms',
+    async (projectId?: string) => {
+      let pid = projectId;
+      if (!pid) {
+        pid = await papi.dialogs.selectProject({
+          title: 'Abrir Verificador de Términos Clave',
+          prompt: 'Selecciona un proyecto:',
+          includeProjectInterfaces: 'platformScripture.USJ_Chapter',
+        });
+      }
+      if (!pid) return undefined;
+      pendingProjectId[KEY_TERMS_TYPE] = pid;
+      return papi.webViews.openWebView(KEY_TERMS_TYPE, undefined, {
+        existingId: `key-terms-${pid}`,
+      });
+    },
+  );
+
+  const openKeyTermsAnalyticsPromise = papi.commands.registerCommand(
+    'paratextProjectManager.openKeyTermsAnalytics',
+    async (projectId?: string) => {
+      let pid = projectId;
+      if (!pid) {
+        pid = await papi.dialogs.selectProject({
+          title: 'Abrir Análisis de Términos Clave',
+          prompt: 'Selecciona un proyecto:',
+          includeProjectInterfaces: 'platformScripture.USJ_Chapter',
+        });
+      }
+      if (!pid) return undefined;
+      pendingProjectId[KEY_TERMS_ANALYTICS_TYPE] = pid;
+      return papi.webViews.openWebView(KEY_TERMS_ANALYTICS_TYPE, undefined, {
+        existingId: `key-terms-analytics-${pid}`,
+      });
+    },
+  );
+
   // --- Data commands ---
+
 
   const getTasksPromise = papi.commands.registerCommand(
     'paratextProjectManager.getTasks',
@@ -1101,6 +1194,200 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
       return 'ok';
     },
   );
+
+  const getKeyTermsDataPromise = papi.commands.registerCommand(
+    'paratextProjectManager.getKeyTermsData',
+    async (projectId: string): Promise<string> => {
+      try {
+        const projectDir = await resolveProjectDir(projectId);
+        const keyTermsPath = `${projectDir}${SEP}${KEY_TERMS_FILENAME}`;
+        const exists = await runFileHelper('exists', keyTermsPath);
+        if (exists.trim() === 'true') {
+          return await runFileHelper('read', keyTermsPath);
+        }
+
+        // If it doesn't exist, load legacy XML data and merge
+        const pt9ListsDir = 'C:\\Program Files\\Paratext 9\\Terms\\Lists';
+        const store = await loadLegacyKeyTermsAsync(pt9ListsDir, projectDir, 'es', runFileHelper);
+        const storeJson = JSON.stringify(store, null, 2);
+        
+        // Write the default JSON store to the project folder
+        await runFileHelper('write', keyTermsPath, storeJson);
+        return storeJson;
+      } catch (e: any) {
+        logger.warn(`getKeyTermsData failed for "${projectId}": ${e}`);
+        return JSON.stringify({ schemaVersion: 1, morphologyConfig: { languageName: 'Español', prefixes: [], suffixes: [], enableFuzzyMatch: true, maxEditDistance: 2 }, terms: [] });
+      }
+    },
+  );
+
+  const saveKeyTermsDataPromise = papi.commands.registerCommand(
+    'paratextProjectManager.saveKeyTermsData',
+    async (projectId: string, dataJson: string): Promise<string> => {
+      try {
+        const projectDir = await resolveProjectDir(projectId);
+        const keyTermsPath = `${projectDir}${SEP}${KEY_TERMS_FILENAME}`;
+        await runFileHelper('write', keyTermsPath, dataJson);
+        logger.info(`Project Manager: saved key terms data locally to ${keyTermsPath}`);
+        
+        // Broadcast local update
+        if (collabEventEmitter) {
+          collabEventEmitter.emit({ type: 'key_terms_update', payload: { projectId } });
+        }
+        return 'ok';
+      } catch (e: any) {
+        logger.warn(`saveKeyTermsData failed for "${projectId}": ${e}`);
+        return `error: ${e.message || e}`;
+      }
+    },
+  );
+
+  const scanChapterRenderingsPromise = papi.commands.registerCommand(
+    'paratextProjectManager.scanChapterRenderings',
+    async (projectId: string, bookCode: string, chapter: number): Promise<string> => {
+      try {
+        const projectDir = await resolveProjectDir(projectId);
+        const keyTermsPath = `${projectDir}${SEP}${KEY_TERMS_FILENAME}`;
+        
+        let store: KeyTermsStore;
+        const exists = await runFileHelper('exists', keyTermsPath);
+        if (exists.trim() === 'true') {
+          store = JSON.parse(await runFileHelper('read', keyTermsPath));
+        } else {
+          const pt9ListsDir = 'C:\\Program Files\\Paratext 9\\Terms\\Lists';
+          store = await loadLegacyKeyTermsAsync(pt9ListsDir, projectDir, 'es', runFileHelper);
+        }
+
+        // Fetch target chapter text
+        const textRes = await papi.commands.sendCommand(
+          'paratextProjectManager.getChapterText',
+          projectId,
+          bookCode,
+          chapter,
+        ) as string;
+        const parsed = JSON.parse(textRes) as { blocks: any[] };
+        
+        const verseMap = new Map<number, string>();
+        if (parsed && parsed.blocks) {
+          for (const block of parsed.blocks) {
+            if (block.children) {
+              for (const child of block.children) {
+                if (child.type === 'verse' && child.text) {
+                  verseMap.set(child.number, child.text);
+                }
+              }
+            }
+          }
+        }
+
+        const matches: VerseMatchStatus[] = [];
+        const prefix = `${bookCode} ${chapter}:`;
+        const relevantTerms = store.terms.filter((term) =>
+          term.references.some((ref) => ref.startsWith(prefix)),
+        );
+
+        for (const term of relevantTerms) {
+          // Find expected renderings
+          const approvedRenderings = term.renderings.filter((r) => r.status === 'approved');
+          
+          for (const ref of term.references) {
+            if (!ref.startsWith(prefix)) continue;
+            const verseStr = ref.split(':')[1];
+            const verseNum = parseInt(verseStr, 10);
+            const verseText = verseMap.get(verseNum) || '';
+
+            let bestMatch: MatchResult = { found: false, matchType: 'none', confidence: 0 };
+            
+            for (const rendering of approvedRenderings) {
+              const result = matchRendering(verseText, rendering.text, store.morphologyConfig);
+              if (result.found && result.confidence > bestMatch.confidence) {
+                bestMatch = result;
+              }
+            }
+
+            matches.push({
+              reference: ref,
+              termId: term.id,
+              lemma: term.lemma,
+              gloss: term.gloss,
+              expectedRenderings: approvedRenderings.map((r) => r.text),
+              matchResult: bestMatch,
+            });
+          }
+        }
+
+        return JSON.stringify({
+          chapter,
+          bookCode,
+          matches,
+        });
+      } catch (e: any) {
+        logger.warn(`scanChapterRenderings failed: ${e}`);
+        return JSON.stringify({ chapter, bookCode, matches: [] });
+      }
+    },
+  );
+
+  const scanBookRenderingsPromise = papi.commands.registerCommand(
+    'paratextProjectManager.scanBookRenderings',
+    async (projectId: string, bookCode: string): Promise<string> => {
+      try {
+        const projectDir = await resolveProjectDir(projectId);
+        const keyTermsPath = `${projectDir}${SEP}${KEY_TERMS_FILENAME}`;
+        
+        let store: KeyTermsStore;
+        const exists = await runFileHelper('exists', keyTermsPath);
+        if (exists.trim() === 'true') {
+          store = JSON.parse(await runFileHelper('read', keyTermsPath));
+        } else {
+          const pt9ListsDir = 'C:\\Program Files\\Paratext 9\\Terms\\Lists';
+          store = await loadLegacyKeyTermsAsync(pt9ListsDir, projectDir, 'es', runFileHelper);
+        }
+
+        const prefix = `${bookCode} `;
+        const relevantTerms = store.terms.filter((term) =>
+          term.references.some((ref) => ref.startsWith(prefix)),
+        );
+
+        const chapters = new Set<number>();
+        for (const term of relevantTerms) {
+          for (const ref of term.references) {
+            if (ref.startsWith(prefix)) {
+              const chapStr = ref.split(' ')[1].split(':')[0];
+              chapters.add(parseInt(chapStr, 10));
+            }
+          }
+        }
+
+        const allMatches: VerseMatchStatus[] = [];
+        const scanPromises = Array.from(chapters).map(async (chap) => {
+          try {
+            const res = await papi.commands.sendCommand(
+              'paratextProjectManager.scanChapterRenderings',
+              projectId,
+              bookCode,
+              chap,
+            ) as string;
+            const parsed = JSON.parse(res) as { matches: VerseMatchStatus[] };
+            if (parsed && parsed.matches) {
+              allMatches.push(...parsed.matches);
+            }
+          } catch (_) {}
+        });
+
+        await Promise.all(scanPromises);
+
+        return JSON.stringify({
+          bookCode,
+          matches: allMatches,
+        });
+      } catch (e: any) {
+        logger.warn(`scanBookRenderings failed: ${e}`);
+        return JSON.stringify({ bookCode, matches: [] });
+      }
+    },
+  );
+
 
   const getCurrentUserPromise = papi.commands.registerCommand(
     'paratextProjectManager.getCurrentUser',
@@ -2815,8 +3102,17 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     await broadcastCursorPromise,
     await broadcastVerseEditPromise,
     await getUpdateStatusPromise,
+    await getKeyTermsDataPromise,
+    await saveKeyTermsDataPromise,
+    await scanChapterRenderingsPromise,
+    await scanBookRenderingsPromise,
+    await keyTermsProviderPromise,
+    await keyTermsAnalyticsProviderPromise,
+    await openKeyTermsPromise,
+    await openKeyTermsAnalyticsPromise,
     collabEventEmitter,
   );
+
 
   // Start check for updates in the background on startup
   checkAndApplyUpdates().catch((err) => {

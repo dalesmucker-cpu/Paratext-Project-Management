@@ -42,3 +42,9 @@ body,
     transform: scaleY(0.92);
   }
 }
+
+.key-term-hover-container:hover .key-term-tooltip-content {
+  visibility: visible;
+  opacity: 1;
+}
+
