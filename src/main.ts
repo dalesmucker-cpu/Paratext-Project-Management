@@ -1201,17 +1201,43 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         const projectDir = await resolveProjectDir(projectId);
         const keyTermsPath = `${projectDir}${SEP}${KEY_TERMS_FILENAME}`;
         const exists = await runFileHelper('exists', keyTermsPath);
+        
+        let store: KeyTermsStore;
         if (exists.trim() === 'true') {
-          return await runFileHelper('read', keyTermsPath);
+          store = JSON.parse(await runFileHelper('read', keyTermsPath));
+        } else {
+          // If it doesn't exist, load legacy XML data and merge
+          const pt9ListsDir = 'C:\\Program Files\\Paratext 9\\Terms\\Lists';
+          store = await loadLegacyKeyTermsAsync(pt9ListsDir, projectDir, 'es', runFileHelper);
         }
 
-        // If it doesn't exist, load legacy XML data and merge
-        const pt9ListsDir = 'C:\\Program Files\\Paratext 9\\Terms\\Lists';
-        const store = await loadLegacyKeyTermsAsync(pt9ListsDir, projectDir, 'es', runFileHelper);
+        // Patch any renderings that are missing IDs (from legacy Paratext 9 import)
+        let patched = false;
+        const now = new Date().toISOString();
+        store.terms = store.terms.map((term) => {
+          const renderings = term.renderings.map((r, idx) => {
+            if (!r.id) {
+              patched = true;
+              return {
+                ...r,
+                id: `r-legacy-${term.id}-${idx}-${Date.now()}`,
+                votes: r.votes || [],
+                contextTags: r.contextTags || [],
+                proposedBy: r.proposedBy || 'Paratext',
+                createdAt: r.createdAt || now,
+                updatedAt: r.updatedAt || now,
+              };
+            }
+            return r;
+          });
+          return { ...term, renderings };
+        });
+
         const storeJson = JSON.stringify(store, null, 2);
-        
-        // Write the default JSON store to the project folder
-        await runFileHelper('write', keyTermsPath, storeJson);
+        // Write back if we patched anything or file was missing
+        if (patched || exists.trim() !== 'true') {
+          await runFileHelper('write', keyTermsPath, storeJson);
+        }
         return storeJson;
       } catch (e: any) {
         logger.warn(`getKeyTermsData failed for "${projectId}": ${e}`);
@@ -1219,6 +1245,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
       }
     },
   );
+
 
   const saveKeyTermsDataPromise = papi.commands.registerCommand(
     'paratextProjectManager.saveKeyTermsData',

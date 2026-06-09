@@ -5,6 +5,21 @@ export function escapeRegex(text: string): string {
 }
 
 /**
+ * Unicode-aware word boundary patterns that handle accented characters (Spanish, etc.)
+ * Standard JS \b treats accented letters as non-word characters.
+ */
+const UNI_WORD_CHAR = '[\\p{L}\\p{N}_]';
+
+/**
+ * Build a Unicode-aware regex for a word, wrapping with lookahead/lookbehind
+ * to simulate word boundaries that respect accented letters.
+ */
+function unicodeWordRegex(pattern: string, flags = 'gi'): RegExp {
+  // Use lookahead/lookbehind instead of \b for Unicode compatibility
+  return new RegExp(`(?<![\\p{L}\\p{N}_])${pattern}(?![\\p{L}\\p{N}_])`, flags + 'u');
+}
+
+/**
  * Checks if a rendering text matches a verse text using morphology and wildcard configurations.
  */
 export function matchRendering(
@@ -27,42 +42,59 @@ export function matchRendering(
     if (startsWithAsterisk) coreText = coreText.slice(1);
     if (endsWithAsterisk) coreText = coreText.slice(0, -1);
     
-    const escapedCore = escapeRegex(coreText).replace(/\\\*/g, '.*');
+    const escapedCore = escapeRegex(coreText).replace(/\\\*/g, '[\\p{L}\\p{N}_]*');
     
-    // Class of valid word characters (excludes whitespace and standard punctuation, supporting Unicode letters/accents)
-    const wordChars = '[^\\s.,;:!?\\x22\'()[\\]“”‘’«»¿¡]';
+    // Unicode-aware word character sequences
     let regexStr = '';
     
     if (startsWithAsterisk && endsWithAsterisk) {
       // Substring match: match the entire word containing the core
-      regexStr = `\\b${wordChars}*${escapedCore}${wordChars}*\\b`;
+      regexStr = `(?<![\\p{L}\\p{N}_])[\\p{L}\\p{N}_]*${escapedCore}[\\p{L}\\p{N}_]*(?![\\p{L}\\p{N}_])`;
     } else if (startsWithAsterisk) {
       // Suffix match: match the entire word ending with the core
-      regexStr = `\\b${wordChars}*${escapedCore}\\b`;
+      regexStr = `(?<![\\p{L}\\p{N}_])[\\p{L}\\p{N}_]*${escapedCore}(?![\\p{L}\\p{N}_])`;
     } else if (endsWithAsterisk) {
       // Prefix match: match the entire word starting with the core
-      regexStr = `\\b${escapedCore}${wordChars}*\\b`;
+      regexStr = `(?<![\\p{L}\\p{N}_])${escapedCore}[\\p{L}\\p{N}_]*(?![\\p{L}\\p{N}_])`;
     } else {
       // Internal asterisks only
-      regexStr = `\\b${escapedCore}\\b`;
+      regexStr = `(?<![\\p{L}\\p{N}_])${escapedCore}(?![\\p{L}\\p{N}_])`;
     }
     
-    const regex = new RegExp(regexStr, 'i');
-    const match = verseText.match(regex);
-    if (match) {
-      return {
-        found: true,
-        matchType: 'wildcard',
-        matchedText: match[0],
-        confidence: 0.95
-      };
+    try {
+      const regex = new RegExp(regexStr, 'iu');
+      const match = verseText.match(regex);
+      if (match) {
+        return {
+          found: true,
+          matchType: 'wildcard',
+          matchedText: match[0],
+          confidence: 0.95
+        };
+      }
+    } catch (_) {
+      // Fallback for engines without Unicode property escapes
+      const fallbackRegex = new RegExp(regexStr.replace(/\\p\{[LN]\}/g, '\\w').replace(/\\p\{N\}/g, '\\d'), 'i');
+      const match = verseText.match(fallbackRegex);
+      if (match) {
+        return { found: true, matchType: 'wildcard', matchedText: match[0], confidence: 0.95 };
+      }
     }
   }
 
-  // 2. Exact match (without affixes)
+  // 2. Exact match (without affixes) - Unicode-aware boundaries
   const escapedExact = escapeRegex(cleanRendering);
-  const exactRegex = new RegExp(`\\b${escapedExact}\\b`, 'i');
-  const exactMatch = verseText.match(exactRegex);
+  let exactMatch: RegExpMatchArray | null = null;
+  try {
+    const exactRegex = unicodeWordRegex(escapedExact);
+    exactMatch = verseText.match(exactRegex);
+  } catch (_) {
+    // Fallback to simple case-insensitive search
+    const idx = verseText.toLowerCase().indexOf(cleanRendering.toLowerCase());
+    if (idx !== -1) {
+      exactMatch = [verseText.slice(idx, idx + cleanRendering.length)] as any;
+    }
+  }
   if (exactMatch) {
     return {
       found: true,
@@ -87,15 +119,25 @@ export function matchRendering(
       suffixPart = `(?:${sJoined})?`;
     }
     
-    const affixRegex = new RegExp(`\\b${prefixPart}${escapedExact}${suffixPart}\\b`, 'i');
-    const affixMatch = verseText.match(affixRegex);
-    if (affixMatch) {
-      return {
-        found: true,
-        matchType: 'affix',
-        matchedText: affixMatch[0],
-        confidence: 0.85
-      };
+    try {
+      const affixRegexStr = `(?<![\\p{L}\\p{N}_])${prefixPart}${escapedExact}${suffixPart}(?![\\p{L}\\p{N}_])`;
+      const affixRegex = new RegExp(affixRegexStr, 'iu');
+      const affixMatch = verseText.match(affixRegex);
+      if (affixMatch) {
+        return {
+          found: true,
+          matchType: 'affix',
+          matchedText: affixMatch[0],
+          confidence: 0.85
+        };
+      }
+    } catch (_) {
+      // Fallback without Unicode property escapes
+      const affixRegex = new RegExp(`\\b${prefixPart}${escapedExact}${suffixPart}\\b`, 'i');
+      const affixMatch = verseText.match(affixRegex);
+      if (affixMatch) {
+        return { found: true, matchType: 'affix', matchedText: affixMatch[0], confidence: 0.85 };
+      }
     }
   }
 

@@ -39,11 +39,26 @@ globalThis.webViewComponent = function KeyTermsWebView({
   // Sidebar resizable width & selected button scroll tracking
   const [sidebarWidth, setSidebarWidth] = useState(320);
   const selectedButtonRef = useRef<HTMLButtonElement | null>(null);
+  const sidebarListRef = useRef<HTMLDivElement | null>(null);
 
+  // When selectedTermId changes, scroll the button into view within the sidebar only
   useEffect(() => {
-    if (selectedTermId && selectedButtonRef.current) {
-      selectedButtonRef.current.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    if (selectedTermId && selectedButtonRef.current && sidebarListRef.current) {
+      const container = sidebarListRef.current;
+      const btn = selectedButtonRef.current;
+      const containerTop = container.scrollTop;
+      const containerBottom = containerTop + container.clientHeight;
+      const btnTop = btn.offsetTop;
+      const btnBottom = btnTop + btn.offsetHeight;
+      if (btnTop < containerTop || btnBottom > containerBottom) {
+        container.scrollTop = btnTop - container.clientHeight / 2 + btn.offsetHeight / 2;
+      }
     }
+  }, [selectedTermId]);
+
+  // Clear the tag input fields whenever we navigate to a different term
+  useEffect(() => {
+    setNewContextTags({});
   }, [selectedTermId]);
 
   // Listen to external key term selection events
@@ -643,7 +658,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
           </div>
 
           {/* List area */}
-          <div className="tw:flex-1 tw:overflow-y-auto tw:divide-y tw:divide-slate-100">
+          <div ref={sidebarListRef} className="tw:flex-1 tw:overflow-y-auto tw:divide-y tw:divide-slate-100">
             {filteredTerms.map(term => {
               const status = getTermStatus(term);
               const isSelected = term.id === selectedTermId;
@@ -796,7 +811,9 @@ globalThis.webViewComponent = function KeyTermsWebView({
 
               {/* Renderings List */}
               <div className="tw:space-y-3">
-                {selectedTerm.renderings && selectedTerm.renderings.map(rend => {
+                {selectedTerm.renderings && selectedTerm.renderings.map((rend, rendIdx) => {
+                  // Safety: ensure each rendering has a stable ID (legacy terms may lack one)
+                  const rendId = rend.id || `rend-${selectedTermId}-${rendIdx}-${rend.text.slice(0, 8)}`;
                   const upVotes = rend.votes ? rend.votes.filter(v => v.value === 'up').length : 0;
                   const downVotes = rend.votes ? rend.votes.filter(v => v.value === 'down').length : 0;
                   
@@ -804,7 +821,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
                   const hasDownvoted = rend.votes && rend.votes.some(v => v.user === currentUser && v.value === 'down');
 
                   return (
-                    <div key={rend.id} className="tw:p-3 tw:bg-slate-50 tw:rounded-lg tw:border tw:border-slate-100 tw:space-y-2">
+                    <div key={rendId} className="tw:p-3 tw:bg-slate-50 tw:rounded-lg tw:border tw:border-slate-100 tw:space-y-2">
                       <div className="tw:flex tw:items-start tw:justify-between tw:gap-4">
                         <div className="tw:space-y-1">
                           <span className="tw:font-bold tw:text-sm tw:text-slate-700">{rend.text}</span>
@@ -816,7 +833,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
                         {/* Status select dropdown */}
                         <select
                           value={rend.status}
-                          onChange={(e) => updateRenderingStatus(rend.id, e.target.value as any)}
+                          onChange={(e) => updateRenderingStatus(rendId, e.target.value as any)}
                           className={`tw:text-xs tw:px-2 tw:py-1 tw:rounded-md tw:border tw:font-medium ${
                             rend.status === 'approved' ? 'tw:bg-green-50 tw:text-green-700 tw:border-green-200' :
                             rend.status === 'disputed' ? 'tw:bg-red-50 tw:text-red-700 tw:border-red-200' :
@@ -836,7 +853,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
                         {/* Vote buttons */}
                         <div className="tw:flex tw:items-center tw:gap-2">
                           <button
-                            onClick={() => voteRendering(rend.id, 'up')}
+                            onClick={() => voteRendering(rendId, 'up')}
                             className={`tw:flex tw:items-center tw:gap-1 tw:px-2 tw:py-1 tw:rounded-md tw:border tw:text-xs tw:cursor-pointer ${
                               hasUpvoted
                                 ? 'tw:bg-indigo-50 tw:text-indigo-600 tw:border-indigo-200'
@@ -846,7 +863,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
                             👍 <span className="tw:font-semibold">{upVotes}</span>
                           </button>
                           <button
-                            onClick={() => voteRendering(rend.id, 'down')}
+                            onClick={() => voteRendering(rendId, 'down')}
                             className={`tw:flex tw:items-center tw:gap-1 tw:px-2 tw:py-1 tw:rounded-md tw:border tw:text-xs tw:cursor-pointer ${
                               hasDownvoted
                                 ? 'tw:bg-red-50 tw:text-red-600 tw:border-red-200'
@@ -863,7 +880,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
                             <span key={tag} className="tw:inline-flex tw:items-center tw:gap-1 tw:text-[10px] tw:bg-slate-200 tw:text-slate-600 tw:rounded tw:px-1.5 tw:py-0.5 font-medium">
                               #{tag}
                               <button
-                                onClick={() => removeContextTag(rend.id, tag)}
+                                onClick={() => removeContextTag(rendId, tag)}
                                 className="tw:text-slate-400 tw:hover:text-slate-600 font-bold"
                               >
                                 ✕
@@ -874,13 +891,13 @@ globalThis.webViewComponent = function KeyTermsWebView({
                             <input
                               type="text"
                               placeholder="+tag"
-                              value={newContextTags[rend.id] || ''}
-                              onChange={(e) => setNewContextTags(prev => ({ ...prev, [rend.id]: e.target.value }))}
-                              onKeyDown={(e) => e.key === 'Enter' && addContextTag(rend.id)}
+                              value={newContextTags[rendId] || ''}
+                              onChange={(e) => setNewContextTags(prev => ({ ...prev, [rendId]: e.target.value }))}
+                              onKeyDown={(e) => e.key === 'Enter' && addContextTag(rendId)}
                               className="tw:border tw:border-slate-200 tw:rounded tw:px-1 tw:py-0.5 tw:text-[10px] tw:w-16"
                             />
                             <button
-                              onClick={() => addContextTag(rend.id)}
+                              onClick={() => addContextTag(rendId)}
                               className="tw:px-1.5 tw:bg-slate-200 tw:rounded tw:text-[10px] tw:hover:bg-slate-300"
                             >
                               +

@@ -796,8 +796,17 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
 
       const sortedRends = uniqueRends.sort((a, b) => b.length - a.length);
       const escaped = sortedRends.map((r: string) => r.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
-      const regex = new RegExp(`\\b(${escaped.join('|')})\\b`, 'gi');
-      const parts = node.split(regex);
+      
+      // Try Unicode-aware split; fall back to simple \b if not supported
+      let parts: string[];
+      try {
+        const uniPattern = `(?<![\\p{L}\\p{N}_])(${escaped.join('|')})(?![\\p{L}\\p{N}_])`;
+        const regex = new RegExp(uniPattern, 'giu');
+        parts = node.split(regex);
+      } catch (_) {
+        const regex = new RegExp(`\\b(${escaped.join('|')})\\b`, 'gi');
+        parts = node.split(regex);
+      }
 
       return parts.map((part, index) => {
         const match: any = matches.find((m: any) => {
@@ -821,6 +830,8 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                 e.preventDefault();
                 try {
                   await papi.commands.sendCommand('paratextProjectManager.openKeyTerms', projectId);
+                  // Small delay to allow the webview to finish opening/focusing before emitting the select event
+                  await new Promise((r) => setTimeout(r, 400));
                   await papi.commands.sendCommand('paratextProjectManager.selectKeyTerm', projectId, match.termId);
                 } catch (err) {
                   console.error('Failed to open/select key term on word click:', err);
@@ -863,6 +874,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
 
     return node;
   }, [keyTermsOverlayEnabled, chapterKeyTermsMatches, selectedChapter, projectId]);
+
 
   // Load key terms matches automatically when overlay is enabled or book/chapter changes
   useEffect(() => {
@@ -2894,6 +2906,8 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                         setActiveVersePopup(null);
                         try {
                           await papi.commands.sendCommand('paratextProjectManager.openKeyTerms', projectId);
+                          // Small delay to allow the webview to finish opening/focusing before emitting the select event
+                          await new Promise((r) => setTimeout(r, 400));
                           await papi.commands.sendCommand('paratextProjectManager.selectKeyTerm', projectId, m.termId);
                         } catch (e) {
                           console.error('Failed to open key terms from popup:', e);
