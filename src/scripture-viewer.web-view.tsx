@@ -758,7 +758,8 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       const uniqueRends = Array.from(new Set(matchRenderings));
       if (uniqueRends.length === 0) return node;
 
-      const escaped = uniqueRends.map((r: string) => r.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
+      const sortedRends = uniqueRends.sort((a, b) => b.length - a.length);
+      const escaped = sortedRends.map((r: string) => r.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
       const regex = new RegExp(`\\b(${escaped.join('|')})\\b`, 'gi');
       const parts = node.split(regex);
 

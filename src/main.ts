@@ -1256,6 +1256,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         } else {
           const pt9ListsDir = 'C:\\Program Files\\Paratext 9\\Terms\\Lists';
           store = await loadLegacyKeyTermsAsync(pt9ListsDir, projectDir, 'es', runFileHelper);
+          await runFileHelper('write', keyTermsPath, JSON.stringify(store, null, 2));
         }
 
         // Fetch target chapter text
@@ -1342,6 +1343,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         } else {
           const pt9ListsDir = 'C:\\Program Files\\Paratext 9\\Terms\\Lists';
           store = await loadLegacyKeyTermsAsync(pt9ListsDir, projectDir, 'es', runFileHelper);
+          await runFileHelper('write', keyTermsPath, JSON.stringify(store, null, 2));
         }
 
         const prefix = `${bookCode} `;

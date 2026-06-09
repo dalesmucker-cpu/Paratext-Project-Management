@@ -28,20 +28,23 @@ export function matchRendering(
     if (endsWithAsterisk) coreText = coreText.slice(0, -1);
     
     const escapedCore = escapeRegex(coreText).replace(/\\\*/g, '.*');
+    
+    // Class of valid word characters (excludes whitespace and standard punctuation, supporting Unicode letters/accents)
+    const wordChars = '[^\\s.,;:!?\\x22\'()[\\]“”‘’«»¿¡]';
     let regexStr = '';
     
     if (startsWithAsterisk && endsWithAsterisk) {
-      // Substring match
-      regexStr = escapedCore;
+      // Substring match: match the entire word containing the core
+      regexStr = `\\b${wordChars}*${escapedCore}${wordChars}*\\b`;
     } else if (startsWithAsterisk) {
-      // Suffix match (matches end of word)
-      regexStr = escapedCore + '\\b';
+      // Suffix match: match the entire word ending with the core
+      regexStr = `\\b${wordChars}*${escapedCore}\\b`;
     } else if (endsWithAsterisk) {
-      // Prefix match (matches start of word)
-      regexStr = '\\b' + escapedCore;
+      // Prefix match: match the entire word starting with the core
+      regexStr = `\\b${escapedCore}${wordChars}*\\b`;
     } else {
       // Internal asterisks only
-      regexStr = '\\b' + escapedCore + '\\b';
+      regexStr = `\\b${escapedCore}\\b`;
     }
     
     const regex = new RegExp(regexStr, 'i');
