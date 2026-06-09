@@ -203,7 +203,8 @@ function startNotesHelper(createProcess: ElevatedPrivileges['createProcess']): v
 
     notesHelperProcess.on('close', (code) => {
       logger.info(`Notes helper exited with code ${code}`);
-      if (notesHelperProcess === currentProcess) {
+      const isCurrent = (notesHelperProcess === currentProcess);
+      if (isCurrent) {
         notesHelperProcess = undefined;
       }
       localCollabRole = 'none';
@@ -213,7 +214,7 @@ function startNotesHelper(createProcess: ElevatedPrivileges['createProcess']): v
       pendingNotesRequests.clear();
 
       // Restart helper at runtime if not deactivating
-      if (!isDeactivating && execToken) {
+      if (isCurrent && !isDeactivating && execToken) {
         helperStartAttempts++;
         logger.info(`Restarting Notes helper (attempt ${helperStartAttempts}/5)...`);
         setTimeout(() => {
@@ -224,11 +225,11 @@ function startNotesHelper(createProcess: ElevatedPrivileges['createProcess']): v
 
     // Verify the child process is responsive
     const verifyResponsive = async () => {
-      await new Promise((resolve) => setTimeout(resolve, 800));
+      await new Promise((resolve) => setTimeout(resolve, 4000));
       if (notesHelperProcess !== currentProcess) return;
 
       try {
-        const res = await sendToNotesHelper('ping', [], 1500);
+        const res = await sendToNotesHelper('ping', [], 8000);
         if (res === 'pong') {
           logger.info('Project Manager: Notes helper is responsive and ready.');
           helperStartAttempts = 0; // Reset count on success
@@ -246,8 +247,6 @@ function startNotesHelper(createProcess: ElevatedPrivileges['createProcess']): v
         try {
           currentProcess.kill();
         } catch (_) {}
-        notesHelperProcess = undefined;
-        startNotesHelper(createProcess);
       }
     };
     verifyResponsive();
