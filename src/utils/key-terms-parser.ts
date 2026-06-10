@@ -8,7 +8,7 @@ export async function loadLegacyKeyTermsAsync(
   pt9ListsDir: string,
   projectDir: string,
   languageCode: 'en' | 'es' = 'es',
-  fileReader: (action: string, path: string, stdin?: string) => Promise<string>
+  fileReader: (action: string, path: string, stdin?: string) => Promise<string>,
 ): Promise<KeyTermsStore> {
   const stdinData = JSON.stringify({ pt9ListsDir, languageCode });
   const resultJson = await fileReader('loadlegacykeyterms', projectDir, stdinData);

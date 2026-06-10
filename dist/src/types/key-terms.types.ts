@@ -52,6 +52,7 @@ export interface MorphologyConfig {
   languageName: string;
   prefixes: AffixRule[];
   suffixes: AffixRule[];
+  infixes?: AffixRule[];
   enableFuzzyMatch: boolean;
   maxEditDistance: number; // default: 2
 }

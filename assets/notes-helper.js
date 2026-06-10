@@ -356,6 +356,7 @@ function parseUsfmChapter(content) {
   const blocks = [];
   let currentBlock = null;
   let activeVerseNum = null;
+  let activeVerseStr = null;
 
   const cleanUsfmText = (text) => {
     return text
@@ -373,7 +374,7 @@ function parseUsfmChapter(content) {
     const cleanedText = text.trim();
     if (!cleanedText) return;
 
-    const verseRegex = /\\v\s+(\d+)(?:\s+([^\\]*?))?(?=\\v\s+\d+|$)/g;
+    const verseRegex = /\\v\s+([^\s\\]+)\s*([\s\S]*?)(?=\\v\s+|$)/g;
     let vMatch;
     let hasVerses = false;
 
@@ -388,7 +389,12 @@ function parseUsfmChapter(content) {
           if (existingVerse) {
             existingVerse.text += ' ' + beforeText;
           } else {
-            children.push({ type: 'verse', number: activeVerseNum, text: beforeText });
+            children.push({
+              type: 'verse',
+              number: activeVerseNum,
+              numberStr: activeVerseStr || String(activeVerseNum),
+              text: beforeText,
+            });
           }
         } else {
           if (children.length > 0 && children[children.length - 1].type === 'text') {
@@ -402,15 +408,25 @@ function parseUsfmChapter(content) {
 
     while ((vMatch = verseRegex.exec(cleanedText)) !== null) {
       hasVerses = true;
-      const verseNum = parseInt(vMatch[1], 10);
+      const verseNumStr = vMatch[1];
+      const verseNum = parseInt(verseNumStr, 10);
       const verseText = cleanUsfmText(vMatch[2] || '');
       activeVerseNum = verseNum;
+      activeVerseStr = verseNumStr;
 
       const existingVerse = children.find((c) => c.type === 'verse' && c.number === verseNum);
       if (existingVerse) {
         existingVerse.text += ' ' + verseText;
+        if (!existingVerse.numberStr) {
+          existingVerse.numberStr = verseNumStr;
+        }
       } else {
-        children.push({ type: 'verse', number: verseNum, text: verseText });
+        children.push({
+          type: 'verse',
+          number: verseNum,
+          numberStr: verseNumStr,
+          text: verseText,
+        });
       }
     }
 
@@ -424,7 +440,12 @@ function parseUsfmChapter(content) {
           if (existingVerse) {
             existingVerse.text += ' ' + clean;
           } else {
-            children.push({ type: 'verse', number: activeVerseNum, text: clean });
+            children.push({
+              type: 'verse',
+              number: activeVerseNum,
+              numberStr: activeVerseStr || String(activeVerseNum),
+              text: clean,
+            });
           }
         } else {
           if (children.length > 0 && children[children.length - 1].type === 'text') {
@@ -446,6 +467,7 @@ function parseUsfmChapter(content) {
       blocks.push({ type: 'heading', text });
       currentBlock = null;
       activeVerseNum = null;
+      activeVerseStr = null;
     } else if (line.startsWith('\\p') || line.startsWith('\\m')) {
       currentBlock = { type: 'paragraph', children: [] };
       blocks.push(currentBlock);
@@ -666,6 +688,266 @@ async function handleAction(action, args) {
   switch (action) {
     case 'ping': {
       return 'pong';
+    }
+
+    case 'fileIO': {
+      const [ioAction, targetPath, stdinData] = args;
+      if (ioAction === 'read' || ioAction === 'readfile') {
+        return await fs.promises.readFile(targetPath, 'utf8');
+      } else if (ioAction === 'write') {
+        await fs.promises.writeFile(targetPath, stdinData || '', 'utf8');
+        return 'ok';
+      } else if (ioAction === 'readdir') {
+        const entries = await fs.promises.readdir(targetPath);
+        return entries;
+      } else if (ioAction === 'exists') {
+        try {
+          await fs.promises.access(targetPath, fs.constants.F_OK);
+          return 'true';
+        } catch (_) {
+          return 'false';
+        }
+      } else if (ioAction === 'readxml') {
+        const xml = await fs.promises.readFile(targetPath, 'utf8');
+        const guidMatch = /<Guid>([^<]+)<\/Guid>/i.exec(xml);
+        const nameMatch = /<Name>([^<]+)<\/Name>/i.exec(xml);
+        const fileNamePostPartMatch = /<FileNamePostPart>([^<]+)<\/FileNamePostPart>/i.exec(xml);
+        return {
+          guid: guidMatch ? guidMatch[1].trim() : '',
+          name: nameMatch ? nameMatch[1].trim() : '',
+          fileNamePostPart: fileNamePostPartMatch ? fileNamePostPartMatch[1].trim() : '',
+        };
+      } else if (ioAction === 'scanprojects') {
+        const dirs = await fs.promises.readdir(targetPath);
+        const results = [];
+        for (const dir of dirs) {
+          const settingsPath = path.join(targetPath, dir, 'Settings.xml');
+          try {
+            await fs.promises.access(settingsPath, fs.constants.F_OK);
+            const xml = await fs.promises.readFile(settingsPath, 'utf8');
+            const guidMatch = /<Guid>([^<]+)<\/Guid>/i.exec(xml);
+            const nameMatch = /<Name>([^<]+)<\/Name>/i.exec(xml);
+            const fileNamePostPartMatch = /<FileNamePostPart>([^<]+)<\/FileNamePostPart>/i.exec(xml);
+            results.push({
+              dir: path.join(targetPath, dir),
+              guid: guidMatch ? guidMatch[1].trim() : '',
+              name: nameMatch ? nameMatch[1].trim() : '',
+              fileNamePostPart: fileNamePostPartMatch ? fileNamePostPartMatch[1].trim() : '',
+            });
+          } catch (_) {
+            // skip
+          }
+        }
+        return results;
+      } else if (ioAction === 'open') {
+        const { exec } = require('child_process');
+        return new Promise((resolve, reject) => {
+          const escaped = targetPath.replace(/"/g, '\\"');
+          exec(`start "" "${escaped}"`, (err) => {
+            if (err) reject(err);
+            else resolve('ok');
+          });
+        });
+      } else if (ioAction === 'mkdir') {
+        await fs.promises.mkdir(targetPath, { recursive: true });
+        return 'ok';
+      } else if (ioAction === 'loadlegacykeyterms') {
+        const params = typeof stdinData === 'string' ? JSON.parse(stdinData) : stdinData;
+        const pt9ListsDir = params.pt9ListsDir;
+        const projectDir = targetPath;
+        const languageCode = params.languageCode || 'es';
+
+        const BIBLE_BOOKS = [
+          'GEN', 'EXO', 'LEV', 'NUM', 'DEU', 'JOS', 'JDG', 'RUT', '1SA', '2SA', '1KI', '2KI',
+          '1CH', '2CH', 'EZR', 'NEH', 'EST', 'JOB', 'PSA', 'PRO', 'ECC', 'SNG', 'ISA', 'JER',
+          'LAM', 'EZK', 'DAN', 'HOS', 'JOL', 'AMO', 'OBD', 'JON', 'MIC', 'NAM', 'HAB', 'ZEP',
+          'HAG', 'ZEC', 'MAL', 'MAT', 'MRK', 'LUK', 'JHN', 'ACT', 'ROM', '1CO', '2CO', 'GAL',
+          'EPH', 'PHP', 'COL', '1TH', '2TH', '1TI', '2TI', 'TIT', 'PHM', 'HEB', 'JAS', '1PE',
+          '2PE', '1JN', '2JN', '3JN', 'JUD', 'REV'
+        ];
+
+        const convertVerseRef = (verseRef14) => {
+          if (verseRef14.length < 9) return verseRef14;
+          const bookNum = parseInt(verseRef14.substring(0, 3), 10);
+          const chapterNum = parseInt(verseRef14.substring(3, 6), 10);
+          const verseNum = parseInt(verseRef14.substring(6, 9), 10);
+          const bookCode = BIBLE_BOOKS[bookNum - 1];
+          if (!bookCode) return `${bookNum} ${chapterNum}:${verseNum}`;
+          return `${bookCode} ${chapterNum}:${verseNum}`;
+        };
+
+        const parseBiblicalTermsXml = (xmlContent) => {
+          const termsMap = new Map();
+          const termRegex = /<Term\s+Id="([^"]+)">([\s\S]*?)<\/Term>/g;
+          let match;
+          while ((match = termRegex.exec(xmlContent)) !== null) {
+            const id = match[1];
+            const body = match[2];
+            const strongMatch = /<Strong>([^<]*)<\/Strong>/i.exec(body);
+            const translitMatch = /<Transliteration>([^<]*)<\/Transliteration>/i.exec(body);
+            const catMatch = /<Category>([^<]*)<\/Category>/i.exec(body);
+            const domMatch = /<Domain>([^<]*)<\/Domain>/i.exec(body);
+            const glossMatch = /<Gloss>([^<]*)<\/Gloss>/i.exec(body);
+            const defMatch = /<Definition>([^<]*)<\/Definition>/i.exec(body);
+            const refs = [];
+            const refRegex = /<Verse>([^<]+)<\/Verse>/g;
+            let refMatch;
+            while ((refMatch = refRegex.exec(body)) !== null) {
+              refs.push(refMatch[1]);
+            }
+            termsMap.set(id, {
+              strongs: strongMatch ? strongMatch[1].trim() : undefined,
+              transliteration: translitMatch ? translitMatch[1].trim() : undefined,
+              category: catMatch ? catMatch[1].trim() : undefined,
+              domain: domMatch ? domMatch[1].trim() : undefined,
+              gloss: glossMatch ? glossMatch[1].trim() : '',
+              definition: defMatch ? defMatch[1].trim() : undefined,
+              references: refs,
+            });
+          }
+          return termsMap;
+        };
+
+        const parseLocalizationsXml = (xmlContent) => {
+          const locMap = new Map();
+          const locRegex = /<Localization\s+Id="([^"]+)"\s+Gloss="([^"]*)"[^>]*>([\s\S]*?)<\/Localization>/g;
+          let match;
+          while ((match = locRegex.exec(xmlContent)) !== null) {
+            const id = match[1];
+            const gloss = match[2];
+            const definition = match[3].trim();
+            locMap.set(id, { gloss, definition });
+          }
+          return locMap;
+        };
+
+        const parseTermRenderingsXml = (xmlContent) => {
+          const renderingsMap = new Map();
+          const trRegex = /<TermRendering\s+Id="([^"]+)"[^>]*>([\s\S]*?)<\/TermRendering>/g;
+          let match;
+          while ((match = trRegex.exec(xmlContent)) !== null) {
+            const id = match[1];
+            const body = match[2];
+            const rMatch = /<Renderings>([^<]*)<\/Renderings>/i.exec(body);
+            if (rMatch) {
+              const rendsStr = rMatch[1].trim();
+              if (rendsStr) {
+                const list = rendsStr
+                  .split('||')
+                  .map((r) => r.trim())
+                  .filter(Boolean);
+                renderingsMap.set(id, list);
+              }
+            }
+          }
+          return renderingsMap;
+        };
+
+        let mainXmlPath = path.join(pt9ListsDir, 'BiblicalTerms.xml');
+        const fallbackProjectXml = path.join(projectDir, 'ProjectBiblicalTerms.xml');
+        try {
+          const settingsPath = path.join(projectDir, 'Settings.xml');
+          const settingsExists = await fs.promises.access(settingsPath, fs.constants.F_OK).then(() => true).catch(() => false);
+          if (settingsExists) {
+            const settingsXml = await fs.promises.readFile(settingsPath, 'utf8');
+            const settingMatch = /<BiblicalTermsListSetting>([^<]+)<\/BiblicalTermsListSetting>/i.exec(settingsXml);
+            if (settingMatch) {
+              const settingVal = settingMatch[1].trim();
+              const parts = settingVal.split(':');
+              if (parts.length >= 3) {
+                const type = parts[0].toLowerCase();
+                const filename = parts[2];
+                if (type === 'project') {
+                  const projectXmlPath = path.join(projectDir, filename);
+                  const projectXmlExists = await fs.promises.access(projectXmlPath, fs.constants.F_OK).then(() => true).catch(() => false);
+                  if (projectXmlExists) {
+                    mainXmlPath = projectXmlPath;
+                  }
+                } else {
+                  const globalXmlPath = path.join(pt9ListsDir, filename);
+                  const globalXmlExists = await fs.promises.access(globalXmlPath, fs.constants.F_OK).then(() => true).catch(() => false);
+                  if (globalXmlExists) {
+                    mainXmlPath = globalXmlPath;
+                  }
+                }
+              }
+            }
+          }
+        } catch (_) {}
+
+        const mainExists = await fs.promises.access(mainXmlPath, fs.constants.F_OK).then(() => true).catch(() => false);
+        const fallbackExists = await fs.promises.access(fallbackProjectXml, fs.constants.F_OK).then(() => true).catch(() => false);
+        if (!mainExists || mainXmlPath === path.join(pt9ListsDir, 'BiblicalTerms.xml')) {
+          if (fallbackExists) {
+            mainXmlPath = fallbackProjectXml;
+          }
+        }
+
+        const locXmlPath = path.join(pt9ListsDir, languageCode === 'es' ? 'BiblicalTermsEs.xml' : 'BiblicalTermsEn.xml');
+        const renderingsXmlPath = path.join(projectDir, 'TermRenderings.xml');
+
+        let termsMap = new Map();
+        let locMap = new Map();
+        let renderingsMap = new Map();
+
+        const mainExistsFinal = await fs.promises.access(mainXmlPath, fs.constants.F_OK).then(() => true).catch(() => false);
+        if (mainExistsFinal) {
+          termsMap = parseBiblicalTermsXml(await fs.promises.readFile(mainXmlPath, 'utf8'));
+        }
+        const locExists = await fs.promises.access(locXmlPath, fs.constants.F_OK).then(() => true).catch(() => false);
+        if (locExists) {
+          locMap = parseLocalizationsXml(await fs.promises.readFile(locXmlPath, 'utf8'));
+        }
+        const renderingsExists = await fs.promises.access(renderingsXmlPath, fs.constants.F_OK).then(() => true).catch(() => false);
+        if (renderingsExists) {
+          renderingsMap = parseTermRenderingsXml(await fs.promises.readFile(renderingsXmlPath, 'utf8'));
+        }
+
+        const terms = [];
+        termsMap.forEach((termData, id) => {
+          const loc = locMap.get(id);
+          const gloss = loc ? loc.gloss : termData.gloss;
+          const projectRenderings = renderingsMap.get(id) || [];
+          const renderings = projectRenderings.map((text, idx) => ({
+            id: `r-${idx}-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+            text,
+            status: 'approved',
+            contextTags: [],
+            votes: [],
+            proposedBy: 'Legacy Import',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          }));
+          const cleanRefs = (termData.references || []).map(convertVerseRef);
+          terms.push({
+            id,
+            lemma: id.replace(/-\d+$/, ''),
+            strongs: termData.strongs,
+            transliteration: termData.transliteration,
+            gloss,
+            domains: termData.domain ? termData.domain.split(';').map((d) => d.trim()).filter(Boolean) : [],
+            references: cleanRefs,
+            renderings,
+            notes: [],
+            updatedAt: new Date().toISOString(),
+          });
+        });
+
+        const store = {
+          schemaVersion: 1,
+          morphologyConfig: {
+            languageName: languageCode === 'es' ? 'Español' : 'English',
+            prefixes: [],
+            suffixes: [],
+            enableFuzzyMatch: true,
+            maxEditDistance: 2,
+          },
+          terms,
+        };
+        return store;
+      } else {
+        throw new Error(`Unknown fileIO action: ${ioAction}`);
+      }
     }
 
     case 'registerProjectDir': {

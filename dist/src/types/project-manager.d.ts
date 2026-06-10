@@ -159,7 +159,10 @@ declare module 'papi-shared-types' {
     /** Gets all key terms data for a project */
     'paratextProjectManager.getKeyTermsData': (projectId: string) => Promise<string>;
     /** Saves key terms data for a project */
-    'paratextProjectManager.saveKeyTermsData': (projectId: string, dataJson: string) => Promise<string>;
+    'paratextProjectManager.saveKeyTermsData': (
+      projectId: string,
+      dataJson: string,
+    ) => Promise<string>;
     /** Scans a chapter's USFM for key terms and renderings match status */
     'paratextProjectManager.scanChapterRenderings': (
       projectId: string,
@@ -172,7 +175,78 @@ declare module 'papi-shared-types' {
       bookCode: string,
     ) => Promise<string>;
     /** Opens the Key Terms Analytics dashboard web view for a project */
-    'paratextProjectManager.openKeyTermsAnalytics': (projectId?: string) => Promise<string | undefined>;
+    'paratextProjectManager.openKeyTermsAnalytics': (
+      projectId?: string,
+    ) => Promise<string | undefined>;
+    /** Gets team members list */
+    'paratextProjectManager.getTeamMembers': () => Promise<string>;
+    /** Sets team members list */
+    'paratextProjectManager.setTeamMembers': (membersJson: string) => Promise<string>;
+    /** Gets projects pending tasks-drive sync */
+    'paratextProjectManager.tasksDriveGetPendingSync': () => Promise<string>;
+    /** Emits key term selection event */
+    'paratextProjectManager.selectKeyTerm': (projectId: string, termId: string) => Promise<string>;
+    /** Broadcasts live verse editing cursor / typing events */
+    'paratextProjectManager.broadcastVerseEdit': (
+      username: string,
+      projectId: string,
+      book: string,
+      chapter: number,
+      verse: number,
+      newText: string,
+    ) => Promise<string>;
+    /** Gets Google Calendar connection status */
+    'paratextProjectManager.gcalGetStatus': () => Promise<string>;
+    /** Connects Google Calendar using Client ID and Secret */
+    'paratextProjectManager.gcalConnect': (clientId: string, clientSecret: string) => Promise<string>;
+    /** Reconnects Google Calendar using existing config credentials */
+    'paratextProjectManager.gcalReconnect': () => Promise<string>;
+    /** Polls Google Calendar OAuth flow status */
+    'paratextProjectManager.gcalPollAuth': () => string;
+    /** Disconnects Google Calendar connection */
+    'paratextProjectManager.gcalDisconnect': () => Promise<string>;
+    /** Lists calendars from Google Calendar account */
+    'paratextProjectManager.gcalListCalendars': () => Promise<string>;
+    /** Sets active calendar ID in Google Calendar config */
+    'paratextProjectManager.gcalSetCalendarId': (calendarId: string) => Promise<string>;
+    /** Syncs task deadlines to Google Calendar */
+    'paratextProjectManager.gcalSyncDeadlines': (projectId: string) => Promise<string>;
+    /** Gets Google Calendar events for a range */
+    'paratextProjectManager.gcalGetEvents': (
+      calendarId: string,
+      timeMin: string,
+      timeMax: string,
+    ) => Promise<string>;
+    /** Deletes an event from Google Calendar */
+    'paratextProjectManager.gcalDeleteEvent': (calendarId: string, eventId: string) => Promise<string>;
+    /** Syncs a single time log entry to Google Calendar */
+    'paratextProjectManager.gcalSyncTimeEntry': (
+      timeEntryJson: string,
+      taskLabel: string,
+      calendarId: string,
+    ) => Promise<string>;
+    /** Flushes pending time entries to Google Calendar */
+    'paratextProjectManager.gcalFlushPendingTime': () => Promise<string>;
+    /** Saves content to Downloads and tries to open it */
+    'paratextProjectManager.saveToDownloads': (filename: string, content: string) => Promise<string>;
+    /** Starts the Drive OAuth flow in the background */
+    'paratextProjectManager.tasksDriveStartAuth': (clientId: string, clientSecret: string) => Promise<string>;
+    /** Polls the Drive OAuth flow status */
+    'paratextProjectManager.tasksDrivePollAuth': () => Promise<string>;
+    /** Gets Drive sync status */
+    'paratextProjectManager.tasksDriveGetStatus': () => Promise<string>;
+    /** Exports the Drive sync config JSON string */
+    'paratextProjectManager.tasksDriveExportConfig': () => Promise<string>;
+    /** Imports the Drive sync config JSON string */
+    'paratextProjectManager.tasksDriveImportConfig': (configJson: string) => Promise<string>;
+    /** Force-syncs a project's local tasks file to Drive */
+    'paratextProjectManager.tasksDriveForceSyncProject': (projectId: string) => Promise<string>;
+    /** Tests the Drive connection with a small payload */
+    'paratextProjectManager.tasksDriveTest': () => Promise<string>;
   }
 }
 
+declare module '*?inline' {
+  const content: string;
+  export default content;
+}

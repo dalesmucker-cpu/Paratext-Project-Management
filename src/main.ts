@@ -27,7 +27,11 @@ import keyTermsAnalyticsWebView from './key-terms-analytics.web-view?inline';
 import keyTermsAnalyticsStyles from './key-terms-analytics.web-view.scss?inline';
 
 import type { PendingTimeSyncEntry } from './types/task.types';
-import type { KeyTermsStore, KeyTerm, Rendering, VerseMatchStatus, ChapterScanResult } from './types/key-terms.types';
+import type {
+  KeyTermsStore,
+  VerseMatchStatus,
+  MatchResult,
+} from './types/key-terms.types';
 import { loadLegacyKeyTermsAsync } from './utils/key-terms-parser';
 import { matchRendering } from './utils/key-terms-matcher';
 
@@ -40,7 +44,6 @@ const KEY_TERMS_TYPE = 'paratextProjectManager.keyTerms';
 const KEY_TERMS_ANALYTICS_TYPE = 'paratextProjectManager.keyTermsAnalytics';
 const TASKS_FILENAME = 'project-tasks.json';
 const KEY_TERMS_FILENAME = 'key-terms-data.json';
-
 
 // Resolve the current user's home directory from the environment.
 // USERPROFILE is set on Windows (e.g. "C:\Users\Dale").
@@ -77,6 +80,7 @@ interface GcalConfig {
   calendarId: string;
   lastSync: string;
   pendingTimeSync?: PendingTimeSyncEntry[];
+  connected?: boolean;
 }
 
 interface TasksDriveConfig {
@@ -155,6 +159,7 @@ function sendToNotesHelper(action: string, args: any[], timeoutMs = 15000): Prom
 let helperStartAttempts = 0;
 
 function startNotesHelper(createProcess: ElevatedPrivileges['createProcess']): void {
+  if (!createProcess) return;
   if (notesHelperProcess) return;
   if (helperStartAttempts > 5) {
     logger.error('Project Manager: Failed to start Notes helper after 5 attempts.');
@@ -203,7 +208,7 @@ function startNotesHelper(createProcess: ElevatedPrivileges['createProcess']): v
 
     notesHelperProcess.on('close', (code) => {
       logger.info(`Notes helper exited with code ${code}`);
-      const isCurrent = (notesHelperProcess === currentProcess);
+      const isCurrent = notesHelperProcess === currentProcess;
       if (isCurrent) {
         notesHelperProcess = undefined;
       }
@@ -328,6 +333,13 @@ function runScript(
 
     let stdout = '';
     let stderr = '';
+    let settled = false;
+
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      callback();
+    };
 
     let timeoutId: NodeJS.Timeout | undefined;
     if (timeoutMs) {
@@ -337,7 +349,7 @@ function runScript(
         } catch (_) {
           /* ignore */
         }
-        reject(new Error(`Script timed out after ${Math.round(timeoutMs / 1000)}s`));
+        finish(() => reject(new Error(`Script timed out after ${Math.round(timeoutMs / 1000)}s`)));
       }, timeoutMs);
     }
 
@@ -354,20 +366,23 @@ function runScript(
 
     child.on('close', (code: number | undefined) => {
       if (timeoutId) clearTimeout(timeoutId);
-      if (code && code !== 0) {
-        reject(new Error(`${scriptPath} failed: ${stderr}`));
-      } else {
-        resolve(stdout);
-      }
+      finish(() => {
+        if (code && code !== 0) {
+          reject(new Error(`${scriptPath} failed: ${stderr}`));
+        } else {
+          resolve(stdout);
+        }
+      });
     });
     child.on('error', (err: Error) => {
       if (timeoutId) clearTimeout(timeoutId);
-      reject(err);
+      finish(() => reject(err));
     });
 
     if (stdinData !== undefined && child.stdin) {
-      child.stdin.write(stdinData, 'utf8', () => {
-        child.stdin.end();
+      const stdin = child.stdin;
+      stdin.write(stdinData, 'utf8', () => {
+        stdin.end();
       });
     }
   });
@@ -375,8 +390,24 @@ function runScript(
 
 // --- File I/O via file-helper.js child process ---
 
-function runFileHelper(action: string, targetPath: string, stdinData?: string): Promise<string> {
-  return runScript('assets/file-helper.js', [action, targetPath], stdinData);
+async function runFileHelper(
+  action: string,
+  targetPath: string,
+  stdinData?: string,
+  timeoutMs = 30_000,
+): Promise<string> {
+  if (notesHelperProcess) {
+    try {
+      const res = await sendToNotesHelper('fileIO', [action, targetPath, stdinData], timeoutMs);
+      if (res !== undefined && res !== null && typeof res === 'object') {
+        return JSON.stringify(res);
+      }
+      return String(res !== undefined && res !== null ? res : '');
+    } catch (err) {
+      logger.warn(`runFileHelper IPC failed for action ${action}: ${err}. Falling back to runScript.`);
+    }
+  }
+  return runScript('assets/file-helper.js', [action, targetPath], stdinData, timeoutMs);
 }
 
 // --- Google Calendar helper via gcal-helper.js ---
@@ -643,8 +674,12 @@ async function getValidAccessToken(): Promise<string> {
 
 /** Cache of projectId -> { projectDir } */
 const projectCache: Record<string, { projectDir: string }> = {};
+const getTasksDriveSyncInProgress = new Set<string>();
 
 async function resolveProjectDir(projectId: string): Promise<string> {
+  if (!projectId || typeof projectId !== 'string' || !projectId.trim()) {
+    throw new Error('resolveProjectDir: Invalid or empty projectId');
+  }
   if (projectCache[projectId]) return projectCache[projectId].projectDir;
 
   // Build ordered list of candidate paths to search.
@@ -653,7 +688,7 @@ async function resolveProjectDir(projectId: string): Promise<string> {
   const candidates: string[] = [];
 
   try {
-    const settingVal = await papi.settings.get('paratextProjectManager.projectsBasePath');
+    const settingVal = await papi.settings.get('paratextProjectManager.projectsBasePath' as any);
     if (settingVal && typeof settingVal === 'string' && settingVal.trim()) {
       candidates.push(settingVal.trim());
     }
@@ -736,19 +771,34 @@ async function resolveProjectDir(projectId: string): Promise<string> {
 // --- WebView Providers ---
 
 /**
- * OpenWebViewOptions does NOT include projectId (confirmed in papi.d.ts lines 612-640). We use this
- * registry to pass the selected projectId from open commands into getWebView, which CAN set
- * projectId on the returned WebViewDefinition.
+ * OpenWebViewOptions does NOT include projectId (confirmed in papi.d.ts lines 612-640). Use the
+ * requested webview id as the handoff key so concurrent opens of the same tab type cannot overwrite
+ * each other's project id.
  */
-const pendingProjectId: Record<string, string | undefined> = {};
+const pendingProjectIdByWebViewId: Record<string, string | undefined> = {};
+
+function setPendingProjectId(webViewId: string, projectId: string): void {
+  pendingProjectIdByWebViewId[webViewId] = projectId;
+}
+
+function takePendingProjectId(savedWebView: SavedWebViewDefinition): string | undefined {
+  const pendingProjectId = pendingProjectIdByWebViewId[savedWebView.id];
+  pendingProjectIdByWebViewId[savedWebView.id] = undefined;
+  return pendingProjectId;
+}
 
 const taskBoardProvider: IWebViewProvider = {
-  async getWebView(savedWebView: SavedWebViewDefinition): Promise<WebViewDefinition | undefined> {
+  async getWebView(
+    savedWebView: SavedWebViewDefinition,
+    openWebViewOptions?: any,
+  ): Promise<WebViewDefinition | undefined> {
     if (savedWebView.webViewType !== TASK_BOARD_TYPE)
       throw new Error(`Wrong webview type: ${savedWebView.webViewType}`);
-    // savedWebView.projectId is set on re-open (persisted); pendingProjectId is set on first open
-    const projectId = savedWebView.projectId ?? pendingProjectId[TASK_BOARD_TYPE];
-    pendingProjectId[TASK_BOARD_TYPE] = undefined;
+    // savedWebView.projectId is set on re-open (persisted); pending id is set on first open
+    const projectId =
+      savedWebView.projectId ??
+      openWebViewOptions?.projectId ??
+      takePendingProjectId(savedWebView);
     return {
       ...savedWebView,
       projectId,
@@ -760,11 +810,16 @@ const taskBoardProvider: IWebViewProvider = {
 };
 
 const myTasksProvider: IWebViewProvider = {
-  async getWebView(savedWebView: SavedWebViewDefinition): Promise<WebViewDefinition | undefined> {
+  async getWebView(
+    savedWebView: SavedWebViewDefinition,
+    openWebViewOptions?: any,
+  ): Promise<WebViewDefinition | undefined> {
     if (savedWebView.webViewType !== MY_TASKS_TYPE)
       throw new Error(`Wrong webview type: ${savedWebView.webViewType}`);
-    const projectId = savedWebView.projectId ?? pendingProjectId[MY_TASKS_TYPE];
-    pendingProjectId[MY_TASKS_TYPE] = undefined;
+    const projectId =
+      savedWebView.projectId ??
+      openWebViewOptions?.projectId ??
+      takePendingProjectId(savedWebView);
     return {
       ...savedWebView,
       projectId,
@@ -776,11 +831,16 @@ const myTasksProvider: IWebViewProvider = {
 };
 
 const projectOverviewProvider: IWebViewProvider = {
-  async getWebView(savedWebView: SavedWebViewDefinition): Promise<WebViewDefinition | undefined> {
+  async getWebView(
+    savedWebView: SavedWebViewDefinition,
+    openWebViewOptions?: any,
+  ): Promise<WebViewDefinition | undefined> {
     if (savedWebView.webViewType !== PROJECT_OVERVIEW_TYPE)
       throw new Error(`Wrong webview type: ${savedWebView.webViewType}`);
-    const projectId = savedWebView.projectId ?? pendingProjectId[PROJECT_OVERVIEW_TYPE];
-    pendingProjectId[PROJECT_OVERVIEW_TYPE] = undefined;
+    const projectId =
+      savedWebView.projectId ??
+      openWebViewOptions?.projectId ??
+      takePendingProjectId(savedWebView);
     return {
       ...savedWebView,
       projectId,
@@ -792,11 +852,16 @@ const projectOverviewProvider: IWebViewProvider = {
 };
 
 const notesViewerProvider: IWebViewProvider = {
-  async getWebView(savedWebView: SavedWebViewDefinition): Promise<WebViewDefinition | undefined> {
+  async getWebView(
+    savedWebView: SavedWebViewDefinition,
+    openWebViewOptions?: any,
+  ): Promise<WebViewDefinition | undefined> {
     if (savedWebView.webViewType !== NOTES_VIEWER_TYPE)
       throw new Error(`Wrong webview type: ${savedWebView.webViewType}`);
-    const projectId = savedWebView.projectId ?? pendingProjectId[NOTES_VIEWER_TYPE];
-    pendingProjectId[NOTES_VIEWER_TYPE] = undefined;
+    const projectId =
+      savedWebView.projectId ??
+      openWebViewOptions?.projectId ??
+      takePendingProjectId(savedWebView);
     return {
       ...savedWebView,
       projectId,
@@ -808,11 +873,16 @@ const notesViewerProvider: IWebViewProvider = {
 };
 
 const scriptureViewerProvider: IWebViewProvider = {
-  async getWebView(savedWebView: SavedWebViewDefinition): Promise<WebViewDefinition | undefined> {
+  async getWebView(
+    savedWebView: SavedWebViewDefinition,
+    openWebViewOptions?: any,
+  ): Promise<WebViewDefinition | undefined> {
     if (savedWebView.webViewType !== SCRIPTURE_VIEWER_TYPE)
       throw new Error(`Wrong webview type: ${savedWebView.webViewType}`);
-    const projectId = savedWebView.projectId ?? pendingProjectId[SCRIPTURE_VIEWER_TYPE];
-    pendingProjectId[SCRIPTURE_VIEWER_TYPE] = undefined;
+    const projectId =
+      savedWebView.projectId ??
+      openWebViewOptions?.projectId ??
+      takePendingProjectId(savedWebView);
     return {
       ...savedWebView,
       projectId,
@@ -824,11 +894,16 @@ const scriptureViewerProvider: IWebViewProvider = {
 };
 
 const keyTermsProvider: IWebViewProvider = {
-  async getWebView(savedWebView: SavedWebViewDefinition): Promise<WebViewDefinition | undefined> {
+  async getWebView(
+    savedWebView: SavedWebViewDefinition,
+    openWebViewOptions?: any,
+  ): Promise<WebViewDefinition | undefined> {
     if (savedWebView.webViewType !== KEY_TERMS_TYPE)
       throw new Error(`Wrong webview type: ${savedWebView.webViewType}`);
-    const projectId = savedWebView.projectId ?? pendingProjectId[KEY_TERMS_TYPE];
-    pendingProjectId[KEY_TERMS_TYPE] = undefined;
+    const projectId =
+      savedWebView.projectId ??
+      openWebViewOptions?.projectId ??
+      takePendingProjectId(savedWebView);
     return {
       ...savedWebView,
       projectId,
@@ -840,11 +915,16 @@ const keyTermsProvider: IWebViewProvider = {
 };
 
 const keyTermsAnalyticsProvider: IWebViewProvider = {
-  async getWebView(savedWebView: SavedWebViewDefinition): Promise<WebViewDefinition | undefined> {
+  async getWebView(
+    savedWebView: SavedWebViewDefinition,
+    openWebViewOptions?: any,
+  ): Promise<WebViewDefinition | undefined> {
     if (savedWebView.webViewType !== KEY_TERMS_ANALYTICS_TYPE)
       throw new Error(`Wrong webview type: ${savedWebView.webViewType}`);
-    const projectId = savedWebView.projectId ?? pendingProjectId[KEY_TERMS_ANALYTICS_TYPE];
-    pendingProjectId[KEY_TERMS_ANALYTICS_TYPE] = undefined;
+    const projectId =
+      savedWebView.projectId ??
+      openWebViewOptions?.projectId ??
+      takePendingProjectId(savedWebView);
     return {
       ...savedWebView,
       projectId,
@@ -854,7 +934,6 @@ const keyTermsAnalyticsProvider: IWebViewProvider = {
     };
   },
 };
-
 
 // --- Extension Lifecycle ---
 
@@ -873,7 +952,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
   startNotesHelper(createProcess);
 
   context.registrations.add({
-    dispose: () => {
+    dispose: async () => {
       if (notesHelperProcess) {
         try {
           notesHelperProcess.kill();
@@ -882,6 +961,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         }
         notesHelperProcess = undefined;
       }
+      return true;
     },
   });
 
@@ -915,7 +995,6 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     keyTermsAnalyticsProvider,
   );
 
-
   // --- Open commands ---
 
   const openTaskBoardPromise = papi.commands.registerCommand(
@@ -930,10 +1009,12 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         });
       }
       if (!pid) return undefined;
-      pendingProjectId[TASK_BOARD_TYPE] = pid;
+      const webViewId = `task-board-${pid}`;
+      setPendingProjectId(webViewId, pid);
       return papi.webViews.openWebView(TASK_BOARD_TYPE, undefined, {
-        existingId: `task-board-${pid}`,
-      });
+        existingId: webViewId,
+        projectId: pid,
+      } as any);
     },
   );
 
@@ -949,8 +1030,12 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         });
       }
       if (!pid) return undefined;
-      pendingProjectId[MY_TASKS_TYPE] = pid;
-      return papi.webViews.openWebView(MY_TASKS_TYPE, undefined, { existingId: `my-tasks-${pid}` });
+      const webViewId = `my-tasks-${pid}`;
+      setPendingProjectId(webViewId, pid);
+      return papi.webViews.openWebView(MY_TASKS_TYPE, undefined, {
+        existingId: webViewId,
+        projectId: pid,
+      } as any);
     },
   );
 
@@ -966,10 +1051,12 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         });
       }
       if (!pid) return undefined;
-      pendingProjectId[PROJECT_OVERVIEW_TYPE] = pid;
+      const webViewId = `project-overview-${pid}`;
+      setPendingProjectId(webViewId, pid);
       return papi.webViews.openWebView(PROJECT_OVERVIEW_TYPE, undefined, {
-        existingId: `project-overview-${pid}`,
-      });
+        existingId: webViewId,
+        projectId: pid,
+      } as any);
     },
   );
 
@@ -985,10 +1072,12 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         });
       }
       if (!pid) return undefined;
-      pendingProjectId[KEY_TERMS_TYPE] = pid;
+      const webViewId = `key-terms-${pid}`;
+      setPendingProjectId(webViewId, pid);
       return papi.webViews.openWebView(KEY_TERMS_TYPE, undefined, {
-        existingId: 'key-terms-singleton',
-      });
+        existingId: webViewId,
+        projectId: pid,
+      } as any);
     },
   );
 
@@ -1004,15 +1093,16 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         });
       }
       if (!pid) return undefined;
-      pendingProjectId[KEY_TERMS_ANALYTICS_TYPE] = pid;
+      const webViewId = `key-terms-analytics-${pid}`;
+      setPendingProjectId(webViewId, pid);
       return papi.webViews.openWebView(KEY_TERMS_ANALYTICS_TYPE, undefined, {
-        existingId: 'key-terms-analytics-singleton',
-      });
+        existingId: webViewId,
+        projectId: pid,
+      } as any);
     },
   );
 
   // --- Data commands ---
-
 
   const getTasksPromise = papi.commands.registerCommand(
     'paratextProjectManager.getTasks',
@@ -1036,66 +1126,71 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
       }
 
       // --- Trigger background Drive sync to prevent blocking the UI ---
-      (async () => {
-        try {
-          const token = await getValidDriveToken();
-          if (token) {
-            const driveConfig = await readTasksDriveConfig();
-            let fileId = driveConfig.fileIds[projectId];
+      if (!getTasksDriveSyncInProgress.has(projectId)) {
+        getTasksDriveSyncInProgress.add(projectId);
+        (async () => {
+          try {
+            const token = await getValidDriveToken();
+            if (token) {
+              const driveConfig = await readTasksDriveConfig();
+              let fileId = driveConfig.fileIds[projectId];
 
-            if (!fileId) {
-              const safeName = projectId.replace(/[^a-zA-Z0-9-]/g, '_');
-              const fileName = `paratext-tasks-${safeName}.json`;
-              try {
-                const searchResult = JSON.parse(
-                  await runGcalHelper('drive-search', [token, fileName], undefined, 10_000),
-                ) as { fileId: string | null };
-                if (searchResult.fileId) {
-                  fileId = searchResult.fileId;
-                  const updatedIds = { ...driveConfig.fileIds, [projectId]: fileId };
-                  await writeTasksDriveConfig({ fileIds: updatedIds });
-                }
-              } catch (searchErr) {
-                logger.warn(`Drive file search failed for "${projectId}": ${searchErr}`);
-              }
-            }
-
-            if (fileId) {
-              const driveContent = await runGcalHelper(
-                'drive-read',
-                [token, fileId],
-                undefined,
-                15_000,
-              );
-              JSON.parse(driveContent); // validate
-              if (localContent) {
-                const merged = mergeTaskStores(localContent, driveContent);
-                if (merged !== localContent && tasksPath) {
-                  await runFileHelper('write', tasksPath, merged);
-                  logger.info(
-                    `Project Manager: getTasks background merged local+Drive for "${projectId}"`,
-                  );
-                  if (collabEventEmitter) {
-                    collabEventEmitter.emit({ type: 'tasks_update', payload: { projectId } });
+              if (!fileId) {
+                const safeName = projectId.replace(/[^a-zA-Z0-9-]/g, '_');
+                const fileName = `paratext-tasks-${safeName}.json`;
+                try {
+                  const searchResult = JSON.parse(
+                    await runGcalHelper('drive-search', [token, fileName], undefined, 10_000),
+                  ) as { fileId: string | null };
+                  if (searchResult.fileId) {
+                    fileId = searchResult.fileId;
+                    const updatedIds = { ...driveConfig.fileIds, [projectId]: fileId };
+                    await writeTasksDriveConfig({ fileIds: updatedIds });
                   }
-                }
-              } else {
-                if (tasksPath) {
-                  await runFileHelper('write', tasksPath, driveContent);
-                  logger.info(
-                    `Project Manager: getTasks background synced Drive only (no local file before) for "${projectId}"`,
-                  );
-                  if (collabEventEmitter) {
-                    collabEventEmitter.emit({ type: 'tasks_update', payload: { projectId } });
-                  }
+                } catch (searchErr) {
+                  logger.warn(`Drive file search failed for "${projectId}": ${searchErr}`);
                 }
               }
+
+              if (fileId) {
+                const driveContent = await runGcalHelper(
+                  'drive-read',
+                  [token, fileId],
+                  undefined,
+                  15_000,
+                );
+                JSON.parse(driveContent); // validate
+                if (localContent) {
+                  const merged = mergeTaskStores(localContent, driveContent);
+                  if (merged !== localContent && tasksPath) {
+                    await runFileHelper('write', tasksPath, merged);
+                    logger.info(
+                      `Project Manager: getTasks background merged local+Drive for "${projectId}"`,
+                    );
+                    if (collabEventEmitter) {
+                      collabEventEmitter.emit({ type: 'tasks_update', payload: { projectId } });
+                    }
+                  }
+                } else {
+                  if (tasksPath) {
+                    await runFileHelper('write', tasksPath, driveContent);
+                    logger.info(
+                      `Project Manager: getTasks background synced Drive only (no local file before) for "${projectId}"`,
+                    );
+                    if (collabEventEmitter) {
+                      collabEventEmitter.emit({ type: 'tasks_update', payload: { projectId } });
+                    }
+                  }
+                }
+              }
             }
+          } catch (driveErr) {
+            logger.warn(`Background Drive sync failed in getTasks: ${driveErr}`);
+          } finally {
+            getTasksDriveSyncInProgress.delete(projectId);
           }
-        } catch (driveErr) {
-          logger.warn(`Background Drive sync failed in getTasks: ${driveErr}`);
-        }
-      })();
+        })();
+      }
 
       return localContent || empty;
     },
@@ -1195,35 +1290,48 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
   );
 
   // Helper to load, patch, and automatically sync custom project terms from ProjectBiblicalTerms.xml if needed
-  async function loadOrUpdateKeyTermsStore(projectId: string, projectDir: string): Promise<KeyTermsStore> {
+  async function loadOrUpdateKeyTermsStore(
+    projectId: string,
+    projectDir: string,
+  ): Promise<KeyTermsStore> {
     const keyTermsPath = `${projectDir}${SEP}${KEY_TERMS_FILENAME}`;
     const exists = await runFileHelper('exists', keyTermsPath);
-    
+
     let store: KeyTermsStore;
     let modified = false;
     const pt9ListsDir = 'C:\\Program Files\\Paratext 9\\Terms\\Lists';
 
     if (exists.trim() === 'true') {
       store = JSON.parse(await runFileHelper('read', keyTermsPath));
-      
+
       // Check if we need to merge custom project terms.
       // If ProjectBiblicalTerms.xml exists, but the JSON file has fewer than 15000 terms,
       // it means it was loaded from the smaller global list. We merge the custom project terms list.
-      const projectXmlExists = await runFileHelper('exists', `${projectDir}${SEP}ProjectBiblicalTerms.xml`);
+      const projectXmlExists = await runFileHelper(
+        'exists',
+        `${projectDir}${SEP}ProjectBiblicalTerms.xml`,
+      );
       if (projectXmlExists.trim() === 'true' && (!store.terms || store.terms.length < 15000)) {
-        logger.info(`Key terms store for "${projectId}" has ${store.terms?.length || 0} terms, but ProjectBiblicalTerms.xml exists. Merging custom terms...`);
+        logger.info(
+          `Key terms store for "${projectId}" has ${store.terms?.length || 0} terms, but ProjectBiblicalTerms.xml exists. Merging custom terms...`,
+        );
         try {
-          const newStore = await loadLegacyKeyTermsAsync(pt9ListsDir, projectDir, 'es', runFileHelper);
-          const existingMap = new Map(store.terms.map(t => [t.id, t]));
-          
+          const newStore = await loadLegacyKeyTermsAsync(
+            pt9ListsDir,
+            projectDir,
+            'es',
+            runFileHelper,
+          );
+          const existingMap = new Map(store.terms.map((t) => [t.id, t]));
+
           // Merge: keep existing term data (with voting/tags/renderings) if it exists, otherwise add the new term
-          const mergedTerms = newStore.terms.map(nt => {
+          const mergedTerms = newStore.terms.map((nt) => {
             if (existingMap.has(nt.id)) {
               return existingMap.get(nt.id)!;
             }
             return nt;
           });
-          
+
           store.terms = mergedTerms;
           modified = true;
         } catch (err) {
@@ -1235,7 +1343,34 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
       modified = true;
     }
 
+    // Patch morphologyConfig to ensure new fields are always present (schema migration)
+    if (!store.morphologyConfig) {
+      store.morphologyConfig = {
+        languageName: 'Español',
+        prefixes: [],
+        suffixes: [],
+        infixes: [],
+        enableFuzzyMatch: true,
+        maxEditDistance: 2,
+      };
+      modified = true;
+    } else {
+      if (!store.morphologyConfig.infixes) {
+        store.morphologyConfig.infixes = [];
+        modified = true;
+      }
+      if (!store.morphologyConfig.prefixes) {
+        store.morphologyConfig.prefixes = [];
+        modified = true;
+      }
+      if (!store.morphologyConfig.suffixes) {
+        store.morphologyConfig.suffixes = [];
+        modified = true;
+      }
+    }
+
     // Patch any renderings that are missing IDs (from legacy Paratext 9 import)
+
     const now = new Date().toISOString();
     store.terms = store.terms.map((term) => {
       let termPatched = false;
@@ -1261,14 +1396,14 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     if (modified) {
       await runFileHelper('write', keyTermsPath, JSON.stringify(store, null, 2));
     }
-    
+
     return store;
   }
 
   // Helper to extract plain text from all verses within a reference (handling ranges like "1-2" or single verses like "1a")
   function getVerseTextForRef(verseStr: string, verseMap: Map<number, string>): string {
     const cleanVerseStr = verseStr.replace(/[a-zA-Z]/g, '');
-    
+
     if (cleanVerseStr.includes('-')) {
       const parts = cleanVerseStr.split('-');
       const start = parseInt(parts[0], 10);
@@ -1282,9 +1417,9 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         return texts.join(' ');
       }
     }
-    
+
     const vNum = parseInt(cleanVerseStr, 10);
-    return isNaN(vNum) ? '' : (verseMap.get(vNum) || '');
+    return isNaN(vNum) ? '' : verseMap.get(vNum) || '';
   }
 
   const getKeyTermsDataPromise = papi.commands.registerCommand(
@@ -1296,11 +1431,21 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         return JSON.stringify(store, null, 2);
       } catch (e: any) {
         logger.warn(`getKeyTermsData failed for "${projectId}": ${e}`);
-        return JSON.stringify({ schemaVersion: 1, morphologyConfig: { languageName: 'Español', prefixes: [], suffixes: [], enableFuzzyMatch: true, maxEditDistance: 2 }, terms: [] });
+        return JSON.stringify({
+          schemaVersion: 1,
+          morphologyConfig: {
+            languageName: 'Español',
+            prefixes: [],
+            suffixes: [],
+            infixes: [],
+            enableFuzzyMatch: true,
+            maxEditDistance: 2,
+          },
+          terms: [],
+        });
       }
     },
   );
-
 
   const saveKeyTermsDataPromise = papi.commands.registerCommand(
     'paratextProjectManager.saveKeyTermsData',
@@ -1310,7 +1455,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         const keyTermsPath = `${projectDir}${SEP}${KEY_TERMS_FILENAME}`;
         await runFileHelper('write', keyTermsPath, dataJson);
         logger.info(`Project Manager: saved key terms data locally to ${keyTermsPath}`);
-        
+
         // Broadcast local update
         if (collabEventEmitter) {
           collabEventEmitter.emit({ type: 'key_terms_update', payload: { projectId } });
@@ -1328,26 +1473,42 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     async (projectId: string, bookCode: string, chapter: number): Promise<string> => {
       try {
         const projectDir = await resolveProjectDir(projectId);
-        const keyTermsPath = `${projectDir}${SEP}${KEY_TERMS_FILENAME}`;
-        
+
         const store = await loadOrUpdateKeyTermsStore(projectId, projectDir);
 
         // Fetch target chapter text
-        const textRes = await papi.commands.sendCommand(
+        const textRes = (await papi.commands.sendCommand(
           'paratextProjectManager.getChapterText',
           projectId,
           bookCode,
           chapter,
-        ) as string;
+        )) as string;
         const parsed = JSON.parse(textRes) as { blocks: any[] };
-        
+
         const verseMap = new Map<number, string>();
         if (parsed && parsed.blocks) {
           for (const block of parsed.blocks) {
             if (block.children) {
               for (const child of block.children) {
                 if (child.type === 'verse' && child.text) {
-                  verseMap.set(child.number, child.text);
+                  const numStr = child.numberStr || String(child.number);
+                  if (numStr.includes('-')) {
+                    const parts = numStr.split('-');
+                    const start = parseInt(parts[0], 10);
+                    const end = parseInt(parts[1], 10);
+                    if (!isNaN(start) && !isNaN(end)) {
+                      for (let v = start; v <= end; v++) {
+                        const existing = verseMap.get(v);
+                        verseMap.set(v, existing ? existing + ' ' + child.text : child.text);
+                      }
+                    } else {
+                      const existing = verseMap.get(child.number);
+                      verseMap.set(child.number, existing ? existing + ' ' + child.text : child.text);
+                    }
+                  } else {
+                    const existing = verseMap.get(child.number);
+                    verseMap.set(child.number, existing ? existing + ' ' + child.text : child.text);
+                  }
                 }
               }
             }
@@ -1370,7 +1531,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         for (const term of relevantTerms) {
           // Find expected renderings
           const approvedRenderings = term.renderings.filter((r) => r.status === 'approved');
-          
+
           for (const ref of term.references) {
             const parts = ref.split(' ');
             if (parts.length < 2) continue;
@@ -1384,7 +1545,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
             const verseText = getVerseTextForRef(verseStr, verseMap);
 
             let bestMatch: MatchResult = { found: false, matchType: 'none', confidence: 0 };
-            
+
             for (const rendering of approvedRenderings) {
               const result = matchRendering(verseText, rendering.text, store.morphologyConfig);
               if (result.found && result.confidence > bestMatch.confidence) {
@@ -1420,8 +1581,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     async (projectId: string, bookCode: string): Promise<string> => {
       try {
         const projectDir = await resolveProjectDir(projectId);
-        const keyTermsPath = `${projectDir}${SEP}${KEY_TERMS_FILENAME}`;
-        
+
         const store = await loadOrUpdateKeyTermsStore(projectId, projectDir);
 
         const prefix = `${bookCode} `;
@@ -1440,22 +1600,30 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         }
 
         const allMatches: VerseMatchStatus[] = [];
-        const scanPromises = Array.from(chapters).map(async (chap) => {
-          try {
-            const res = await papi.commands.sendCommand(
-              'paratextProjectManager.scanChapterRenderings',
-              projectId,
-              bookCode,
-              chap,
-            ) as string;
-            const parsed = JSON.parse(res) as { matches: VerseMatchStatus[] };
-            if (parsed && parsed.matches) {
-              allMatches.push(...parsed.matches);
-            }
-          } catch (_) {}
-        });
+        const chapList = Array.from(chapters);
+        const concurrency = 4;
 
-        await Promise.all(scanPromises);
+        const worker = async () => {
+          while (chapList.length > 0) {
+            const chap = chapList.shift();
+            if (chap === undefined) break;
+            try {
+              const res = (await papi.commands.sendCommand(
+                'paratextProjectManager.scanChapterRenderings',
+                projectId,
+                bookCode,
+                chap,
+              )) as string;
+              const parsed = JSON.parse(res) as { matches: VerseMatchStatus[] };
+              if (parsed && parsed.matches) {
+                allMatches.push(...parsed.matches);
+              }
+            } catch (_) {}
+          }
+        };
+
+        const workers = Array(concurrency).fill(null).map(() => worker());
+        await Promise.all(workers);
 
         return JSON.stringify({
           bookCode,
@@ -1467,7 +1635,6 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
       }
     },
   );
-
 
   const getCurrentUserPromise = papi.commands.registerCommand(
     'paratextProjectManager.getCurrentUser',
@@ -1852,10 +2019,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
 
   const selectKeyTermPromise = papi.commands.registerCommand(
     'paratextProjectManager.selectKeyTerm',
-    async (
-      projectId: string,
-      termId: string,
-    ): Promise<string> => {
+    async (projectId: string, termId: string): Promise<string> => {
       selectKeyTermEmitter.emit({ projectId, termId });
       return 'ok';
     },
@@ -1873,10 +2037,12 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         });
       }
       if (!pid) return undefined;
-      pendingProjectId[NOTES_VIEWER_TYPE] = pid;
+      const webViewId = `notes-viewer-${pid}`;
+      setPendingProjectId(webViewId, pid);
       return papi.webViews.openWebView(NOTES_VIEWER_TYPE, undefined, {
-        existingId: `notes-viewer-${pid}`,
-      });
+        existingId: webViewId,
+        projectId: pid,
+      } as any);
     },
   );
 
@@ -1892,10 +2058,12 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         });
       }
       if (!pid) return undefined;
-      pendingProjectId[SCRIPTURE_VIEWER_TYPE] = pid;
+      const webViewId = `scripture-viewer-${pid}`;
+      setPendingProjectId(webViewId, pid);
       return papi.webViews.openWebView(SCRIPTURE_VIEWER_TYPE, undefined, {
-        existingId: `scripture-viewer-${pid}`,
-      });
+        existingId: webViewId,
+        projectId: pid,
+      } as any);
     },
   );
 
@@ -3130,7 +3298,12 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     },
     3 * 60 * 1000,
   );
-  context.registrations.add({ dispose: () => clearInterval(driveSyncRetryInterval) });
+  context.registrations.add({
+    dispose: async () => {
+      clearInterval(driveSyncRetryInterval);
+      return true;
+    },
+  });
 
   // Await all registrations
   context.registrations.add(
@@ -3211,7 +3384,6 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     selectKeyTermEmitter,
     collabEventEmitter,
   );
-
 
   // Start check for updates in the background on startup
   checkAndApplyUpdates().catch((err) => {

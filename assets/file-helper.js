@@ -157,8 +157,72 @@ if (action === 'read' || action === 'readfile') {
       const languageCode = params.languageCode || 'es';
 
       const BIBLE_BOOKS = [
-        "GEN", "EXO", "LEV", "NUM", "DEU", "JOS", "JDG", "RUT", "1SA", "2SA", "1KI", "2KI", "1CH", "2CH", "EZR", "NEH", "EST", "JOB", "PSA", "PRO", "ECC", "SNG", "ISA", "JER", "LAM", "EZK", "DAN", "HOS", "JOL", "AMO", "OBD", "JON", "MIC", "NAM", "HAB", "ZEP", "HAG", "ZEC", "MAL",
-        "MAT", "MRK", "LUK", "JHN", "ACT", "ROM", "1CO", "2CO", "GAL", "EPH", "PHP", "COL", "1TH", "2TH", "1TI", "2TI", "TIT", "PHM", "HEB", "JAS", "1PE", "2PE", "1JN", "2JN", "3JN", "JUD", "REV"
+        'GEN',
+        'EXO',
+        'LEV',
+        'NUM',
+        'DEU',
+        'JOS',
+        'JDG',
+        'RUT',
+        '1SA',
+        '2SA',
+        '1KI',
+        '2KI',
+        '1CH',
+        '2CH',
+        'EZR',
+        'NEH',
+        'EST',
+        'JOB',
+        'PSA',
+        'PRO',
+        'ECC',
+        'SNG',
+        'ISA',
+        'JER',
+        'LAM',
+        'EZK',
+        'DAN',
+        'HOS',
+        'JOL',
+        'AMO',
+        'OBD',
+        'JON',
+        'MIC',
+        'NAM',
+        'HAB',
+        'ZEP',
+        'HAG',
+        'ZEC',
+        'MAL',
+        'MAT',
+        'MRK',
+        'LUK',
+        'JHN',
+        'ACT',
+        'ROM',
+        '1CO',
+        '2CO',
+        'GAL',
+        'EPH',
+        'PHP',
+        'COL',
+        '1TH',
+        '2TH',
+        '1TI',
+        '2TI',
+        'TIT',
+        'PHM',
+        'HEB',
+        'JAS',
+        '1PE',
+        '2PE',
+        '1JN',
+        '2JN',
+        '3JN',
+        'JUD',
+        'REV',
       ];
 
       function convertVerseRef(verseRef14) {
@@ -166,7 +230,7 @@ if (action === 'read' || action === 'readfile') {
         const bookNum = parseInt(verseRef14.substring(0, 3), 10);
         const chapterNum = parseInt(verseRef14.substring(3, 6), 10);
         const verseNum = parseInt(verseRef14.substring(6, 9), 10);
-        
+
         const bookCode = BIBLE_BOOKS[bookNum - 1];
         if (!bookCode) return `${bookNum} ${chapterNum}:${verseNum}`;
         return `${bookCode} ${chapterNum}:${verseNum}`;
@@ -198,7 +262,7 @@ if (action === 'read' || action === 'readfile') {
             domain: domMatch ? domMatch[1].trim() : undefined,
             gloss: glossMatch ? glossMatch[1].trim() : '',
             definition: defMatch ? defMatch[1].trim() : undefined,
-            references: refs
+            references: refs,
           });
         }
         return termsMap;
@@ -206,7 +270,8 @@ if (action === 'read' || action === 'readfile') {
 
       function parseLocalizationsXml(xmlContent) {
         const locMap = new Map();
-        const locRegex = /<Localization\s+Id="([^"]+)"\s+Gloss="([^"]*)"[^>]*>([\s\S]*?)<\/Localization>/g;
+        const locRegex =
+          /<Localization\s+Id="([^"]+)"\s+Gloss="([^"]*)"[^>]*>([\s\S]*?)<\/Localization>/g;
         let match;
         while ((match = locRegex.exec(xmlContent)) !== null) {
           const id = match[1];
@@ -228,7 +293,10 @@ if (action === 'read' || action === 'readfile') {
           if (rMatch) {
             const rendsStr = rMatch[1].trim();
             if (rendsStr) {
-              const list = rendsStr.split('||').map(r => r.trim()).filter(Boolean);
+              const list = rendsStr
+                .split('||')
+                .map((r) => r.trim())
+                .filter(Boolean);
               renderingsMap.set(id, list);
             }
           }
@@ -243,7 +311,8 @@ if (action === 'read' || action === 'readfile') {
         const settingsPath = path.join(projectDir, 'Settings.xml');
         if (fs.existsSync(settingsPath)) {
           const settingsXml = fs.readFileSync(settingsPath, 'utf8');
-          const settingMatch = /<BiblicalTermsListSetting>([^<]+)<\/BiblicalTermsListSetting>/i.exec(settingsXml);
+          const settingMatch =
+            /<BiblicalTermsListSetting>([^<]+)<\/BiblicalTermsListSetting>/i.exec(settingsXml);
           if (settingMatch) {
             const settingVal = settingMatch[1].trim();
             const parts = settingVal.split(':');
@@ -269,13 +338,19 @@ if (action === 'read' || action === 'readfile') {
       }
 
       // General fallback if mainXmlPath doesn't exist or is still global but project has custom file
-      if (!fs.existsSync(mainXmlPath) || mainXmlPath === path.join(pt9ListsDir, 'BiblicalTerms.xml')) {
+      if (
+        !fs.existsSync(mainXmlPath) ||
+        mainXmlPath === path.join(pt9ListsDir, 'BiblicalTerms.xml')
+      ) {
         if (fs.existsSync(fallbackProjectXml)) {
           mainXmlPath = fallbackProjectXml;
         }
       }
 
-      const locXmlPath = path.join(pt9ListsDir, languageCode === 'es' ? 'BiblicalTermsEs.xml' : 'BiblicalTermsEn.xml');
+      const locXmlPath = path.join(
+        pt9ListsDir,
+        languageCode === 'es' ? 'BiblicalTermsEs.xml' : 'BiblicalTermsEn.xml',
+      );
       const renderingsXmlPath = path.join(projectDir, 'TermRenderings.xml');
 
       let termsMap = new Map();
@@ -297,7 +372,7 @@ if (action === 'read' || action === 'readfile') {
         const loc = locMap.get(id);
         const gloss = loc ? loc.gloss : termData.gloss;
         const projectRenderings = renderingsMap.get(id) || [];
-        
+
         const renderings = projectRenderings.map((text, idx) => ({
           id: `r-${idx}-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
           text,
@@ -306,7 +381,7 @@ if (action === 'read' || action === 'readfile') {
           votes: [],
           proposedBy: 'Legacy Import',
           createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
+          updatedAt: new Date().toISOString(),
         }));
 
         const cleanRefs = (termData.references || []).map(convertVerseRef);
@@ -317,11 +392,16 @@ if (action === 'read' || action === 'readfile') {
           strongs: termData.strongs,
           transliteration: termData.transliteration,
           gloss,
-          domains: termData.domain ? termData.domain.split(';').map(d => d.trim()).filter(Boolean) : [],
+          domains: termData.domain
+            ? termData.domain
+                .split(';')
+                .map((d) => d.trim())
+                .filter(Boolean)
+            : [],
           references: cleanRefs,
           renderings,
           notes: [],
-          updatedAt: new Date().toISOString()
+          updatedAt: new Date().toISOString(),
         });
       });
 
@@ -332,9 +412,9 @@ if (action === 'read' || action === 'readfile') {
           prefixes: [],
           suffixes: [],
           enableFuzzyMatch: true,
-          maxEditDistance: 2
+          maxEditDistance: 2,
         },
-        terms
+        terms,
       };
 
       const resultJson = JSON.stringify(store, null, 2);

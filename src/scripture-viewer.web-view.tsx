@@ -2,10 +2,8 @@ import { WebViewProps } from '@papi/core';
 import papi from '@papi/frontend';
 import { useDialogCallback } from '@papi/frontend/react';
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import type { ParatextNoteThread, ParatextComment } from './types/note.types';
+import type { ParatextNoteThread } from './types/note.types';
 import { ScrollGroupSelector } from 'platform-bible-react';
-
-import { BIBLE_BOOKS } from './types/shared.constants';
 
 import { AudioPlayer, AttachmentViewer } from './components/note-media-components';
 
@@ -52,7 +50,12 @@ function renderTextWithLinks(text: string, baseKey: string): React.ReactNode[] |
   return parts.length > 0 ? parts : text;
 }
 
-function isVerseInRef(bookCode: string, chapterNum: number, verseNum: number, ref: string): boolean {
+function isVerseInRef(
+  bookCode: string,
+  chapterNum: number,
+  verseNum: number,
+  ref: string,
+): boolean {
   if (!ref) return false;
   const parts = ref.split(' ');
   if (parts.length < 2) return false;
@@ -65,14 +68,14 @@ function isVerseInRef(bookCode: string, chapterNum: number, verseNum: number, re
 
   const verseStr = chapVerse[1]; // e.g. "1" or "1-2" or "1a"
   const cleanVerseStr = verseStr.replace(/[a-zA-Z]/g, '');
-  
+
   if (cleanVerseStr.includes('-')) {
     const [startStr, endStr] = cleanVerseStr.split('-');
     const start = parseInt(startStr, 10);
     const end = parseInt(endStr, 10);
     return verseNum >= start && verseNum <= end;
   }
-  
+
   const parsedVerse = parseInt(cleanVerseStr, 10);
   return parsedVerse === verseNum;
 }
@@ -154,6 +157,7 @@ interface BookInfo {
 interface VerseItem {
   type: 'verse';
   number: number;
+  numberStr?: string;
   text: string;
 }
 
@@ -460,9 +464,10 @@ const renderFootnotes = (node: React.ReactNode): React.ReactNode => {
   }
 
   if (React.isValidElement(node)) {
-    if (!node.props.children) return node;
-    const children = React.Children.map(node.props.children, (child) => renderFootnotes(child));
-    return React.cloneElement(node, { ...node.props, key: node.key }, children);
+    const element = node as React.ReactElement<{ children?: React.ReactNode }>;
+    if (!element.props?.children) return node;
+    const children = React.Children.map(element.props.children, (child) => renderFootnotes(child));
+    return React.cloneElement(element, { ...element.props, key: element.key }, children);
   }
 
   if (Array.isArray(node)) {
@@ -564,16 +569,17 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     >
   >({});
   const [teamMembers, setTeamMembers] = useState<string[]>([]);
-  
+
   // Key Terms integration states
-  const [keyTermsOverlayEnabled, setKeyTermsOverlayEnabled] = useState(() => localStorage.getItem('key_terms_overlay_enabled') === 'true');
+  const [keyTermsOverlayEnabled, setKeyTermsOverlayEnabled] = useState(
+    () => localStorage.getItem('key_terms_overlay_enabled') === 'true',
+  );
   const [chapterKeyTermsMatches, setChapterKeyTermsMatches] = useState<Record<string, any>>({});
   const [activeVersePopup, setActiveVersePopup] = useState<{
     verseNum: number;
     reference: string;
     expected: any[];
   } | null>(null);
-
 
   const getCursorColors = (user: string) => {
     const userHash = user.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
@@ -626,27 +632,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     );
   };
 
-  const renderVerseTextWithCursors = (
-    text: string,
-    editors: { user: string; offset: number }[],
-  ) => {
-    if (editors.length === 0) return text;
-    const sorted = [...editors].sort((a, b) => a.offset - b.offset);
-    const elements: React.ReactNode[] = [];
-    let lastIndex = 0;
-    sorted.forEach((ed, idx) => {
-      const offset = Math.min(Math.max(0, ed.offset), text.length);
-      if (offset > lastIndex) {
-        elements.push(text.substring(lastIndex, offset));
-      }
-      elements.push(renderCursorBar(ed.user, idx));
-      lastIndex = offset;
-    });
-    if (lastIndex < text.length) {
-      elements.push(text.substring(lastIndex));
-    }
-    return <>{elements}</>;
-  };
+
 
   const injectCursorsIntoElements = (
     nodes: React.ReactNode,
@@ -731,13 +717,19 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     }, 100);
   }, []);
 
+  const loadNotesRequestRef = useRef(0);
+
   const loadNotes = useCallback(async () => {
+    if (!projectId) return;
+    const requestId = ++loadNotesRequestRef.current;
+    const isCurrentRequest = () => requestId === loadNotesRequestRef.current;
     try {
       const notesRes = await papi.commands.sendCommand(
         'paratextProjectManager.getProjectNotes',
         projectId,
         currentUser,
       );
+      if (!isCurrentRequest()) return;
       const parsedNotes = JSON.parse(notesRes) as { threads: ParatextNoteThread[] };
       setAllNotes(parsedNotes.threads || []);
     } catch (err) {
@@ -745,136 +737,153 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     }
   }, [projectId, currentUser]);
 
-  const loadKeyTermsMatches = useCallback(async (bookCode: string, chapterNum: number) => {
-    if (!projectId || !keyTermsOverlayEnabled) return;
-    try {
-      const res = await papi.commands.sendCommand(
-        'paratextProjectManager.scanChapterRenderings',
-        projectId,
-        bookCode,
-        chapterNum,
-      ) as string;
-      const parsed = JSON.parse(res) as { matches: any[] };
-      if (parsed && parsed.matches) {
-        const matchesMap: Record<string, any> = {};
-        for (const m of parsed.matches) {
-          matchesMap[`${m.termId}-${m.reference}`] = m;
-        }
-        setChapterKeyTermsMatches(matchesMap);
-      }
-    } catch (e) {
-      console.error('Failed to load key terms matches:', e);
-    }
-  }, [projectId, keyTermsOverlayEnabled]);
+  const loadKeyTermsMatchesRequestRef = useRef(0);
 
-  const highlightKeyTermsInNode = useCallback((
-    node: React.ReactNode,
-    verseNum: number,
-    bookCode: string
-  ): React.ReactNode => {
-    if (!keyTermsOverlayEnabled) return node;
-
-    const matches = Object.values(chapterKeyTermsMatches).filter(
-      (m: any) => isVerseInRef(bookCode, selectedChapter, verseNum, m.reference) && m.matchResult?.found
-    );
-
-    if (matches.length === 0) return node;
-
-    if (typeof node === 'string') {
-      const matchRenderings = matches
-        .map((m: any) => m.matchResult?.matchedText || '')
-        .filter(Boolean);
-      
-      // Split multi-word matches so each word is matched and underlined separately
-      const individualWords: string[] = [];
-      for (const rend of matchRenderings) {
-        const words = rend.split(/\s+/).filter(Boolean);
-        individualWords.push(...words);
-      }
-      const uniqueRends = Array.from(new Set(individualWords));
-      if (uniqueRends.length === 0) return node;
-
-      const sortedRends = uniqueRends.sort((a, b) => b.length - a.length);
-      const escaped = sortedRends.map((r: string) => r.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
-      
-      // Try Unicode-aware split; fall back to simple \b if not supported
-      let parts: string[];
+  const loadKeyTermsMatches = useCallback(
+    async (bookCode: string, chapterNum: number) => {
+      if (!projectId || !keyTermsOverlayEnabled) return;
+      const requestId = ++loadKeyTermsMatchesRequestRef.current;
+      const isCurrentRequest = () => requestId === loadKeyTermsMatchesRequestRef.current;
       try {
-        const uniPattern = `(?<![\\p{L}\\p{N}_])(${escaped.join('|')})(?![\\p{L}\\p{N}_])`;
-        const regex = new RegExp(uniPattern, 'giu');
-        parts = node.split(regex);
-      } catch (_) {
-        const regex = new RegExp(`\\b(${escaped.join('|')})\\b`, 'gi');
-        parts = node.split(regex);
-      }
-
-      return parts.map((part, index) => {
-        const match: any = matches.find((m: any) => {
-          if (!m.matchResult?.matchedText) return false;
-          const words = m.matchResult.matchedText.toLowerCase().split(/\s+/);
-          return words.includes(part.toLowerCase());
-        });
-
-        if (match) {
-          const isExact = match.matchResult?.matchType === 'exact';
-          const underlineClass = isExact
-            ? 'tw:border-b-2 tw:border-dashed tw:border-emerald-500 tw:bg-emerald-50/20'
-            : 'tw:border-b-2 tw:border-dashed tw:border-amber-500 tw:bg-amber-50/20';
-
-          return (
-            <span
-              key={index}
-              className={`key-term-hover-container tw:relative tw:inline-block tw:cursor-pointer ${underlineClass}`}
-              onClick={async (e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                try {
-                  await papi.commands.sendCommand('paratextProjectManager.openKeyTerms', projectId);
-                  // Small delay to allow the webview to finish opening/focusing before emitting the select event
-                  await new Promise((r) => setTimeout(r, 400));
-                  await papi.commands.sendCommand('paratextProjectManager.selectKeyTerm', projectId, match.termId);
-                } catch (err) {
-                  console.error('Failed to open/select key term on word click:', err);
-                }
-              }}
-            >
-              {part}
-              <span className="key-term-tooltip-content tw:invisible tw:absolute tw:bottom-full tw:left-1/2 tw:-translate-x-1/2 tw:mb-1 tw:bg-slate-800 tw:text-white tw:text-[10px] tw:p-2 tw:rounded-lg tw:shadow-md tw:w-48 tw:whitespace-normal tw:z-50 tw:opacity-0 tw:transition-opacity tw:duration-200 pointer-events-none">
-                <div className="tw:font-bold tw:text-indigo-300 tw:font-serif tw:text-xs">{match.lemma}</div>
-                <div className="tw:text-[9px] tw:text-slate-400 tw:italic">({match.gloss})</div>
-                <div className="tw:mt-1 tw:border-t tw:border-slate-700 tw:pt-1">
-                  <strong>Aprobados:</strong> {match.expectedRenderings.join(', ') || 'Ninguno'}
-                </div>
-              </span>
-            </span>
-          );
+        const res = (await papi.commands.sendCommand(
+          'paratextProjectManager.scanChapterRenderings',
+          projectId,
+          bookCode,
+          chapterNum,
+        )) as string;
+        if (!isCurrentRequest()) return;
+        const parsed = JSON.parse(res) as { matches: any[] };
+        if (parsed && parsed.matches) {
+          const matchesMap: Record<string, any> = {};
+          for (const m of parsed.matches) {
+            matchesMap[`${m.termId}-${m.reference}`] = m;
+          }
+          setChapterKeyTermsMatches(matchesMap);
         }
-        return part;
-      });
-    }
-
-    if (React.isValidElement(node)) {
-      const element = node as React.ReactElement<any>;
-      if (element.props && element.props.children) {
-        const children = React.Children.map(element.props.children, (child) =>
-          highlightKeyTermsInNode(child, verseNum, bookCode)
-        );
-        return React.cloneElement(element, { ...element.props, key: element.key }, children);
+      } catch (e) {
+        console.error('Failed to load key terms matches:', e);
       }
+    },
+    [projectId, keyTermsOverlayEnabled],
+  );
+
+  const highlightKeyTermsInNode = useCallback(
+    (node: React.ReactNode, verseNum: number, bookCode: string): React.ReactNode => {
+      if (!keyTermsOverlayEnabled) return node;
+
+      const matches = Object.values(chapterKeyTermsMatches).filter(
+        (m: any) =>
+          isVerseInRef(bookCode, selectedChapter, verseNum, m.reference) && m.matchResult?.found,
+      );
+
+      if (matches.length === 0) return node;
+
+      if (typeof node === 'string') {
+        const matchRenderings = matches
+          .map((m: any) => m.matchResult?.matchedText || '')
+          .filter(Boolean);
+
+        // Split multi-word matches so each word is matched and underlined separately
+        const individualWords: string[] = [];
+        for (const rend of matchRenderings) {
+          const words = rend.split(/\s+/).filter(Boolean);
+          individualWords.push(...words);
+        }
+        const uniqueRends = Array.from(new Set(individualWords));
+        if (uniqueRends.length === 0) return node;
+
+        const sortedRends = uniqueRends.sort((a, b) => b.length - a.length);
+        const escaped = sortedRends.map((r: string) => r.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
+
+        // Try Unicode-aware split; fall back to simple \b if not supported
+        let parts: string[];
+        try {
+          const uniPattern = `(?<![\\p{L}\\p{N}_])(${escaped.join('|')})(?![\\p{L}\\p{N}_])`;
+          const regex = new RegExp(uniPattern, 'giu');
+          parts = node.split(regex);
+        } catch (_) {
+          const regex = new RegExp(`\\b(${escaped.join('|')})\\b`, 'gi');
+          parts = node.split(regex);
+        }
+
+        return parts.map((part, index) => {
+          const match: any = matches.find((m: any) => {
+            if (!m.matchResult?.matchedText) return false;
+            const words = m.matchResult.matchedText.toLowerCase().split(/\s+/);
+            return words.includes(part.toLowerCase());
+          });
+
+          if (match) {
+            const isExact = match.matchResult?.matchType === 'exact';
+            const underlineClass = isExact
+              ? 'tw:border-b-2 tw:border-dashed tw:border-emerald-500 tw:bg-emerald-50/20'
+              : 'tw:border-b-2 tw:border-dashed tw:border-amber-500 tw:bg-amber-50/20';
+
+            return (
+              <span
+                key={index}
+                className={`key-term-hover-container tw:relative tw:inline-block tw:cursor-pointer ${underlineClass}`}
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  if (!projectId) return;
+                  try {
+                    await papi.commands.sendCommand(
+                      'paratextProjectManager.openKeyTerms',
+                      projectId,
+                    );
+                    // Small delay to allow the webview to finish opening/focusing before emitting the select event
+                    await new Promise((r) => setTimeout(r, 400));
+                    await papi.commands.sendCommand(
+                      'paratextProjectManager.selectKeyTerm',
+                      projectId,
+                      match.termId,
+                    );
+                  } catch (err) {
+                     console.error('Failed to open/select key term on word click:', err);
+                  }
+                }}
+              >
+                {part}
+                <span className="key-term-tooltip-content tw:invisible tw:absolute tw:bottom-full tw:left-1/2 tw:-translate-x-1/2 tw:mb-1 tw:bg-slate-800 tw:text-white tw:text-[10px] tw:p-2 tw:rounded-lg tw:shadow-md tw:w-48 tw:whitespace-normal tw:z-50 tw:opacity-0 tw:transition-opacity tw:duration-200 pointer-events-none">
+                  <div className="tw:font-bold tw:text-indigo-300 tw:font-serif tw:text-xs">
+                    {match.lemma}
+                  </div>
+                  <div className="tw:text-[9px] tw:text-slate-400 tw:italic">({match.gloss})</div>
+                  <div className="tw:mt-1 tw:border-t tw:border-slate-700 tw:pt-1">
+                    <strong>Aprobados:</strong> {match.expectedRenderings.join(', ') || 'Ninguno'}
+                  </div>
+                </span>
+              </span>
+            );
+          }
+          return part;
+        });
+      }
+
+      if (React.isValidElement(node)) {
+        const element = node as React.ReactElement<any>;
+        if (element.props && element.props.children) {
+          const children = React.Children.map(element.props.children, (child) =>
+            highlightKeyTermsInNode(child, verseNum, bookCode),
+          );
+          return React.cloneElement(element, { ...element.props, key: element.key }, children);
+        }
+        return node;
+      }
+
+      if (Array.isArray(node)) {
+        return node.map((child, idx) => (
+          <React.Fragment key={idx}>
+            {highlightKeyTermsInNode(child, verseNum, bookCode)}
+          </React.Fragment>
+        ));
+      }
+
       return node;
-    }
-
-    if (Array.isArray(node)) {
-      return node.map((child, idx) => (
-        <React.Fragment key={idx}>
-          {highlightKeyTermsInNode(child, verseNum, bookCode)}
-        </React.Fragment>
-      ));
-    }
-
-    return node;
-  }, [keyTermsOverlayEnabled, chapterKeyTermsMatches, selectedChapter, projectId]);
-
+    },
+    [keyTermsOverlayEnabled, chapterKeyTermsMatches, selectedChapter, projectId],
+  );
 
   // Load key terms matches automatically when overlay is enabled or book/chapter changes
   useEffect(() => {
@@ -885,9 +894,13 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     }
   }, [keyTermsOverlayEnabled, selectedBook, selectedChapter, projectId, loadKeyTermsMatches]);
 
+  const loadChapterRequestRef = useRef(0);
+
   const loadChapter = useCallback(
     async (bookCode: string, chapterNum: number) => {
-      if (!bookCode) return;
+      if (!bookCode || !projectId) return;
+      const requestId = ++loadChapterRequestRef.current;
+      const isCurrentRequest = () => requestId === loadChapterRequestRef.current;
       setLoading(true);
       try {
         const textRes = await papi.commands.sendCommand(
@@ -896,6 +909,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
           bookCode,
           chapterNum,
         );
+        if (!isCurrentRequest()) return;
         const parsedText = JSON.parse(textRes) as {
           blocks: ChapterBlock[];
           totalChapters: number;
@@ -921,12 +935,14 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
         // Auto-retry once after 3s — handles papi timeouts after long idle
         try {
           await new Promise((r) => setTimeout(r, 3000));
+          if (!isCurrentRequest()) return;
           const textRes = await papi.commands.sendCommand(
             'paratextProjectManager.getChapterText',
             projectId,
             bookCode,
             chapterNum,
           );
+          if (!isCurrentRequest()) return;
           const parsedText = JSON.parse(textRes) as {
             blocks: ChapterBlock[];
             totalChapters: number;
@@ -948,10 +964,10 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
           });
         } catch (retryErr) {
           console.error(retryErr);
-          setError('Error al cargar texto o notas.');
+          if (isCurrentRequest()) setError('Error al cargar texto o notas.');
         }
       } finally {
-        setLoading(false);
+        if (isCurrentRequest()) setLoading(false);
       }
     },
     [projectId, loadNotes, loadKeyTermsMatches],
@@ -982,7 +998,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
 
   const handleCursorChange = useCallback(
     (verseNum: number, offset: number) => {
-      if (!currentUser) return;
+      if (!currentUser || !projectId) return;
       const now = Date.now();
       const throttleMs = 200;
 
@@ -1022,7 +1038,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   // appearing live as the local user types.
   const handleVerseEditBroadcast = useCallback(
     (verseNum: number, newText: string) => {
-      if (!currentUser || !selectedBook) return;
+      if (!currentUser || !selectedBook || !projectId) return;
       const cleanText = newText.replace(/\u200B/g, '');
       const throttleMs = 150;
       const now = Date.now();
@@ -1060,38 +1076,10 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     [currentUser, projectId, selectedBook, selectedChapter],
   );
 
-  // Flush any pending keystroke broadcast when editing ends.
-  const flushPendingEditBroadcast = useCallback(() => {
-    if (editBroadcastTimerRef.current) {
-      clearTimeout(editBroadcastTimerRef.current);
-      editBroadcastTimerRef.current = null;
-    }
-    if (pendingEditBroadcastRef.current) {
-      const { verse, text } = pendingEditBroadcastRef.current;
-      pendingEditBroadcastRef.current = null;
-      lastEditBroadcastTimeRef.current = 0;
-      if (currentUser && selectedBook) {
-        papi.commands
-          .sendCommand(
-            'paratextProjectManager.broadcastVerseEdit',
-            currentUser,
-            projectId,
-            selectedBook,
-            selectedChapter,
-            verse,
-            text,
-          )
-          .catch(() => {
-            /* ignore */
-          });
-      }
-    }
-  }, [currentUser, projectId, selectedBook, selectedChapter]);
+
 
   // Verse editing states
   const [isEditingVerse, setIsEditingVerse] = useState(false);
-  const [verseEditText, setVerseEditText] = useState('');
-  const [savingVerse, setSavingVerse] = useState(false);
   const [fontSize, setFontSize] = useState(16);
   const [verseEditorCanUndo, setVerseEditorCanUndo] = useState(false);
 
@@ -1119,7 +1107,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     text: string;
   } | null>(null);
 
-  const captureVerseHighlight = (verseNum: number, verseText: string) => {
+  const captureVerseHighlight = (verseNum: number, _verseText: string) => {
     const sel = window.getSelection();
     if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
       setVerseHighlight(null);
@@ -1193,7 +1181,6 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   const [newNoteAudio, setNewNoteAudio] = useState<{ filename: string; base64Data: string } | null>(
     null,
   );
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const newNoteFileInputRef = useRef<HTMLInputElement>(null);
   const replyFileInputRef = useRef<HTMLInputElement>(null);
   const [activeReplyThreadId, setActiveReplyThreadId] = useState<string | null>(null);
@@ -1241,7 +1228,9 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
         });
       }
     });
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+    };
   }, [projectId, selectedBook, selectedChapter, scrollGroupId, setScrRef]);
 
   // Keep refs of current values to avoid stale closures in scroll group sync
@@ -1457,7 +1446,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
 
   // Broadcast cursor when editing state changes
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser || !projectId) return;
     const updateCursor = async () => {
       try {
         const verseToBroadcast = isEditingVerse ? selectedVerseNum : null;
@@ -1496,6 +1485,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       }, 80);
       return () => clearTimeout(timer);
     }
+    return undefined;
   }, [selectedVerseNum, chapterBlocks]);
 
   // Scroll to focused thread card in right sidebar
@@ -1509,15 +1499,11 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       }, 100);
       return () => clearTimeout(timer);
     }
+    return undefined;
   }, [selectedThreadIdInSidebar]);
 
   // Reset states on active verse changes
   useEffect(() => {
-    if (selectedVerseNum !== null) {
-      setVerseEditText(getSelectedVerseText());
-    } else {
-      setVerseEditText('');
-    }
     setSelectedThreadIdInSidebar(null);
   }, [selectedVerseNum]);
 
@@ -1538,47 +1524,10 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     return '';
   };
 
-  const getSelectedVerseText = () => getVerseText(selectedVerseNum);
 
-  const hasFormattingMarkup = verseEditText.includes('[FN:') || verseEditText.includes('\\');
-
-  const handleSaveVerseText = async (customText?: string) => {
-    if (selectedVerseNum === null || !selectedBook) return;
-    const textToSave = customText !== undefined ? customText : verseEditText;
-    setSavingVerse(true);
-    selfVerseUpdateRef.current = {
-      book: selectedBook,
-      chapter: selectedChapter,
-      verse: selectedVerseNum,
-      ts: Date.now(),
-    };
-    try {
-      const res = await papi.commands.sendCommand(
-        'paratextProjectManager.updateVerseText',
-        projectId,
-        selectedBook,
-        selectedChapter,
-        selectedVerseNum,
-        textToSave,
-      );
-
-      if (res === 'ok') {
-        setIsEditingVerse(false);
-        setSelectedVerseNum(null);
-        // The verse_update event will trigger loadChapter; no need to call it explicitly
-      } else {
-        showErrorMessage(`Error al guardar el texto: ${res}`);
-        selfVerseUpdateRef.current = null;
-      }
-    } catch (err) {
-      showErrorMessage(`Error al guardar el texto: ${err}`);
-      selfVerseUpdateRef.current = null;
-    } finally {
-      setSavingVerse(false);
-    }
-  };
 
   const handleContentEditableSave = async (newText: string, verseNum: number) => {
+    if (!projectId) return;
     const originalText = getVerseText(verseNum);
 
     if (newText.trim() === originalText.trim()) {
@@ -1589,9 +1538,6 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       return;
     }
 
-    if (selectedVerseNum === verseNum) {
-      setSavingVerse(true);
-    }
     selfVerseUpdateRef.current = {
       book: selectedBook || '',
       chapter: selectedChapter,
@@ -1649,9 +1595,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       }
       selfVerseUpdateRef.current = null;
     } finally {
-      if (selectedVerseNum === verseNum) {
-        setSavingVerse(false);
-      }
+      /* done */
     }
   };
 
@@ -1703,35 +1647,88 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   // Returns a React node (string + mark + string) that can be safely composed
   // with the note highlights and cursor injection.
   const wrapRangeInMark = (
-    text: string,
+    node: React.ReactNode,
     start: number,
     end: number,
     keyBase: string,
   ): React.ReactNode => {
-    const safeStart = Math.max(0, Math.min(start, text.length));
-    const safeEnd = Math.max(safeStart, Math.min(end, text.length));
-    if (safeEnd <= safeStart) return text;
-    return (
-      <>
-        {text.substring(0, safeStart)}
-        <mark
-          key={`${keyBase}-hl`}
-          className="tw:transition-colors"
-          style={{
-            backgroundColor: 'rgba(99, 102, 241, 0.28)',
-            borderRadius: '3px',
-            padding: '0 2px',
-          }}
-        >
-          {text.substring(safeStart, safeEnd)}
-        </mark>
-        {text.substring(safeEnd)}
-      </>
-    );
+    if (typeof node === 'string') {
+      const safeStart = Math.max(0, Math.min(start, node.length));
+      const safeEnd = Math.max(safeStart, Math.min(end, node.length));
+      if (safeEnd <= safeStart) return node;
+      return (
+        <>
+          {node.substring(0, safeStart)}
+          <mark
+            key={`${keyBase}-hl`}
+            className="tw:transition-colors"
+            style={{
+              backgroundColor: 'rgba(99, 102, 241, 0.28)',
+              borderRadius: '3px',
+              padding: '0 2px',
+            }}
+          >
+            {node.substring(safeStart, safeEnd)}
+          </mark>
+          {node.substring(safeEnd)}
+        </>
+      );
+    }
+
+    if (Array.isArray(node)) {
+      let currentOffset = 0;
+      return node.map((child, idx) => {
+        if (typeof child === 'string') {
+          const childStart = currentOffset;
+          const childEnd = currentOffset + child.length;
+          currentOffset = childEnd;
+
+          const overlapStart = Math.max(start, childStart);
+          const overlapEnd = Math.min(end, childEnd);
+
+          if (overlapEnd > overlapStart) {
+            const relStart = overlapStart - childStart;
+            const relEnd = overlapEnd - childStart;
+            return (
+              <React.Fragment key={`${keyBase}-node-${idx}`}>
+                {child.substring(0, relStart)}
+                <mark
+                  key={`${keyBase}-hl`}
+                  className="tw:transition-colors"
+                  style={{
+                    backgroundColor: 'rgba(99, 102, 241, 0.28)',
+                    borderRadius: '3px',
+                    padding: '0 2px',
+                  }}
+                >
+                  {child.substring(relStart, relEnd)}
+                </mark>
+                {child.substring(relEnd)}
+              </React.Fragment>
+            );
+          }
+          return child;
+        } else {
+          const childText =
+            child &&
+            typeof child === 'object' &&
+            'props' in child &&
+            typeof child.props?.children === 'string'
+              ? child.props.children
+              : '';
+          const childEnd = currentOffset + childText.length;
+          currentOffset = childEnd;
+          return child;
+        }
+      });
+    }
+
+    return node;
   };
 
   // Fetch books & config
   const initData = useCallback(async () => {
+    if (!projectId) return;
     setLoading(true);
     setError('');
     try {
@@ -1946,6 +1943,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
         const reader = new FileReader();
         reader.readAsDataURL(audioBlob);
         reader.onloadend = async () => {
+          if (!projectId) return;
           const base64data = (reader.result as string).split(',')[1];
           const filename = `audio_${Date.now()}.webm`;
 
@@ -2057,6 +2055,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   };
 
   const handleReplyFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!projectId) return;
     const threadId = activeReplyThreadId;
     if (!threadId || !e.target.files || e.target.files.length === 0) {
       setActiveReplyThreadId(null);
@@ -2153,6 +2152,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
 
   // Reply text handler
   const handleSendReply = async (thread: ParatextNoteThread) => {
+    if (!projectId) return;
     const text = replyTexts[thread.threadId]?.trim();
     if (!text) return;
 
@@ -2197,7 +2197,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   };
 
   const handleDeleteCommentConfirm = async () => {
-    if (!commentToDelete) return;
+    if (!commentToDelete || !projectId) return;
     const target = commentToDelete;
     setCommentToDelete(null);
     try {
@@ -2225,7 +2225,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     const selectedStr = selection ? selection.toString().trim() : '';
     const isEmpty = !verseText || verseText.trim().length === 0;
 
-    if (selectedStr && !isEmpty) {
+    if (selection && selectedStr && !isEmpty) {
       // User is selecting/has selected text. Do NOT enter edit mode.
       // Save the selection for context menu
       selectVerse(verseNum);
@@ -2263,7 +2263,6 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     }
     selectVerse(verseNum);
     setIsEditingVerse(true);
-    setVerseEditText(verseText);
     setSelectedText('');
     setStartPosition(0);
     setContextBefore('');
@@ -2274,7 +2273,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     const selection = window.getSelection();
     const selectedStr = selection ? selection.toString().trim() : '';
     const isEmpty = !verseText || verseText.trim().length === 0;
-    if (selectedStr && !isEmpty) {
+    if (selection && selectedStr && !isEmpty) {
       e.preventDefault();
       e.stopPropagation();
 
@@ -2302,15 +2301,11 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     }
   };
 
-  const handleNoteIndicatorClick = (verseNum: number) => {
-    selectVerse(verseNum);
-    setNotesPopupVerseNum(verseNum);
-    setIsEditingVerse(false);
-    setShowNewNoteForm(false);
-  };
+
 
   // Create new note thread
   const handleCreateNote = async () => {
+    if (!projectId) return;
     if (!newNoteText.trim() && !newNoteAudio && !newNoteAttachment) return;
     if (notesPopupVerseNum === null) return;
 
@@ -2445,7 +2440,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
             </button>
             <span className="tw:font-bold tw:text-slate-800 tw:text-base">Lector</span>
             <button
-              onClick={selectProject}
+              onClick={() => selectProject()}
               className="tw:px-2 tw:py-1 tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:border-slate-350 tw:rounded tw:text-xs tw:font-semibold tw:text-slate-700 tw:cursor-pointer"
               title="Cambiar de proyecto o recurso"
             >
@@ -2497,8 +2492,8 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
 
           <div className="tw:flex tw:items-center tw:gap-2">
             {/* User picker */}
-            {controlsVisible && (
-              currentUser ? (
+            {controlsVisible &&
+              (currentUser ? (
                 <span
                   className="tw:text-xs tw:font-semibold tw:text-slate-700 tw:bg-slate-100 tw:border tw:px-2 tw:py-1 tw:rounded tw:cursor-pointer hover:tw:bg-slate-200 tw:transition-colors tw:flex tw:items-center tw:gap-1"
                   onClick={() => setCurrentUser('')}
@@ -2535,11 +2530,10 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                     ))}
                   </select>
                 </div>
-              )
-            )}
+              ))}
 
             {/* Scroll Group Selector */}
-            {controlsVisible && useWebViewScrollGroupScrRef && (
+            {controlsVisible && typeof useWebViewScrollGroupScrRef === 'function' && setScrollGroupId && (
               <div className="tw:inline-flex tw:items-center tw:scale-90">
                 <ScrollGroupSelector
                   availableScrollGroupIds={[undefined, ...Array(5).keys()]}
@@ -2718,40 +2712,49 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                           }}
                         >
                           {/* Verse number tag */}
-                          {keyTermsOverlayEnabled && (() => {
-                            const verseMatches = Object.values(chapterKeyTermsMatches).filter(
-                              (m: any) => isVerseInRef(selectedBook, selectedChapter, child.number, m.reference)
-                            );
-                            if (verseMatches.length === 0) return null;
-                            const totalExpected = verseMatches.length;
-                            const totalFound = verseMatches.filter((m: any) => m.matchResult?.found).length;
-                            const verseRef = `${selectedBook} ${selectedChapter}:${child.number}`;
-                            return (
-                              <span
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveVersePopup({
-                                    verseNum: child.number,
-                                    reference: verseRef,
-                                    expected: verseMatches,
-                                  });
-                                }}
-                                className="tw:inline-flex tw:items-center tw:justify-center tw:w-5 tw:h-5 tw:cursor-pointer tw:mr-0.5 tw:align-middle"
-                                title={`Términos clave: ${totalFound}/${totalExpected} encontrados. Haga clic para ver detalles.`}
-                                style={{ position: 'relative', top: '-1px' }}
-                              >
+                          {keyTermsOverlayEnabled &&
+                            (() => {
+                              const verseMatches = Object.values(chapterKeyTermsMatches).filter(
+                                (m: any) =>
+                                  isVerseInRef(
+                                    selectedBook,
+                                    selectedChapter,
+                                    child.number,
+                                    m.reference,
+                                  ),
+                              );
+                              if (verseMatches.length === 0) return null;
+                              const totalExpected = verseMatches.length;
+                              const totalFound = verseMatches.filter(
+                                (m: any) => m.matchResult?.found,
+                              ).length;
+                              const verseRef = `${selectedBook} ${selectedChapter}:${child.number}`;
+                              return (
                                 <span
-                                  className={`tw:w-2.5 tw:h-2.5 tw:rounded-full tw:transition-transform hover:tw:scale-125 ${
-                                    totalFound === totalExpected
-                                      ? 'tw:bg-emerald-500'
-                                      : totalFound > 0
-                                      ? 'tw:bg-amber-500'
-                                      : 'tw:bg-rose-500'
-                                  }`}
-                                />
-                              </span>
-                            );
-                          })()}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveVersePopup({
+                                      verseNum: child.number,
+                                      reference: verseRef,
+                                      expected: verseMatches,
+                                    });
+                                  }}
+                                  className="tw:inline-flex tw:items-center tw:justify-center tw:w-5 tw:h-5 tw:cursor-pointer tw:mr-0.5 tw:align-middle"
+                                  title={`Términos clave: ${totalFound}/${totalExpected} encontrados. Haga clic para ver detalles.`}
+                                  style={{ position: 'relative', top: '-1px' }}
+                                >
+                                  <span
+                                    className={`tw:w-2.5 tw:h-2.5 tw:rounded-full tw:transition-transform hover:tw:scale-125 ${
+                                      totalFound === totalExpected
+                                        ? 'tw:bg-emerald-500'
+                                        : totalFound > 0
+                                          ? 'tw:bg-amber-500'
+                                          : 'tw:bg-rose-500'
+                                    }`}
+                                  />
+                                </span>
+                              );
+                            })()}
                           <sup
                             className={`tw:select-none tw:font-bold tw:mr-1 tw:px-1 tw:rounded ${
                               flashVerseNum === child.number
@@ -2760,7 +2763,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                             }`}
                             style={{ fontSize: '0.65em', top: '-0.3em' }}
                           >
-                            {child.number}
+                            {child.numberStr || child.number}
                           </sup>
 
                           {/* Verse text content */}
@@ -2896,7 +2899,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                       </div>
                     )}
                   </div>
-                   <div className="tw:flex tw:items-center tw:gap-2">
+                  <div className="tw:flex tw:items-center tw:gap-2">
                     {m.matchResult?.found ? (
                       <span className="tw:text-[10px] tw:bg-emerald-50 tw:text-emerald-700 tw:px-2 tw:py-0.5 tw:border tw:border-emerald-200 tw:rounded-full tw:font-semibold">
                         ✓ Encontrado
@@ -2908,12 +2911,20 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                     )}
                     <button
                       onClick={async () => {
+                        if (!projectId) return;
                         setActiveVersePopup(null);
                         try {
-                          await papi.commands.sendCommand('paratextProjectManager.openKeyTerms', projectId);
+                          await papi.commands.sendCommand(
+                            'paratextProjectManager.openKeyTerms',
+                            projectId,
+                          );
                           // Small delay to allow the webview to finish opening/focusing before emitting the select event
                           await new Promise((r) => setTimeout(r, 400));
-                          await papi.commands.sendCommand('paratextProjectManager.selectKeyTerm', projectId, m.termId);
+                          await papi.commands.sendCommand(
+                            'paratextProjectManager.selectKeyTerm',
+                            projectId,
+                            m.termId,
+                          );
                         } catch (e) {
                           console.error('Failed to open key terms from popup:', e);
                         }
@@ -3161,7 +3172,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                                     )}
                                   </div>
                                 </div>
-                                <CommentText text={comm.plainText} projectId={projectId} />
+                                <CommentText text={comm.plainText} projectId={projectId || ''} />
                               </div>
                             );
                           })}

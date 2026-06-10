@@ -1,7 +1,7 @@
 import { WebViewProps } from '@papi/core';
 import papi from '@papi/frontend';
 import { useDialogCallback } from '@papi/frontend/react';
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type {
   KeyTermsStore,
   KeyTerm,
@@ -11,7 +11,6 @@ import type {
   MorphologyConfig,
   AffixRule,
 } from './types/key-terms.types';
-import { BIBLE_BOOKS, type BibleBook } from './types/shared.constants';
 
 globalThis.webViewComponent = function KeyTermsWebView({
   projectId,
@@ -26,11 +25,13 @@ globalThis.webViewComponent = function KeyTermsWebView({
 
   // Selected Term ID
   const [selectedTermId, setSelectedTermId] = useWebViewState<string>('selectedTermId', '');
-  
+
   // UI states
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDomain, setFilterDomain] = useState('all');
-  const [filterCompletion, setFilterCompletion] = useState<'all' | 'complete' | 'missing' | 'partial'>('all');
+  const [filterCompletion, setFilterCompletion] = useState<
+    'all' | 'complete' | 'missing' | 'partial'
+  >('all');
   const [newRenderingText, setNewRenderingText] = useState('');
   const [newContextTags, setNewContextTags] = useState<Record<string, string>>({});
   const [newNoteText, setNewNoteText] = useState('');
@@ -64,14 +65,16 @@ globalThis.webViewComponent = function KeyTermsWebView({
   // Listen to external key term selection events
   useEffect(() => {
     if (!papi.network || !papi.network.getNetworkEvent) return undefined;
-    const unsubscribe = papi.network.getNetworkEvent<any>('paratextProjectManager.onSelectKeyTerm')((event) => {
-      if (event && event.termId) {
-        if (event.projectId && event.projectId !== projectId) {
-          updateWebViewDefinition({ projectId: event.projectId });
+    const unsubscribe = papi.network.getNetworkEvent<any>('paratextProjectManager.onSelectKeyTerm')(
+      (event) => {
+        if (event && event.termId) {
+          if (event.projectId && event.projectId !== projectId) {
+            updateWebViewDefinition({ projectId: event.projectId });
+          }
+          setSelectedTermId(event.termId);
         }
-        setSelectedTermId(event.termId);
-      }
-    });
+      },
+    );
     return () => {
       unsubscribe();
     };
@@ -116,21 +119,31 @@ globalThis.webViewComponent = function KeyTermsWebView({
   );
 
   // Load key terms data from backend
+  const loadDataRequestRef = useRef(0);
+
   const loadData = useCallback(async () => {
     if (!projectId) return;
+    const requestId = ++loadDataRequestRef.current;
+    const isCurrentRequest = () => requestId === loadDataRequestRef.current;
     setLoading(true);
     setError('');
     try {
-      const dataStr = await papi.commands.sendCommand('paratextProjectManager.getKeyTermsData', projectId);
+      const dataStr = await papi.commands.sendCommand(
+        'paratextProjectManager.getKeyTermsData',
+        projectId,
+      );
+      if (!isCurrentRequest()) return;
       const parsed = JSON.parse(dataStr) as KeyTermsStore;
       setStore(parsed);
 
       const user = await papi.commands.sendCommand('paratextProjectManager.getCurrentUser');
+      if (!isCurrentRequest()) return;
       if (user) setCurrentUser(user);
     } catch (e: any) {
+      if (!isCurrentRequest()) return;
       setError(`Error al cargar datos de términos clave: ${e.message || e}`);
     } finally {
-      setLoading(false);
+      if (isCurrentRequest()) setLoading(false);
     }
   }, [projectId]);
 
@@ -139,27 +152,34 @@ globalThis.webViewComponent = function KeyTermsWebView({
   }, [loadData]);
 
   // Persist updated store to backend
-  const persistStore = useCallback(async (updated: KeyTermsStore) => {
-    if (!projectId) return;
-    setSaving(true);
-    setStore(updated); // Optimistic update
-    try {
-      await papi.commands.sendCommand(
-        'paratextProjectManager.saveKeyTermsData',
-        projectId,
-        JSON.stringify(updated, null, 2)
-      );
-    } catch (e: any) {
-      setError(`Error al guardar datos: ${e.message || e}`);
-    } finally {
-      setSaving(false);
-    }
-  }, [projectId]);
+  const persistStore = useCallback(
+    async (updated: KeyTermsStore) => {
+      if (!projectId) return;
+      setSaving(true);
+      setStore(updated); // Optimistic update
+      try {
+        await papi.commands.sendCommand(
+          'paratextProjectManager.saveKeyTermsData',
+          projectId,
+          JSON.stringify(updated, null, 2),
+        );
+      } catch (e: any) {
+        setError(`Error al guardar datos: ${e.message || e}`);
+      } finally {
+        setSaving(false);
+      }
+    },
+    [projectId],
+  );
 
   // Periodic scan of the current book/chapter to update match status checkboxes
+  const scanChapterRequestRef = useRef(0);
+
   const scanChapter = useCallback(async () => {
     if (!projectId || !store || !selectedTermId) return;
-    const term = store.terms.find(t => t.id === selectedTermId);
+    const requestId = ++scanChapterRequestRef.current;
+    const isCurrentRequest = () => requestId === scanChapterRequestRef.current;
+    const term = store.terms.find((t) => t.id === selectedTermId);
     if (!term || term.references.length === 0) return;
 
     setScanning(true);
@@ -176,17 +196,17 @@ globalThis.webViewComponent = function KeyTermsWebView({
       }
 
       const newMatches: Record<string, VerseMatchStatus> = { ...verseMatches };
-      
+
       const scanPromises = Array.from(chaptersToScan).map(async (bkChap) => {
         const [book, chapStr] = bkChap.split(' ');
         const chapter = parseInt(chapStr, 10);
         try {
-          const res = await papi.commands.sendCommand(
+          const res = (await papi.commands.sendCommand(
             'paratextProjectManager.scanChapterRenderings',
             projectId,
             book,
-            chapter
-          ) as string;
+            chapter,
+          )) as string;
           const parsed = JSON.parse(res) as { matches: VerseMatchStatus[] };
           if (parsed && parsed.matches) {
             for (const match of parsed.matches) {
@@ -197,10 +217,10 @@ globalThis.webViewComponent = function KeyTermsWebView({
       });
 
       await Promise.all(scanPromises);
-      setVerseMatches(newMatches);
+      if (isCurrentRequest()) setVerseMatches(newMatches);
     } catch (_) {
     } finally {
-      setScanning(false);
+      if (isCurrentRequest()) setScanning(false);
     }
   }, [projectId, store, selectedTermId, verseMatches]);
 
@@ -211,40 +231,47 @@ globalThis.webViewComponent = function KeyTermsWebView({
   }, [selectedTermId]);
 
   // Navigate to specific verse reference
-  const handleVerseClick = useCallback(async (ref: string) => {
-    if (!projectId) return;
-    const parts = ref.split(' ');
-    if (parts.length < 2) return;
-    const book = parts[0];
-    const [chapStr, verseStr] = parts[1].split(':');
-    const chapter = parseInt(chapStr, 10);
-    const verse = parseInt(verseStr, 10);
-    
-    try {
-      await papi.commands.sendCommand(
-        'paratextProjectManager.navigateToVerse',
-        projectId,
-        book,
-        chapter,
-        verse
-      );
-    } catch (e) {
-      console.error('Failed to navigate to verse:', e);
-    }
-  }, [projectId]);
+  const handleVerseClick = useCallback(
+    async (ref: string) => {
+      if (!projectId) return;
+      const parts = ref.split(' ');
+      if (parts.length < 2) return;
+      const book = parts[0];
+      const [chapStr, verseStr] = parts[1].split(':');
+      const chapter = parseInt(chapStr, 10);
+      const verse = parseInt(verseStr, 10);
+
+      try {
+        await papi.commands.sendCommand(
+          'paratextProjectManager.navigateToVerse',
+          projectId,
+          book,
+          chapter,
+          verse,
+        );
+      } catch (e) {
+        console.error('Failed to navigate to verse:', e);
+      }
+    },
+    [projectId],
+  );
 
   // Modify morphology config
-  const handleMorphologyChange = useCallback(async (updates: Partial<MorphologyConfig>) => {
-    if (!store) return;
-    const updatedStore = {
-      ...store,
-      morphologyConfig: {
-        ...store.morphologyConfig,
-        ...updates
-      }
-    };
-    await persistStore(updatedStore);
-  }, [store, persistStore]);
+  const handleMorphologyChange = useCallback(
+    async (updates: Partial<MorphologyConfig>) => {
+      if (!store) return;
+      const updatedStore = {
+        ...store,
+        morphologyConfig: {
+          ...store.morphologyConfig,
+          ...updates,
+        },
+      };
+      await persistStore(updatedStore);
+      setTimeout(scanChapter, 300);
+    },
+    [store, persistStore, scanChapter],
+  );
 
   // Add Prefix Affix Rule
   const addPrefixRule = useCallback(async () => {
@@ -253,19 +280,20 @@ globalThis.webViewComponent = function KeyTermsWebView({
       id: `p-${Date.now()}`,
       affix: newPrefix.trim(),
       label: newPrefixLabel.trim() || 'Prefijo',
-      enabled: true
+      enabled: true,
     };
     const updatedStore = {
       ...store,
       morphologyConfig: {
         ...store.morphologyConfig,
-        prefixes: [...(store.morphologyConfig.prefixes || []), newRule]
-      }
+        prefixes: [...(store.morphologyConfig.prefixes || []), newRule],
+      },
     };
     setNewPrefix('');
     setNewPrefixLabel('');
     await persistStore(updatedStore);
-  }, [store, newPrefix, newPrefixLabel, persistStore]);
+    setTimeout(scanChapter, 300);
+  }, [store, newPrefix, newPrefixLabel, persistStore, scanChapter]);
 
   // Add Suffix Affix Rule
   const addSuffixRule = useCallback(async () => {
@@ -274,19 +302,20 @@ globalThis.webViewComponent = function KeyTermsWebView({
       id: `s-${Date.now()}`,
       affix: newSuffix.trim(),
       label: newSuffixLabel.trim() || 'Sufijo',
-      enabled: true
+      enabled: true,
     };
     const updatedStore = {
       ...store,
       morphologyConfig: {
         ...store.morphologyConfig,
-        suffixes: [...(store.morphologyConfig.suffixes || []), newRule]
-      }
+        suffixes: [...(store.morphologyConfig.suffixes || []), newRule],
+      },
     };
     setNewSuffix('');
     setNewSuffixLabel('');
     await persistStore(updatedStore);
-  }, [store, newSuffix, newSuffixLabel, persistStore]);
+    setTimeout(scanChapter, 300);
+  }, [store, newSuffix, newSuffixLabel, persistStore, scanChapter]);
 
   // Add Infix Affix Rule
   const addInfixRule = useCallback(async () => {
@@ -295,56 +324,71 @@ globalThis.webViewComponent = function KeyTermsWebView({
       id: `i-${Date.now()}`,
       affix: newInfix.trim(),
       label: newInfixLabel.trim() || 'Infijo',
-      enabled: true
+      enabled: true,
     };
     const updatedStore = {
       ...store,
       morphologyConfig: {
         ...store.morphologyConfig,
-        infixes: [...(store.morphologyConfig.infixes || []), newRule]
-      }
+        infixes: [...(store.morphologyConfig.infixes || []), newRule],
+      },
     };
     setNewInfix('');
     setNewInfixLabel('');
     await persistStore(updatedStore);
-  }, [store, newInfix, newInfixLabel, persistStore]);
+    setTimeout(scanChapter, 300);
+  }, [store, newInfix, newInfixLabel, persistStore, scanChapter]);
 
   // Toggle Affix Rule
-  const toggleRule = useCallback(async (ruleId: string, type: 'prefix' | 'suffix' | 'infix') => {
-    if (!store) return;
-    const config = store.morphologyConfig;
-    if (type === 'prefix') {
-      const prefixes = (config.prefixes || []).map(r => r.id === ruleId ? { ...r, enabled: !r.enabled } : r);
-      await persistStore({ ...store, morphologyConfig: { ...config, prefixes } });
-    } else if (type === 'suffix') {
-      const suffixes = (config.suffixes || []).map(r => r.id === ruleId ? { ...r, enabled: !r.enabled } : r);
-      await persistStore({ ...store, morphologyConfig: { ...config, suffixes } });
-    } else {
-      const infixes = (config.infixes || []).map(r => r.id === ruleId ? { ...r, enabled: !r.enabled } : r);
-      await persistStore({ ...store, morphologyConfig: { ...config, infixes } });
-    }
-  }, [store, persistStore]);
+  const toggleRule = useCallback(
+    async (ruleId: string, type: 'prefix' | 'suffix' | 'infix') => {
+      if (!store) return;
+      const config = store.morphologyConfig;
+      if (type === 'prefix') {
+        const prefixes = (config.prefixes || []).map((r) =>
+          r.id === ruleId ? { ...r, enabled: !r.enabled } : r,
+        );
+        await persistStore({ ...store, morphologyConfig: { ...config, prefixes } });
+      } else if (type === 'suffix') {
+        const suffixes = (config.suffixes || []).map((r) =>
+          r.id === ruleId ? { ...r, enabled: !r.enabled } : r,
+        );
+        await persistStore({ ...store, morphologyConfig: { ...config, suffixes } });
+      } else {
+        const infixes = (config.infixes || []).map((r) =>
+          r.id === ruleId ? { ...r, enabled: !r.enabled } : r,
+        );
+        await persistStore({ ...store, morphologyConfig: { ...config, infixes } });
+      }
+      setTimeout(scanChapter, 300);
+    },
+    [store, persistStore, scanChapter],
+  );
 
   // Delete Affix Rule
-  const deleteRule = useCallback(async (ruleId: string, type: 'prefix' | 'suffix' | 'infix') => {
-    if (!store) return;
-    const config = store.morphologyConfig;
-    if (type === 'prefix') {
-      const prefixes = (config.prefixes || []).filter(r => r.id !== ruleId);
-      await persistStore({ ...store, morphologyConfig: { ...config, prefixes } });
-    } else if (type === 'suffix') {
-      const suffixes = (config.suffixes || []).filter(r => r.id !== ruleId);
-      await persistStore({ ...store, morphologyConfig: { ...config, suffixes } });
-    } else {
-      const infixes = (config.infixes || []).filter(r => r.id !== ruleId);
-      await persistStore({ ...store, morphologyConfig: { ...config, infixes } });
-    }
-  }, [store, persistStore]);
+  const deleteRule = useCallback(
+    async (ruleId: string, type: 'prefix' | 'suffix' | 'infix') => {
+      if (!store) return;
+      const config = store.morphologyConfig;
+      if (type === 'prefix') {
+        const prefixes = (config.prefixes || []).filter((r) => r.id !== ruleId);
+        await persistStore({ ...store, morphologyConfig: { ...config, prefixes } });
+      } else if (type === 'suffix') {
+        const suffixes = (config.suffixes || []).filter((r) => r.id !== ruleId);
+        await persistStore({ ...store, morphologyConfig: { ...config, suffixes } });
+      } else {
+        const infixes = (config.infixes || []).filter((r) => r.id !== ruleId);
+        await persistStore({ ...store, morphologyConfig: { ...config, infixes } });
+      }
+      setTimeout(scanChapter, 300);
+    },
+    [store, persistStore, scanChapter],
+  );
 
   // Selected term details
   const selectedTerm = useMemo(() => {
     if (!store || !selectedTermId) return null;
-    return store.terms.find(t => t.id === selectedTermId) || null;
+    return store.terms.find((t) => t.id === selectedTermId) || null;
   }, [store, selectedTermId]);
 
   // Add a rendering to selected term
@@ -359,15 +403,15 @@ globalThis.webViewComponent = function KeyTermsWebView({
       votes: [],
       proposedBy: currentUser,
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
     };
 
-    const terms = store.terms.map(t => {
+    const terms = store.terms.map((t) => {
       if (t.id === selectedTermId) {
         return {
           ...t,
           renderings: [...(t.renderings || []), newRend],
-          updatedAt: now
+          updatedAt: now,
         };
       }
       return t;
@@ -379,92 +423,110 @@ globalThis.webViewComponent = function KeyTermsWebView({
   }, [store, selectedTermId, newRenderingText, currentUser, persistStore, scanChapter]);
 
   // Change rendering status
-  const updateRenderingStatus = useCallback(async (renderingId: string, status: RenderingStatus) => {
-    if (!store || !selectedTermId) return;
-    const now = new Date().toISOString();
-    const terms = store.terms.map(t => {
-      if (t.id === selectedTermId) {
-        const renderings = t.renderings.map(r => 
-          r.id === renderingId ? { ...r, status, updatedAt: now } : r
-        );
-        return { ...t, renderings, updatedAt: now };
-      }
-      return t;
-    });
-    await persistStore({ ...store, terms });
-    setTimeout(scanChapter, 300);
-  }, [store, selectedTermId, persistStore, scanChapter]);
+  const updateRenderingStatus = useCallback(
+    async (renderingId: string, status: RenderingStatus) => {
+      if (!store || !selectedTermId) return;
+      const now = new Date().toISOString();
+      const terms = store.terms.map((t) => {
+        if (t.id === selectedTermId) {
+          const renderings = t.renderings.map((r) =>
+            r.id === renderingId ? { ...r, status, updatedAt: now } : r,
+          );
+          return { ...t, renderings, updatedAt: now };
+        }
+        return t;
+      });
+      await persistStore({ ...store, terms });
+      setTimeout(scanChapter, 300);
+    },
+    [store, selectedTermId, persistStore, scanChapter],
+  );
 
   // Vote on rendering
-  const voteRendering = useCallback(async (renderingId: string, value: 'up' | 'down') => {
-    if (!store || !selectedTermId) return;
-    const now = new Date().toISOString();
-    const terms = store.terms.map(t => {
-      if (t.id === selectedTermId) {
-        const renderings = t.renderings.map(r => {
-          if (r.id === renderingId) {
-            // Remove existing vote by user if any
-            const cleanVotes = (r.votes || []).filter(v => v.user !== currentUser);
-            const newVote = { user: currentUser, value, timestamp: now };
-            return {
-              ...r,
-              votes: [...cleanVotes, newVote],
-              updatedAt: now
-            };
-          }
-          return r;
-        });
-        return { ...t, renderings, updatedAt: now };
-      }
-      return t;
-    });
-    await persistStore({ ...store, terms });
-  }, [store, selectedTermId, currentUser, persistStore]);
+  const voteRendering = useCallback(
+    async (renderingId: string, value: 'up' | 'down') => {
+      if (!store || !selectedTermId) return;
+      const now = new Date().toISOString();
+      const terms = store.terms.map((t) => {
+        if (t.id === selectedTermId) {
+          const renderings = t.renderings.map((r) => {
+            if (r.id === renderingId) {
+              const existingVote = (r.votes || []).find((v) => v.user === currentUser);
+              const cleanVotes = (r.votes || []).filter((v) => v.user !== currentUser);
+
+              // If clicking the same button they already voted for, remove the vote entirely (retract)
+              const shouldRetract = existingVote && existingVote.value === value;
+              const updatedVotes = shouldRetract
+                ? cleanVotes
+                : [...cleanVotes, { user: currentUser, value, timestamp: now }];
+
+              return {
+                ...r,
+                votes: updatedVotes,
+                updatedAt: now,
+              };
+            }
+            return r;
+          });
+          return { ...t, renderings, updatedAt: now };
+        }
+        return t;
+      });
+      await persistStore({ ...store, terms });
+    },
+    [store, selectedTermId, currentUser, persistStore],
+  );
 
   // Add context tag to rendering
-  const addContextTag = useCallback(async (renderingId: string) => {
-    const rawTag = newContextTags[renderingId] || '';
-    if (!store || !selectedTermId || !rawTag.trim()) return;
-    const now = new Date().toISOString();
-    const tag = rawTag.trim().toLowerCase();
-    
-    const terms = store.terms.map(t => {
-      if (t.id === selectedTermId) {
-        const renderings = t.renderings.map(r => {
-          if (r.id === renderingId) {
-            const contextTags = Array.from(new Set([...(r.contextTags || []), tag]));
-            return { ...r, contextTags, updatedAt: now };
-          }
-          return r;
-        });
-        return { ...t, renderings, updatedAt: now };
-      }
-      return t;
-    });
+  const addContextTag = useCallback(
+    async (renderingId: string) => {
+      const rawTag = newContextTags[renderingId] || '';
+      if (!store || !selectedTermId || !rawTag.trim()) return;
+      const now = new Date().toISOString();
+      const tag = rawTag.trim().toLowerCase();
 
-    setNewContextTags(prev => ({ ...prev, [renderingId]: '' }));
-    await persistStore({ ...store, terms });
-  }, [store, selectedTermId, newContextTags, persistStore]);
+      const terms = store.terms.map((t) => {
+        if (t.id === selectedTermId) {
+          const renderings = t.renderings.map((r) => {
+            if (r.id === renderingId) {
+              const contextTags = Array.from(new Set([...(r.contextTags || []), tag]));
+              return { ...r, contextTags, updatedAt: now };
+            }
+            return r;
+          });
+          return { ...t, renderings, updatedAt: now };
+        }
+        return t;
+      });
+
+      setNewContextTags((prev) => ({ ...prev, [renderingId]: '' }));
+      await persistStore({ ...store, terms });
+    },
+    [store, selectedTermId, newContextTags, persistStore],
+  );
 
   // Remove context tag from rendering
-  const removeContextTag = useCallback(async (renderingId: string, tag: string) => {
-    if (!store || !selectedTermId) return;
-    const now = new Date().toISOString();
-    const terms = store.terms.map(t => {
-      if (t.id === selectedTermId) {
-        const renderings = t.renderings.map(r => {
-          if (r.id === renderingId) {
-            const contextTags = (r.contextTags || []).filter(t => t !== tag);
-            return { ...r, contextTags, updatedAt: now };
-          }
-          return r;
-        });
-        return { ...t, renderings, updatedAt: now };
-      }
-      return t;
-    });
-    await persistStore({ ...store, terms });
-  }, [store, selectedTermId, persistStore]);
+  const removeContextTag = useCallback(
+    async (renderingId: string, tag: string) => {
+      if (!store || !selectedTermId) return;
+      const now = new Date().toISOString();
+      const terms = store.terms.map((t) => {
+        if (t.id === selectedTermId) {
+          const renderings = t.renderings.map((r) => {
+            if (r.id === renderingId) {
+              const contextTags = (r.contextTags || []).filter((t) => t !== tag);
+              return { ...r, contextTags, updatedAt: now };
+            }
+            return r;
+          });
+          return { ...t, renderings, updatedAt: now };
+        }
+        return t;
+      });
+      await persistStore({ ...store, terms });
+    },
+    [store, selectedTermId, persistStore],
+  );
 
   // Add Note to key term
   const addNote = useCallback(async () => {
@@ -474,15 +536,15 @@ globalThis.webViewComponent = function KeyTermsWebView({
       id: `n-${Date.now()}`,
       author: currentUser,
       text: newNoteText.trim(),
-      timestamp: now
+      timestamp: now,
     };
 
-    const terms = store.terms.map(t => {
+    const terms = store.terms.map((t) => {
       if (t.id === selectedTermId) {
         return {
           ...t,
           notes: [...(t.notes || []), newNote],
-          updatedAt: now
+          updatedAt: now,
         };
       }
       return t;
@@ -510,32 +572,37 @@ globalThis.webViewComponent = function KeyTermsWebView({
   // - Complete: Has at least one approved rendering AND all references are matched
   // - Missing: Has no approved renderings
   // - Partial: Has approved renderings but some references are missing matches
-  const getTermStatus = useCallback((term: KeyTerm): 'complete' | 'missing' | 'partial' => {
-    const approved = term.renderings ? term.renderings.filter(r => r.status === 'approved') : [];
-    if (approved.length === 0) return 'missing';
-    
-    // Check if we scanned references
-    let allFound = true;
-    let hasScan = false;
-    for (const ref of term.references) {
-      const match = verseMatches[`${term.id}-${ref}`];
-      if (match) {
-        hasScan = true;
-        if (!match.matchResult.found) {
-          allFound = false;
+  const getTermStatus = useCallback(
+    (term: KeyTerm): 'complete' | 'missing' | 'partial' => {
+      const approved = term.renderings
+        ? term.renderings.filter((r) => r.status === 'approved')
+        : [];
+      if (approved.length === 0) return 'missing';
+
+      // Check if we scanned references
+      let allFound = true;
+      let hasScan = false;
+      for (const ref of term.references) {
+        const match = verseMatches[`${term.id}-${ref}`];
+        if (match) {
+          hasScan = true;
+          if (!match.matchResult.found) {
+            allFound = false;
+          }
         }
       }
-    }
-    
-    if (hasScan && !allFound) return 'partial';
-    return 'complete';
-  }, [verseMatches]);
+
+      if (hasScan && !allFound) return 'partial';
+      return 'complete';
+    },
+    [verseMatches],
+  );
 
   // Filtered terms list
   const filteredTerms = useMemo(() => {
     if (!store) return [];
     return store.terms
-      .filter(t => {
+      .filter((t) => {
         // Search filter
         const q = searchTerm.toLowerCase().trim();
         if (q) {
@@ -545,12 +612,12 @@ globalThis.webViewComponent = function KeyTermsWebView({
           const translitMatch = t.transliteration && t.transliteration.toLowerCase().includes(q);
           if (!glossMatch && !lemmaMatch && !strongMatch && !translitMatch) return false;
         }
-        
+
         // Domain filter
         if (filterDomain !== 'all' && (!t.domains || !t.domains.includes(filterDomain))) {
           return false;
         }
-        
+
         // Completion filter
         const status = getTermStatus(t);
         if (filterCompletion !== 'all' && status !== filterCompletion) {
@@ -564,7 +631,8 @@ globalThis.webViewComponent = function KeyTermsWebView({
 
   // Percentage complete overall
   const completionStats = useMemo(() => {
-    if (!store || store.terms.length === 0) return { percent: 0, missing: 0, partial: 0, complete: 0 };
+    if (!store || store.terms.length === 0)
+      return { percent: 0, missing: 0, partial: 0, complete: 0 };
     let missing = 0;
     let partial = 0;
     let complete = 0;
@@ -587,7 +655,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
         <p className="tw:text-gray-600">Ningún proyecto seleccionado.</p>
         <button
           className="tw:px-4 tw:py-2 tw:bg-indigo-600 tw:text-white tw:rounded-lg tw:hover:bg-indigo-700 tw:cursor-pointer"
-          onClick={selectProject}
+          onClick={() => selectProject()}
         >
           Seleccionar Proyecto
         </button>
@@ -622,7 +690,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
                 Actualizar
               </button>
             </div>
-            
+
             {/* Search Input */}
             <div className="tw:relative">
               <input
@@ -644,15 +712,19 @@ globalThis.webViewComponent = function KeyTermsWebView({
 
             {/* Semantic Domain Filter */}
             <div className="tw:flex tw:flex-col tw:gap-1">
-              <label className="tw:text-[10px] tw:text-slate-400 tw:font-semibold uppercase">Dominio Semántico</label>
+              <label className="tw:text-[10px] tw:text-slate-400 tw:font-semibold uppercase">
+                Dominio Semántico
+              </label>
               <select
                 value={filterDomain}
                 onChange={(e) => setFilterDomain(e.target.value)}
                 className="tw:w-full tw:border tw:border-slate-200 tw:rounded-lg tw:px-2 tw:py-1 tw:text-xs"
               >
                 <option value="all">Todos los dominios</option>
-                {allDomains.map(d => (
-                  <option key={d} value={d}>{d}</option>
+                {allDomains.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
                 ))}
               </select>
             </div>
@@ -663,8 +735,8 @@ globalThis.webViewComponent = function KeyTermsWebView({
                 { key: 'all', label: 'Todos' },
                 { key: 'complete', label: 'Completos' },
                 { key: 'partial', label: 'Parciales' },
-                { key: 'missing', label: 'Faltantes' }
-              ].map(opt => (
+                { key: 'missing', label: 'Faltantes' },
+              ].map((opt) => (
                 <button
                   key={opt.key}
                   onClick={() => setFilterCompletion(opt.key as any)}
@@ -682,16 +754,21 @@ globalThis.webViewComponent = function KeyTermsWebView({
             {/* Micro stats bar */}
             <div className="tw:pt-1 tw:text-[10px] tw:text-slate-400 tw:flex tw:justify-between">
               <span>{completionStats.percent}% Completado</span>
-              <span>{filteredTerms.length} / {store?.terms.length || 0} términos</span>
+              <span>
+                {filteredTerms.length} / {store?.terms.length || 0} términos
+              </span>
             </div>
           </div>
 
           {/* List area */}
-          <div ref={sidebarListRef} className="tw:flex-1 tw:overflow-y-auto tw:divide-y tw:divide-slate-100">
-            {filteredTerms.map(term => {
+          <div
+            ref={sidebarListRef}
+            className="tw:flex-1 tw:overflow-y-auto tw:divide-y tw:divide-slate-100"
+          >
+            {filteredTerms.map((term) => {
               const status = getTermStatus(term);
               const isSelected = term.id === selectedTermId;
-              
+
               let statusBg = 'tw:bg-red-100 tw:text-red-700';
               let statusText = 'Faltante';
               if (status === 'complete') {
@@ -712,8 +789,12 @@ globalThis.webViewComponent = function KeyTermsWebView({
                   }`}
                 >
                   <div className="tw:flex tw:items-start tw:justify-between tw:gap-2">
-                    <span className="tw:font-semibold tw:text-sm tw:text-slate-700 tw:truncate">{term.gloss}</span>
-                    <span className={`tw:text-[9px] tw:px-1.5 tw:py-0.5 tw:rounded-full tw:font-medium ${statusBg}`}>
+                    <span className="tw:font-semibold tw:text-sm tw:text-slate-700 tw:truncate">
+                      {term.gloss}
+                    </span>
+                    <span
+                      className={`tw:text-[9px] tw:px-1.5 tw:py-0.5 tw:rounded-full tw:font-medium ${statusBg}`}
+                    >
                       {statusText}
                     </span>
                   </div>
@@ -760,12 +841,17 @@ globalThis.webViewComponent = function KeyTermsWebView({
         <div className="tw:px-4 tw:py-3 tw:bg-white tw:border-b tw:border-slate-200 tw:flex tw:items-center tw:justify-between">
           <div className="tw:flex tw:items-center tw:gap-3">
             <button
-              onClick={() => setSidebarVisible(v => !v)}
+              onClick={() => setSidebarVisible((v) => !v)}
               className="tw:p-1.5 tw:rounded-md tw:text-slate-600 tw:hover:bg-slate-100"
-              title={sidebarVisible ? "Ocultar panel lateral" : "Mostrar panel lateral"}
+              title={sidebarVisible ? 'Ocultar panel lateral' : 'Mostrar panel lateral'}
             >
               <svg className="tw:w-5 tw:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M4 6h16M4 12h16M4 18h16"
+                />
               </svg>
             </button>
             <span className="tw:font-bold tw:text-slate-700">Verificador de Términos Clave</span>
@@ -775,12 +861,18 @@ globalThis.webViewComponent = function KeyTermsWebView({
             {saving && <span className="tw:text-xs tw:text-slate-400">Guardando...</span>}
             <button
               className="tw:px-3 tw:py-1.5 tw:bg-indigo-50 tw:text-indigo-700 tw:border tw:border-indigo-100 tw:rounded-lg tw:text-xs tw:font-medium tw:hover:bg-indigo-100 tw:cursor-pointer"
-              onClick={selectProject}
+              onClick={() => selectProject()}
             >
               Cambiar Proyecto
             </button>
           </div>
         </div>
+
+        {error && (
+          <div className="tw:bg-red-50 tw:border-b tw:border-red-200 tw:px-4 tw:py-2 tw:text-red-700 tw:text-xs tw:font-medium">
+            {error}
+          </div>
+        )}
 
         {/* Workspace area */}
         {selectedTerm ? (
@@ -789,11 +881,17 @@ globalThis.webViewComponent = function KeyTermsWebView({
             <div className="tw:bg-white tw:p-4 tw:rounded-xl tw:border tw:border-slate-200 tw:shadow-sm tw:space-y-3">
               <div className="tw:flex tw:items-start tw:justify-between">
                 <div>
-                  <h2 className="tw:text-xl tw:font-bold tw:text-slate-700">{selectedTerm.gloss}</h2>
+                  <h2 className="tw:text-xl tw:font-bold tw:text-slate-700">
+                    {selectedTerm.gloss}
+                  </h2>
                   <div className="tw:flex tw:items-center tw:gap-2 tw:mt-1">
-                    <span className="tw:font-serif tw:text-lg tw:text-indigo-600">{selectedTerm.lemma}</span>
+                    <span className="tw:font-serif tw:text-lg tw:text-indigo-600">
+                      {selectedTerm.lemma}
+                    </span>
                     {selectedTerm.transliteration && (
-                      <span className="tw:text-sm tw:text-slate-400 tw:italic">({selectedTerm.transliteration})</span>
+                      <span className="tw:text-sm tw:text-slate-400 tw:italic">
+                        ({selectedTerm.transliteration})
+                      </span>
                     )}
                   </div>
                 </div>
@@ -807,8 +905,11 @@ globalThis.webViewComponent = function KeyTermsWebView({
               {/* Domains tags */}
               {selectedTerm.domains && selectedTerm.domains.length > 0 && (
                 <div className="tw:flex tw:gap-1.5 tw:flex-wrap">
-                  {selectedTerm.domains.map(dom => (
-                    <span key={dom} className="tw:text-[10px] tw:px-2 tw:py-0.5 tw:bg-indigo-50 tw:text-indigo-600 tw:rounded-md tw:font-semibold uppercase">
+                  {selectedTerm.domains.map((dom) => (
+                    <span
+                      key={dom}
+                      className="tw:text-[10px] tw:px-2 tw:py-0.5 tw:bg-indigo-50 tw:text-indigo-600 tw:rounded-md tw:font-semibold uppercase"
+                    >
                       {dom}
                     </span>
                   ))}
@@ -818,8 +919,10 @@ globalThis.webViewComponent = function KeyTermsWebView({
 
             {/* Renderings Card (Feature 2 & 5) */}
             <div className="tw:bg-white tw:p-4 tw:rounded-xl tw:border tw:border-slate-200 tw:shadow-sm tw:space-y-4">
-              <h3 className="tw:font-bold tw:text-sm tw:text-slate-700 uppercase tw:tracking-wider">Traducciones en el idioma meta</h3>
-              
+              <h3 className="tw:font-bold tw:text-sm tw:text-slate-700 uppercase tw:tracking-wider">
+                Traducciones en el idioma meta
+              </h3>
+
               {/* Add Rendering Input */}
               <div className="tw:flex tw:gap-2">
                 <input
@@ -840,103 +943,132 @@ globalThis.webViewComponent = function KeyTermsWebView({
 
               {/* Renderings List */}
               <div className="tw:space-y-3">
-                {selectedTerm.renderings && selectedTerm.renderings.map((rend, rendIdx) => {
-                  // Safety: ensure each rendering has a stable ID (legacy terms may lack one)
-                  const rendId = rend.id || `rend-${selectedTermId}-${rendIdx}-${rend.text.slice(0, 8)}`;
-                  const upVotes = rend.votes ? rend.votes.filter(v => v.value === 'up').length : 0;
-                  const downVotes = rend.votes ? rend.votes.filter(v => v.value === 'down').length : 0;
-                  
-                  const hasUpvoted = rend.votes && rend.votes.some(v => v.user === currentUser && v.value === 'up');
-                  const hasDownvoted = rend.votes && rend.votes.some(v => v.user === currentUser && v.value === 'down');
+                {selectedTerm.renderings &&
+                  selectedTerm.renderings.map((rend, rendIdx) => {
+                    // Safety: ensure each rendering has a stable ID (legacy terms may lack one)
+                    const rendId =
+                      rend.id || `rend-${selectedTermId}-${rendIdx}-${rend.text.slice(0, 8)}`;
+                    const upVotes = rend.votes
+                      ? rend.votes.filter((v) => v.value === 'up').length
+                      : 0;
+                    const downVotes = rend.votes
+                      ? rend.votes.filter((v) => v.value === 'down').length
+                      : 0;
 
-                  return (
-                    <div key={rendId} className="tw:p-3 tw:bg-slate-50 tw:rounded-lg tw:border tw:border-slate-100 tw:space-y-2">
-                      <div className="tw:flex tw:items-start tw:justify-between tw:gap-4">
-                        <div className="tw:space-y-1">
-                          <span className="tw:font-bold tw:text-sm tw:text-slate-700">{rend.text}</span>
-                          <div className="tw:flex tw:items-center tw:gap-1.5">
-                            <span className="tw:text-[10px] tw:text-slate-400">Propuesto por: {rend.proposedBy}</span>
-                          </div>
-                        </div>
+                    const hasUpvoted =
+                      rend.votes &&
+                      rend.votes.some((v) => v.user === currentUser && v.value === 'up');
+                    const hasDownvoted =
+                      rend.votes &&
+                      rend.votes.some((v) => v.user === currentUser && v.value === 'down');
 
-                        {/* Status select dropdown */}
-                        <select
-                          value={rend.status}
-                          onChange={(e) => updateRenderingStatus(rendId, e.target.value as any)}
-                          className={`tw:text-xs tw:px-2 tw:py-1 tw:rounded-md tw:border tw:font-medium ${
-                            rend.status === 'approved' ? 'tw:bg-green-50 tw:text-green-700 tw:border-green-200' :
-                            rend.status === 'disputed' ? 'tw:bg-red-50 tw:text-red-700 tw:border-red-200' :
-                            rend.status === 'proposed' ? 'tw:bg-yellow-50 tw:text-yellow-700 tw:border-yellow-200' :
-                            'tw:bg-slate-100 tw:text-slate-600 tw:border-slate-300'
-                          }`}
-                        >
-                          <option value="draft">Borrador</option>
-                          <option value="proposed">Propuesto</option>
-                          <option value="disputed">Discutido</option>
-                          <option value="approved">Aprobado</option>
-                        </select>
-                      </div>
-
-                      {/* Vote & tag widgets */}
-                      <div className="tw:flex tw:items-center tw:justify-between tw:pt-1 tw:gap-2 tw:flex-wrap">
-                        {/* Vote buttons */}
-                        <div className="tw:flex tw:items-center tw:gap-2">
-                          <button
-                            onClick={() => voteRendering(rendId, 'up')}
-                            className={`tw:flex tw:items-center tw:gap-1 tw:px-2 tw:py-1 tw:rounded-md tw:border tw:text-xs tw:cursor-pointer ${
-                              hasUpvoted
-                                ? 'tw:bg-indigo-50 tw:text-indigo-600 tw:border-indigo-200'
-                                : 'tw:bg-white tw:text-slate-500 tw:border-slate-200 hover:tw:bg-slate-100'
-                            }`}
-                          >
-                            👍 <span className="tw:font-semibold">{upVotes}</span>
-                          </button>
-                          <button
-                            onClick={() => voteRendering(rendId, 'down')}
-                            className={`tw:flex tw:items-center tw:gap-1 tw:px-2 tw:py-1 tw:rounded-md tw:border tw:text-xs tw:cursor-pointer ${
-                              hasDownvoted
-                                ? 'tw:bg-red-50 tw:text-red-600 tw:border-red-200'
-                                : 'tw:bg-white tw:text-slate-500 tw:border-slate-200 hover:tw:bg-slate-100'
-                            }`}
-                          >
-                            👎 <span className="tw:font-semibold">{downVotes}</span>
-                          </button>
-                        </div>
-
-                        {/* Context Tags widget */}
-                        <div className="tw:flex tw:items-center tw:gap-1 tw:flex-wrap">
-                          {rend.contextTags && rend.contextTags.map(tag => (
-                            <span key={tag} className="tw:inline-flex tw:items-center tw:gap-1 tw:text-[10px] tw:bg-slate-200 tw:text-slate-600 tw:rounded tw:px-1.5 tw:py-0.5 font-medium">
-                              #{tag}
-                              <button
-                                onClick={() => removeContextTag(rendId, tag)}
-                                className="tw:text-slate-400 tw:hover:text-slate-600 font-bold"
-                              >
-                                ✕
-                              </button>
+                    return (
+                      <div
+                        key={rendId}
+                        className="tw:p-3 tw:bg-slate-50 tw:rounded-lg tw:border tw:border-slate-100 tw:space-y-2"
+                      >
+                        <div className="tw:flex tw:items-start tw:justify-between tw:gap-4">
+                          <div className="tw:space-y-1">
+                            <span className="tw:font-bold tw:text-sm tw:text-slate-700">
+                              {rend.text}
                             </span>
-                          ))}
-                          <div className="tw:flex tw:gap-1">
-                            <input
-                              type="text"
-                              placeholder="+tag"
-                              value={newContextTags[rendId] || ''}
-                              onChange={(e) => setNewContextTags(prev => ({ ...prev, [rendId]: e.target.value }))}
-                              onKeyDown={(e) => e.key === 'Enter' && addContextTag(rendId)}
-                              className="tw:border tw:border-slate-200 tw:rounded tw:px-1 tw:py-0.5 tw:text-[10px] tw:w-16"
-                            />
+                            <div className="tw:flex tw:items-center tw:gap-1.5">
+                              <span className="tw:text-[10px] tw:text-slate-400">
+                                Propuesto por: {rend.proposedBy}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Status select dropdown */}
+                          <select
+                            value={rend.status}
+                            onChange={(e) => updateRenderingStatus(rendId, e.target.value as any)}
+                            className={`tw:text-xs tw:px-2 tw:py-1 tw:rounded-md tw:border tw:font-medium ${
+                              rend.status === 'approved'
+                                ? 'tw:bg-green-50 tw:text-green-700 tw:border-green-200'
+                                : rend.status === 'disputed'
+                                  ? 'tw:bg-red-50 tw:text-red-700 tw:border-red-200'
+                                  : rend.status === 'proposed'
+                                    ? 'tw:bg-yellow-50 tw:text-yellow-700 tw:border-yellow-200'
+                                    : 'tw:bg-slate-100 tw:text-slate-600 tw:border-slate-300'
+                            }`}
+                          >
+                            <option value="draft">Borrador</option>
+                            <option value="proposed">Propuesto</option>
+                            <option value="disputed">Discutido</option>
+                            <option value="approved">Aprobado</option>
+                          </select>
+                        </div>
+
+                        {/* Vote & tag widgets */}
+                        <div className="tw:flex tw:items-center tw:justify-between tw:pt-1 tw:gap-2 tw:flex-wrap">
+                          {/* Vote buttons */}
+                          <div className="tw:flex tw:items-center tw:gap-2">
                             <button
-                              onClick={() => addContextTag(rendId)}
-                              className="tw:px-1.5 tw:bg-slate-200 tw:rounded tw:text-[10px] tw:hover:bg-slate-300"
+                              onClick={() => voteRendering(rendId, 'up')}
+                              className={`tw:flex tw:items-center tw:gap-1 tw:px-2 tw:py-1 tw:rounded-md tw:border tw:text-xs tw:cursor-pointer ${
+                                hasUpvoted
+                                  ? 'tw:bg-indigo-50 tw:text-indigo-600 tw:border-indigo-200'
+                                  : 'tw:bg-white tw:text-slate-500 tw:border-slate-200 hover:tw:bg-slate-100'
+                              }`}
                             >
-                              +
+                              👍 <span className="tw:font-semibold">{upVotes}</span>
+                            </button>
+                            <button
+                              onClick={() => voteRendering(rendId, 'down')}
+                              className={`tw:flex tw:items-center tw:gap-1 tw:px-2 tw:py-1 tw:rounded-md tw:border tw:text-xs tw:cursor-pointer ${
+                                hasDownvoted
+                                  ? 'tw:bg-red-50 tw:text-red-600 tw:border-red-200'
+                                  : 'tw:bg-white tw:text-slate-500 tw:border-slate-200 hover:tw:bg-slate-100'
+                              }`}
+                            >
+                              👎 <span className="tw:font-semibold">{downVotes}</span>
                             </button>
                           </div>
+
+                          {/* Context Tags widget */}
+                          <div className="tw:flex tw:items-center tw:gap-1 tw:flex-wrap">
+                            {rend.contextTags &&
+                              rend.contextTags.map((tag) => (
+                                <span
+                                  key={tag}
+                                  className="tw:inline-flex tw:items-center tw:gap-1 tw:text-[10px] tw:bg-slate-200 tw:text-slate-600 tw:rounded tw:px-1.5 tw:py-0.5 font-medium"
+                                >
+                                  #{tag}
+                                  <button
+                                    onClick={() => removeContextTag(rendId, tag)}
+                                    className="tw:text-slate-400 tw:hover:text-slate-600 font-bold"
+                                  >
+                                    ✕
+                                  </button>
+                                </span>
+                              ))}
+                            <div className="tw:flex tw:gap-1">
+                              <input
+                                type="text"
+                                placeholder="+tag"
+                                value={newContextTags[rendId] || ''}
+                                onChange={(e) =>
+                                  setNewContextTags((prev) => ({
+                                    ...prev,
+                                    [rendId]: e.target.value,
+                                  }))
+                                }
+                                onKeyDown={(e) => e.key === 'Enter' && addContextTag(rendId)}
+                                className="tw:border tw:border-slate-200 tw:rounded tw:px-1 tw:py-0.5 tw:text-[10px] tw:w-16"
+                              />
+                              <button
+                                onClick={() => addContextTag(rendId)}
+                                className="tw:px-1.5 tw:bg-slate-200 tw:rounded tw:text-[10px] tw:hover:bg-slate-300"
+                              >
+                                +
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
 
                 {(!selectedTerm.renderings || selectedTerm.renderings.length === 0) && (
                   <div className="tw:text-xs tw:text-slate-400 tw:text-center tw:py-2">
@@ -949,58 +1081,70 @@ globalThis.webViewComponent = function KeyTermsWebView({
             {/* Expected Verse References List */}
             <div className="tw:bg-white tw:p-4 tw:rounded-xl tw:border tw:border-slate-200 tw:shadow-sm tw:space-y-3">
               <div className="tw:flex tw:items-center tw:justify-between">
-                <h3 className="tw:font-bold tw:text-sm tw:text-slate-700 uppercase tw:tracking-wider">Pasajes esperados</h3>
-                {scanning && <span className="tw:text-xs tw:text-slate-400 tw:animate-pulse">Escaneando...</span>}
+                <h3 className="tw:font-bold tw:text-sm tw:text-slate-700 uppercase tw:tracking-wider">
+                  Pasajes esperados
+                </h3>
+                {scanning && (
+                  <span className="tw:text-xs tw:text-slate-400 tw:animate-pulse">
+                    Escaneando...
+                  </span>
+                )}
               </div>
 
               <div className="tw:divide-y tw:divide-slate-100 tw:max-h-72 tw:overflow-y-auto">
-                {selectedTerm.references && selectedTerm.references.map(ref => {
-                  const match = verseMatches[`${selectedTerm.id}-${ref}`];
-                  
-                  let badge = (
-                    <span className="tw:px-2 tw:py-0.5 tw:bg-slate-100 tw:text-slate-500 tw:rounded-md tw:text-[10px]">
-                      No escaneado
-                    </span>
-                  );
+                {selectedTerm.references &&
+                  selectedTerm.references.map((ref) => {
+                    const match = verseMatches[`${selectedTerm.id}-${ref}`];
 
-                  if (match) {
-                    if (match.matchResult.found) {
-                      badge = (
-                        <span className="tw:px-2 tw:py-0.5 tw:bg-green-100 tw:text-green-700 tw:rounded-md tw:text-[10px] tw:font-semibold">
-                          ✓ Encontrado ({match.matchResult.matchedText})
-                        </span>
-                      );
-                    } else {
-                      badge = (
-                        <span className="tw:px-2 tw:py-0.5 tw:bg-red-100 tw:text-red-700 tw:rounded-md tw:text-[10px] tw:font-semibold">
-                          ✗ Falta
-                        </span>
-                      );
+                    let badge = (
+                      <span className="tw:px-2 tw:py-0.5 tw:bg-slate-100 tw:text-slate-500 tw:rounded-md tw:text-[10px]">
+                        No escaneado
+                      </span>
+                    );
+
+                    if (match) {
+                      if (match.matchResult.found) {
+                        badge = (
+                          <span className="tw:px-2 tw:py-0.5 tw:bg-green-100 tw:text-green-700 tw:rounded-md tw:text-[10px] tw:font-semibold">
+                            ✓ Encontrado ({match.matchResult.matchedText})
+                          </span>
+                        );
+                      } else {
+                        badge = (
+                          <span className="tw:px-2 tw:py-0.5 tw:bg-red-100 tw:text-red-700 tw:rounded-md tw:text-[10px] tw:font-semibold">
+                            ✗ Falta
+                          </span>
+                        );
+                      }
                     }
-                  }
 
-                  return (
-                    <div key={ref} className="tw:py-2 tw:flex tw:items-center tw:justify-between tw:gap-4">
-                      <button
-                        onClick={() => handleVerseClick(ref)}
-                        className="tw:text-xs tw:text-indigo-600 tw:font-semibold tw:hover:underline tw:cursor-pointer text-left"
+                    return (
+                      <div
+                        key={ref}
+                        className="tw:py-2 tw:flex tw:items-center tw:justify-between tw:gap-4"
                       >
-                        {ref}
-                      </button>
-                      {badge}
-                    </div>
-                  );
-                })}
+                        <button
+                          onClick={() => handleVerseClick(ref)}
+                          className="tw:text-xs tw:text-indigo-600 tw:font-semibold tw:hover:underline tw:cursor-pointer text-left"
+                        >
+                          {ref}
+                        </button>
+                        {badge}
+                      </div>
+                    );
+                  })}
               </div>
             </div>
 
             {/* Morphology Configuration Panel (Feature 1) */}
             <div className="tw:bg-white tw:rounded-xl tw:border tw:border-slate-200 tw:shadow-sm tw:overflow-hidden">
               <button
-                onClick={() => setMorphPanelOpen(o => !o)}
+                onClick={() => setMorphPanelOpen((o) => !o)}
                 className="tw:w-full tw:px-4 tw:py-3 tw:bg-slate-50 tw:flex tw:items-center tw:justify-between tw:cursor-pointer tw:border-b tw:border-slate-100"
               >
-                <span className="tw:font-bold tw:text-xs tw:text-slate-500 uppercase tw:tracking-wider">Configuración Morfológica</span>
+                <span className="tw:font-bold tw:text-xs tw:text-slate-500 uppercase tw:tracking-wider">
+                  Configuración Morfológica
+                </span>
                 <span>{morphPanelOpen ? '▲' : '▼'}</span>
               </button>
 
@@ -1009,7 +1153,9 @@ globalThis.webViewComponent = function KeyTermsWebView({
                   {/* Language and Fuzzy match settings */}
                   <div className="tw:grid tw:grid-cols-1 md:tw:grid-cols-2 tw:gap-4">
                     <div className="tw:space-y-1">
-                      <label className="tw:text-xs tw:font-semibold tw:text-slate-500">Nombre del idioma</label>
+                      <label className="tw:text-xs tw:font-semibold tw:text-slate-500">
+                        Nombre del idioma
+                      </label>
                       <input
                         type="text"
                         value={store.morphologyConfig.languageName || ''}
@@ -1023,11 +1169,13 @@ globalThis.webViewComponent = function KeyTermsWebView({
                         <input
                           type="checkbox"
                           checked={store.morphologyConfig.enableFuzzyMatch}
-                          onChange={(e) => handleMorphologyChange({ enableFuzzyMatch: e.target.checked })}
+                          onChange={(e) =>
+                            handleMorphologyChange({ enableFuzzyMatch: e.target.checked })
+                          }
                         />
                         Búsqueda Difusa (Levenshtein)
                       </label>
-                      
+
                       {store.morphologyConfig.enableFuzzyMatch && (
                         <div className="tw:flex tw:items-center tw:gap-3">
                           <span className="tw:text-xs tw:text-slate-400">Distancia máx (1-4):</span>
@@ -1036,10 +1184,16 @@ globalThis.webViewComponent = function KeyTermsWebView({
                             min="1"
                             max="4"
                             value={store.morphologyConfig.maxEditDistance || 2}
-                            onChange={(e) => handleMorphologyChange({ maxEditDistance: parseInt(e.target.value, 10) })}
+                            onChange={(e) =>
+                              handleMorphologyChange({
+                                maxEditDistance: parseInt(e.target.value, 10),
+                              })
+                            }
                             className="tw:w-20"
                           />
-                          <span className="tw:text-xs tw:font-bold">{store.morphologyConfig.maxEditDistance || 2}</span>
+                          <span className="tw:text-xs tw:font-bold">
+                            {store.morphologyConfig.maxEditDistance || 2}
+                          </span>
                         </div>
                       )}
                     </div>
@@ -1049,8 +1203,10 @@ globalThis.webViewComponent = function KeyTermsWebView({
                   <div className="tw:grid tw:grid-cols-1 lg:tw:grid-cols-3 tw:gap-6 tw:pt-2">
                     {/* Prefixes list */}
                     <div className="tw:space-y-2">
-                      <span className="tw:font-bold tw:text-xs tw:text-slate-700">Prefijos comunes a ignorar</span>
-                      
+                      <span className="tw:font-bold tw:text-xs tw:text-slate-700">
+                        Prefijos comunes a ignorar
+                      </span>
+
                       {/* Input form */}
                       <div className="tw:flex tw:gap-1">
                         <input
@@ -1077,32 +1233,38 @@ globalThis.webViewComponent = function KeyTermsWebView({
 
                       {/* Prefixes List */}
                       <div className="tw:space-y-1 tw:max-h-36 tw:overflow-y-auto">
-                        {store.morphologyConfig.prefixes && store.morphologyConfig.prefixes.map(rule => (
-                          <div key={rule.id} className="tw:flex tw:items-center tw:justify-between tw:p-1.5 tw:bg-slate-50 tw:rounded tw:text-xs">
-                            <label className="tw:flex tw:items-center tw:gap-2 tw:cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={rule.enabled}
-                                onChange={() => toggleRule(rule.id, 'prefix')}
-                              />
-                              <span className="tw:font-bold">{rule.affix}</span>
-                              <span className="tw:text-slate-400">({rule.label})</span>
-                            </label>
-                            <button
-                              onClick={() => deleteRule(rule.id, 'prefix')}
-                              className="tw:text-slate-400 hover:tw:text-red-500 font-bold"
+                        {store.morphologyConfig.prefixes &&
+                          store.morphologyConfig.prefixes.map((rule) => (
+                            <div
+                              key={rule.id}
+                              className="tw:flex tw:items-center tw:justify-between tw:p-1.5 tw:bg-slate-50 tw:rounded tw:text-xs"
                             >
-                              ✕
-                            </button>
-                          </div>
-                        ))}
+                              <label className="tw:flex tw:items-center tw:gap-2 tw:cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={rule.enabled}
+                                  onChange={() => toggleRule(rule.id, 'prefix')}
+                                />
+                                <span className="tw:font-bold">{rule.affix}</span>
+                                <span className="tw:text-slate-400">({rule.label})</span>
+                              </label>
+                              <button
+                                onClick={() => deleteRule(rule.id, 'prefix')}
+                                className="tw:text-slate-400 hover:tw:text-red-500 font-bold"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ))}
                       </div>
                     </div>
 
                     {/* Suffixes list */}
                     <div className="tw:space-y-2">
-                      <span className="tw:font-bold tw:text-xs tw:text-slate-700">Sufijos comunes a ignorar</span>
-                      
+                      <span className="tw:font-bold tw:text-xs tw:text-slate-700">
+                        Sufijos comunes a ignorar
+                      </span>
+
                       {/* Input form */}
                       <div className="tw:flex tw:gap-1">
                         <input
@@ -1129,32 +1291,38 @@ globalThis.webViewComponent = function KeyTermsWebView({
 
                       {/* Suffixes List */}
                       <div className="tw:space-y-1 tw:max-h-36 tw:overflow-y-auto">
-                        {store.morphologyConfig.suffixes && store.morphologyConfig.suffixes.map(rule => (
-                          <div key={rule.id} className="tw:flex tw:items-center tw:justify-between tw:p-1.5 tw:bg-slate-50 tw:rounded tw:text-xs">
-                            <label className="tw:flex tw:items-center tw:gap-2 tw:cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={rule.enabled}
-                                onChange={() => toggleRule(rule.id, 'suffix')}
-                              />
-                              <span className="tw:font-bold">{rule.affix}</span>
-                              <span className="tw:text-slate-400">({rule.label})</span>
-                            </label>
-                            <button
-                              onClick={() => deleteRule(rule.id, 'suffix')}
-                              className="tw:text-slate-400 hover:tw:text-red-500 font-bold"
+                        {store.morphologyConfig.suffixes &&
+                          store.morphologyConfig.suffixes.map((rule) => (
+                            <div
+                              key={rule.id}
+                              className="tw:flex tw:items-center tw:justify-between tw:p-1.5 tw:bg-slate-50 tw:rounded tw:text-xs"
                             >
-                              ✕
-                            </button>
-                          </div>
-                        ))}
+                              <label className="tw:flex tw:items-center tw:gap-2 tw:cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={rule.enabled}
+                                  onChange={() => toggleRule(rule.id, 'suffix')}
+                                />
+                                <span className="tw:font-bold">{rule.affix}</span>
+                                <span className="tw:text-slate-400">({rule.label})</span>
+                              </label>
+                              <button
+                                onClick={() => deleteRule(rule.id, 'suffix')}
+                                className="tw:text-slate-400 hover:tw:text-red-500 font-bold"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ))}
                       </div>
                     </div>
 
                     {/* Infixes list */}
                     <div className="tw:space-y-2">
-                      <span className="tw:font-bold tw:text-xs tw:text-slate-700">Infijos comunes a ignorar</span>
-                      
+                      <span className="tw:font-bold tw:text-xs tw:text-slate-700">
+                        Infijos comunes a ignorar
+                      </span>
+
                       {/* Input form */}
                       <div className="tw:flex tw:gap-1">
                         <input
@@ -1181,25 +1349,29 @@ globalThis.webViewComponent = function KeyTermsWebView({
 
                       {/* Infixes List */}
                       <div className="tw:space-y-1 tw:max-h-36 tw:overflow-y-auto">
-                        {store.morphologyConfig.infixes && store.morphologyConfig.infixes.map(rule => (
-                          <div key={rule.id} className="tw:flex tw:items-center tw:justify-between tw:p-1.5 tw:bg-slate-50 tw:rounded tw:text-xs">
-                            <label className="tw:flex tw:items-center tw:gap-2 tw:cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={rule.enabled}
-                                onChange={() => toggleRule(rule.id, 'infix')}
-                              />
-                              <span className="tw:font-bold">{rule.affix}</span>
-                              <span className="tw:text-slate-400">({rule.label})</span>
-                            </label>
-                            <button
-                              onClick={() => deleteRule(rule.id, 'infix')}
-                              className="tw:text-slate-400 hover:tw:text-red-500 font-bold"
+                        {store.morphologyConfig.infixes &&
+                          store.morphologyConfig.infixes.map((rule) => (
+                            <div
+                              key={rule.id}
+                              className="tw:flex tw:items-center tw:justify-between tw:p-1.5 tw:bg-slate-50 tw:rounded tw:text-xs"
                             >
-                              ✕
-                            </button>
-                          </div>
-                        ))}
+                              <label className="tw:flex tw:items-center tw:gap-2 tw:cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={rule.enabled}
+                                  onChange={() => toggleRule(rule.id, 'infix')}
+                                />
+                                <span className="tw:font-bold">{rule.affix}</span>
+                                <span className="tw:text-slate-400">({rule.label})</span>
+                              </label>
+                              <button
+                                onClick={() => deleteRule(rule.id, 'infix')}
+                                className="tw:text-slate-400 hover:tw:text-red-500 font-bold"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ))}
                       </div>
                     </div>
                   </div>
@@ -1210,10 +1382,12 @@ globalThis.webViewComponent = function KeyTermsWebView({
             {/* Collaborative notes panel (Feature 5) */}
             <div className="tw:bg-white tw:rounded-xl tw:border tw:border-slate-200 tw:shadow-sm overflow-hidden">
               <button
-                onClick={() => setCollabPanelOpen(o => !o)}
+                onClick={() => setCollabPanelOpen((o) => !o)}
                 className="tw:w-full tw:px-4 tw:py-3 tw:bg-slate-50 tw:flex tw:items-center tw:justify-between tw:cursor-pointer tw:border-b tw:border-slate-100"
               >
-                <span className="tw:font-bold tw:text-xs tw:text-slate-500 uppercase tw:tracking-wider">Notas de Discusión del Equipo</span>
+                <span className="tw:font-bold tw:text-xs tw:text-slate-500 uppercase tw:tracking-wider">
+                  Notas de Discusión del Equipo
+                </span>
                 <span>{collabPanelOpen ? '▲' : '▼'}</span>
               </button>
 
@@ -1221,15 +1395,21 @@ globalThis.webViewComponent = function KeyTermsWebView({
                 <div className="tw:p-4 tw:space-y-4">
                   {/* Notes Feed */}
                   <div className="tw:space-y-2.5 tw:max-h-60 tw:overflow-y-auto">
-                    {selectedTerm.notes && selectedTerm.notes.map(note => (
-                      <div key={note.id} className="tw:p-2.5 tw:bg-slate-50 tw:rounded-lg tw:border tw:border-slate-100 tw:space-y-1">
-                        <div className="tw:flex tw:items-center tw:justify-between tw:text-[10px] tw:text-slate-400">
-                          <span className="tw:font-bold">{note.author}</span>
-                          <span>{new Date(note.timestamp).toLocaleString('es')}</span>
+                    {selectedTerm.notes &&
+                      selectedTerm.notes.map((note) => (
+                        <div
+                          key={note.id}
+                          className="tw:p-2.5 tw:bg-slate-50 tw:rounded-lg tw:border tw:border-slate-100 tw:space-y-1"
+                        >
+                          <div className="tw:flex tw:items-center tw:justify-between tw:text-[10px] tw:text-slate-400">
+                            <span className="tw:font-bold">{note.author}</span>
+                            <span>{new Date(note.timestamp).toLocaleString('es')}</span>
+                          </div>
+                          <p className="tw:text-xs tw:text-slate-600 tw:whitespace-pre-wrap">
+                            {note.text}
+                          </p>
                         </div>
-                        <p className="tw:text-xs tw:text-slate-600 tw:whitespace-pre-wrap">{note.text}</p>
-                      </div>
-                    ))}
+                      ))}
 
                     {(!selectedTerm.notes || selectedTerm.notes.length === 0) && (
                       <div className="tw:text-xs tw:text-slate-400 tw:text-center tw:py-4">

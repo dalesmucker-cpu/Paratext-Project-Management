@@ -673,8 +673,8 @@ function ActivityLogPanel({ log, onClose }: { log: ActivityLogEntry[]; onClose: 
 
 function TaskCard({
   task,
-  stageConfig,
-  orderedStages,
+  stageConfig: _stageConfig,
+  orderedStages: _orderedStages,
   onStatusChange,
   onDelete,
   onEdit,
@@ -1100,8 +1100,12 @@ globalThis.webViewComponent = function TaskBoardWebView({
     ),
   );
 
+  const loadTasksRequestRef = useRef(0);
+
   const loadTasks = useCallback(async () => {
     if (!projectId) return;
+    const requestId = ++loadTasksRequestRef.current;
+    const isCurrentRequest = () => requestId === loadTasksRequestRef.current;
     setLoading(true);
     setError('');
     try {
@@ -1109,6 +1113,7 @@ globalThis.webViewComponent = function TaskBoardWebView({
         papi.commands.sendCommand('paratextProjectManager.getTasks', projectId),
         papi.commands.sendCommand('paratextProjectManager.getTeamMembers'),
       ]);
+      if (!isCurrentRequest()) return;
       const store = JSON.parse(result) as TaskStore;
       const knownDeleted = store.deletedTaskIds ?? [];
       setDeletedTaskIds(knownDeleted);
@@ -1124,6 +1129,7 @@ globalThis.webViewComponent = function TaskBoardWebView({
           papi.commands.sendCommand('paratextProjectManager.getTasks', projectId),
           papi.commands.sendCommand('paratextProjectManager.getTeamMembers'),
         ]);
+        if (!isCurrentRequest()) return;
         const store = JSON.parse(result) as TaskStore;
         const knownDeleted = store.deletedTaskIds ?? [];
         setDeletedTaskIds(knownDeleted);
@@ -1135,7 +1141,7 @@ globalThis.webViewComponent = function TaskBoardWebView({
         setError(`Error al cargar tareas: ${errMsg(retryErr)}`);
       }
     } finally {
-      setLoading(false);
+      if (isCurrentRequest()) setLoading(false);
     }
   }, [projectId]);
 
@@ -1510,7 +1516,7 @@ globalThis.webViewComponent = function TaskBoardWebView({
         <p className="tw:text-gray-600">Ningún proyecto seleccionado.</p>
         <button
           className="tw:px-4 tw:py-2 tw:bg-slate-600 tw:text-white tw:rounded tw:hover:bg-slate-700"
-          onClick={selectProject}
+          onClick={() => selectProject()}
         >
           Seleccionar Proyecto
         </button>
@@ -1557,7 +1563,7 @@ globalThis.webViewComponent = function TaskBoardWebView({
           <div className="tw:flex tw:gap-1.5 tw:items-center tw:ml-auto tw:flex-wrap">
             <button
               className="tw:px-2.5 tw:py-1 tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:border-slate-200 tw:rounded tw:text-xs tw:font-medium tw:text-slate-700 tw:cursor-pointer"
-              onClick={selectProject}
+              onClick={() => selectProject()}
               title="Cambiar proyecto"
             >
               Cambiar Proyecto
@@ -1715,7 +1721,10 @@ globalThis.webViewComponent = function TaskBoardWebView({
                   <span className="tw:truncate">{getStageLabel(stage, stageConfig)}</span>
                   <div className="tw:flex tw:items-center tw:gap-0.5 tw:flex-shrink-0 tw:ml-1">
                     {noAssignees && (
-                      <span className="tw:text-yellow-600 tw:font-bold" title="Sin responsables configurados">
+                      <span
+                        className="tw:text-yellow-600 tw:font-bold"
+                        title="Sin responsables configurados"
+                      >
                         (!)
                       </span>
                     )}

@@ -544,7 +544,7 @@ export default function UnreadNotesWidget({
       // 4. Persons filter
       if (settings.persons.length > 0) {
         if (
-          !settings.persons.some((p) => isMe(t.latestUser) || t.comments.some((c) => isMe(c.user)))
+          !settings.persons.some((_p) => isMe(t.latestUser) || t.comments.some((c) => isMe(c.user)))
         ) {
           return false;
         }

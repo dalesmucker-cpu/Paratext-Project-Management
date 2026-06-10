@@ -1,7 +1,22 @@
 import { WebViewProps } from '@papi/core';
 import papi from '@papi/frontend';
 import { useDialogCallback } from '@papi/frontend/react';
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { 
+  RefreshCw, 
+  Download, 
+  CheckCircle2, 
+  XCircle, 
+  Edit3, 
+  BookOpen, 
+  FileSpreadsheet, 
+  Trophy,
+  AlertTriangle,
+  FolderOpen,
+  PieChart,
+  Layers,
+  FileText
+} from 'lucide-react';
 import type { KeyTermsStore, KeyTerm, VerseMatchStatus } from './types/key-terms.types';
 import { BIBLE_BOOKS, type BibleBook } from './types/shared.constants';
 
@@ -45,18 +60,24 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
   );
 
   // Load basic store data
+  const loadDataRequestRef = useRef(0);
+
   const loadData = useCallback(async () => {
     if (!projectId) return;
+    const requestId = ++loadDataRequestRef.current;
+    const isCurrentRequest = () => requestId === loadDataRequestRef.current;
     setLoading(true);
     setError('');
     try {
       const dataStr = await papi.commands.sendCommand('paratextProjectManager.getKeyTermsData', projectId);
+      if (!isCurrentRequest()) return;
       const parsed = JSON.parse(dataStr) as KeyTermsStore;
       setStore(parsed);
     } catch (e: any) {
+      if (!isCurrentRequest()) return;
       setError(`Error al cargar datos de términos clave: ${e.message || e}`);
     } finally {
-      setLoading(false);
+      if (isCurrentRequest()) setLoading(false);
     }
   }, [projectId]);
 
@@ -65,8 +86,12 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
   }, [loadData]);
 
   // Scan current book
+  const scanBookRequestRef = useRef(0);
+
   const scanBook = useCallback(async () => {
     if (!projectId) return;
+    const requestId = ++scanBookRequestRef.current;
+    const isCurrentRequest = () => requestId === scanBookRequestRef.current;
     setScanning(true);
     try {
       const res = await papi.commands.sendCommand(
@@ -74,6 +99,7 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
         projectId,
         selectedBook
       ) as string;
+      if (!isCurrentRequest()) return;
       const parsed = JSON.parse(res) as { matches: VerseMatchStatus[] };
       if (parsed && parsed.matches) {
         setScanMatches(parsed.matches);
@@ -81,7 +107,7 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
     } catch (e: any) {
       console.error('Failed to scan book renderings:', e);
     } finally {
-      setScanning(false);
+      if (isCurrentRequest()) setScanning(false);
     }
   }, [projectId, selectedBook]);
 
@@ -109,6 +135,13 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
     });
   }, [store]);
 
+  // BUG FIX: Automatically select the first book with terms when store loads if current selectedBook is not in list
+  useEffect(() => {
+    if (booksWithTerms.length > 0 && !booksWithTerms.includes(selectedBook)) {
+      setSelectedBook(booksWithTerms[0] as BibleBook);
+    }
+  }, [booksWithTerms, selectedBook, setSelectedBook]);
+
   // Total chapters in the selected book (based on key terms references)
   const chaptersInBook = useMemo(() => {
     if (!store) return [];
@@ -124,6 +157,17 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
     }
     return Array.from(chapters).sort((a, b) => a - b);
   }, [store, selectedBook]);
+
+  // BUG FIX: Automatically select the first chapter when chapters in book changes
+  useEffect(() => {
+    if (chaptersInBook.length > 0) {
+      if (selectedChapter === null || !chaptersInBook.includes(selectedChapter)) {
+        setSelectedChapter(chaptersInBook[0]);
+      }
+    } else {
+      setSelectedChapter(null);
+    }
+  }, [chaptersInBook, selectedChapter]);
 
   // Compute completion metrics per chapter:
   // maps chapter number -> { expected: number, found: number, matches: VerseMatchStatus[] }
@@ -288,7 +332,7 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
     if (parts.length < 2) return;
     const book = parts[0];
     const [chapStr, verseStr] = parts[1].split(':');
-    const chapter = parseInt(chapStr, 10);
+    const chapterNum = parseInt(chapStr, 10);
     const verse = parseInt(verseStr, 10);
     
     try {
@@ -296,7 +340,7 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
         'paratextProjectManager.navigateToVerse',
         projectId,
         book,
-        chapter,
+        chapterNum,
         verse
       );
     } catch (e) {
@@ -309,6 +353,9 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
     if (!projectId) return;
     try {
       await papi.commands.sendCommand('paratextProjectManager.openKeyTerms', projectId);
+      // Small delay to allow panel to mount/initialize
+      await new Promise(r => setTimeout(r, 450));
+      await papi.commands.sendCommand('paratextProjectManager.selectKeyTerm', projectId, termId);
     } catch (e) {
       console.error('Failed to open key terms editor:', e);
     }
@@ -340,10 +387,9 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
       const filename = `key-terms-analytics-${selectedBook}-${Date.now()}.csv`;
       
       const downloadPath = await papi.commands.sendCommand(
-        'paratextProjectManager.saveDownloadedFile',
+        'paratextProjectManager.saveToDownloads',
         filename,
-        csvContent,
-        'utf8'
+        csvContent
       ) as string;
 
       alert(`Reporte CSV exportado exitosamente a:\n${downloadPath}`);
@@ -363,17 +409,17 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
           <meta charset="UTF-8">
           <title>Reporte de Términos Clave - ${selectedBook}</title>
           <style>
-            body { font-family: sans-serif; padding: 24px; color: #334155; bg-color: #f8fafc; }
-            h1 { color: #1e3a8a; }
-            h2 { color: #475569; margin-top: 24px; }
+            body { font-family: sans-serif; padding: 24px; color: #f8fafc; background-color: #0f172a; }
+            h1 { color: #818cf8; font-weight: 900; }
+            h2 { color: #94a3b8; margin-top: 24px; border-bottom: 1px solid #334155; padding-bottom: 8px; }
             .metrics { display: flex; gap: 16px; margin-bottom: 24px; }
-            .card { background: white; padding: 16px; border-radius: 8px; border: 1px solid #e2e8f0; flex: 1; text-align: center; }
-            .card .num { font-size: 24px; font-weight: bold; color: #4f46e5; }
-            table { width: 100%; border-collapse: collapse; background: white; margin-top: 12px; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; }
-            th, td { padding: 12px; text-align: left; border-bottom: 1px solid #e2e8f0; }
-            th { background-color: #f1f5f9; font-weight: bold; color: #475569; }
-            .status-yes { color: #15803d; font-weight: bold; }
-            .status-no { color: #b91c1c; font-weight: bold; }
+            .card { background: #1e293b; padding: 20px; border-radius: 12px; border: 1px solid #334155; flex: 1; text-align: center; }
+            .card .num { font-size: 32px; font-weight: 900; color: #a78bfa; margin-bottom: 4px; }
+            table { width: 100%; border-collapse: collapse; background: #1e293b; margin-top: 12px; border-radius: 12px; overflow: hidden; border: 1px solid #334155; }
+            th, td { padding: 14px; text-align: left; border-bottom: 1px solid #334155; }
+            th { background-color: #0f172a; font-weight: bold; color: #94a3b8; }
+            .status-yes { color: #34d399; font-weight: bold; background: rgba(52, 211, 153, 0.1); padding: 4px 8px; border-radius: 9999px; display: inline-block; }
+            .status-no { color: #f87171; font-weight: bold; background: rgba(248, 113, 113, 0.1); padding: 4px 8px; border-radius: 9999px; display: inline-block; }
           </style>
         </head>
         <body>
@@ -407,12 +453,12 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
             <tbody>
               ${scanMatches.map(m => `
                 <tr>
-                  <td>${m.reference}</td>
+                  <td><b>${m.reference}</b></td>
                   <td>${m.gloss}</td>
-                  <td style="font-family: serif;">${m.lemma}</td>
+                  <td style="font-family: serif; color: #a5b4fc;">${m.lemma}</td>
                   <td>${m.expectedRenderings.join(', ') || '<i>Ninguna aprobada</i>'}</td>
-                  <td class="${m.matchResult.found ? 'status-yes' : 'status-no'}">${m.matchResult.found ? '✓ Encontrado' : '✗ Faltante'}</td>
-                  <td>${m.matchResult.matchedText || '-'}</td>
+                  <td><span class="${m.matchResult.found ? 'status-yes' : 'status-no'}">${m.matchResult.found ? '✓ Encontrado' : '✗ Faltante'}</span></td>
+                  <td><b>${m.matchResult.matchedText || '-'}</b></td>
                 </tr>
               `).join('')}
             </tbody>
@@ -423,10 +469,9 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
 
       const filename = `key-terms-analytics-${selectedBook}-${Date.now()}.html`;
       const downloadPath = await papi.commands.sendCommand(
-        'paratextProjectManager.saveDownloadedFile',
+        'paratextProjectManager.saveToDownloads',
         filename,
-        htmlContent,
-        'utf8'
+        htmlContent
       ) as string;
 
       alert(`Reporte HTML exportado exitosamente a:\n${downloadPath}`);
@@ -437,11 +482,17 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
 
   if (!projectId) {
     return (
-      <div className="tw:flex tw:flex-col tw:items-center tw:justify-center tw:h-full tw:p-8 tw:text-center tw:gap-4 tw:text-sm">
-        <p className="tw:text-gray-600">Ningún proyecto seleccionado.</p>
+      <div className="tw:flex tw:flex-col tw:items-center tw:justify-center tw:h-full tw:p-8 tw:text-center tw:gap-6 tw:text-sm tw:bg-slate-950 tw:text-slate-200">
+        <div className="tw:p-4 tw:bg-slate-900 tw:rounded-full tw:border tw:border-slate-800 tw:text-slate-400 tw:animate-bounce">
+          <FolderOpen size={48} />
+        </div>
+        <div className="tw:space-y-2">
+          <p className="tw:text-lg tw:font-bold tw:text-slate-300">Ningún proyecto activo seleccionado</p>
+          <p className="tw:text-xs tw:text-slate-500 tw:max-w-xs">Abre o selecciona un proyecto de Scripture en Paratext para visualizar las estadísticas de los términos clave.</p>
+        </div>
         <button
-          className="tw:px-4 tw:py-2 tw:bg-indigo-600 tw:text-white tw:rounded-lg tw:hover:bg-indigo-700 tw:cursor-pointer"
-          onClick={selectProject}
+          className="tw:px-5 tw:py-2.5 tw:bg-gradient-to-r tw:from-indigo-600 tw:to-violet-600 tw:text-white tw:rounded-xl tw:hover:from-indigo-500 tw:hover:to-violet-500 tw:cursor-pointer tw:font-semibold tw:shadow-lg tw:shadow-indigo-500/10 tw:transition-all hover:tw:scale-105"
+          onClick={() => selectProject()}
         >
           Seleccionar Proyecto
         </button>
@@ -451,117 +502,165 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
 
   if (loading) {
     return (
-      <div className="tw:flex tw:items-center tw:justify-center tw:h-full tw:text-sm tw:text-gray-500">
-        Cargando analíticas de términos clave...
+      <div className="tw:flex tw:flex-col tw:items-center tw:justify-center tw:h-full tw:bg-slate-950 tw:text-slate-200 tw:gap-4">
+        <RefreshCw size={36} className="tw:text-indigo-400 tw:animate-spin" />
+        <span className="tw:text-xs tw:text-slate-400 tw:font-medium">Cargando métricas de términos clave...</span>
       </div>
     );
   }
 
   return (
-    <div className="tw:flex tw:flex-col tw:h-full tw:bg-slate-50 tw:text-slate-800 tw:font-sans">
+    <div className="tw:flex tw:flex-col tw:h-full tw:bg-slate-950 tw:text-slate-200 tw:font-sans">
       {/* Top Header */}
-      <div className="tw:px-6 tw:py-4 tw:bg-white tw:border-b tw:border-slate-200 tw:flex tw:items-center tw:justify-between tw:flex-shrink-0">
-        <div className="tw:flex tw:items-center tw:gap-4">
-          <span className="tw:text-xl tw:font-black tw:bg-gradient-to-r tw:from-indigo-600 tw:to-violet-600 tw:bg-clip-text tw:text-transparent">
-            Panel de Control de Términos Clave
-          </span>
-          {scanning && (
-            <span className="tw:text-xs tw:text-slate-400 tw:animate-pulse">
-              Escaneando libro...
+      <div className="tw:px-6 tw:py-4 tw:bg-slate-900/60 tw:border-b tw:border-slate-800/80 tw:flex tw:items-center tw:justify-between tw:flex-shrink-0 tw:backdrop-blur-md">
+        <div className="tw:flex tw:items-center tw:gap-3">
+          <div className="tw:bg-gradient-to-br tw:from-indigo-500 tw:to-violet-600 tw:p-2 tw:rounded-xl tw:shadow-lg tw:shadow-indigo-500/20">
+            <PieChart size={20} className="tw:text-white" />
+          </div>
+          <div className="tw:flex tw:flex-col">
+            <span className="tw:text-lg tw:font-extrabold tw:bg-gradient-to-r tw:from-indigo-400 tw:via-violet-400 tw:to-pink-500 tw:bg-clip-text tw:text-transparent">
+              Tablero de Analíticas de Términos Clave
             </span>
+            <span className="tw:text-[10px] tw:text-slate-500 tw:font-semibold uppercase tracking-wider">Verificación de Consistencia</span>
+          </div>
+          {scanning && (
+            <div className="tw:flex tw:items-center tw:gap-1.5 tw:ml-2 tw:bg-indigo-950/40 tw:border tw:border-indigo-500/30 tw:rounded-full tw:py-0.5 tw:px-2.5">
+              <span className="tw:relative tw:flex tw:h-2 w-2">
+                <span className="tw:animate-ping tw:absolute tw:inline-flex tw:h-full tw:w-full tw:rounded-full tw:bg-indigo-400 tw:opacity-75"></span>
+                <span className="tw:relative tw:inline-flex tw:rounded-full tw:h-2 w-2 tw:bg-indigo-500"></span>
+              </span>
+              <span className="tw:text-[9px] tw:text-indigo-300 tw:font-bold uppercase tracking-wider">Escaneando...</span>
+            </div>
           )}
         </div>
 
         <div className="tw:flex tw:items-center tw:gap-3">
           {/* Book Dropdown Selector */}
-          <select
-            value={selectedBook}
-            onChange={(e) => {
-              setSelectedBook(e.target.value as BibleBook);
-              setSelectedChapter(1);
-            }}
-            className="tw:border tw:border-slate-200 tw:rounded-lg tw:px-3 tw:py-1.5 tw:text-xs tw:font-semibold tw:bg-white"
-          >
-            {booksWithTerms.map(b => (
-              <option key={b} value={b}>
-                {b}
-              </option>
-            ))}
-          </select>
+          <div className="tw:flex tw:items-center tw:gap-2 tw:bg-slate-900 tw:border tw:border-slate-850 tw:rounded-xl tw:px-3 tw:py-1.5">
+            <span className="tw:text-[10px] tw:text-slate-500 tw:font-bold uppercase tracking-wide">Libro</span>
+            <select
+              value={selectedBook}
+              onChange={(e) => {
+                setSelectedBook(e.target.value as BibleBook);
+                setSelectedChapter(1);
+              }}
+              className="tw:text-xs tw:font-bold tw:bg-transparent tw:text-indigo-400 tw:outline-none tw:border-none tw:cursor-pointer tw:pr-2"
+            >
+              {booksWithTerms.map(b => (
+                <option key={b} value={b} className="tw:bg-slate-900 tw:text-slate-200 tw:font-bold">
+                  {b}
+                </option>
+              ))}
+            </select>
+          </div>
 
           <button
             onClick={scanBook}
-            className="tw:px-3 tw:py-1.5 tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:border-slate-200 tw:rounded-lg tw:text-xs tw:font-medium tw:cursor-pointer"
+            disabled={scanning}
+            className="tw:flex tw:items-center tw:gap-2 tw:px-4 tw:py-2 tw:bg-slate-900 hover:tw:bg-slate-850 tw:border tw:border-slate-800 disabled:tw:opacity-50 tw:rounded-xl tw:text-xs tw:font-bold tw:cursor-pointer tw:transition-all hover:tw:scale-[1.02]"
           >
+            <RefreshCw size={14} className={scanning ? 'tw:animate-spin' : ''} />
             Actualizar Escaneo
           </button>
 
           <button
-            className="tw:px-3 tw:py-1.5 tw:bg-indigo-50 tw:text-indigo-700 tw:border tw:border-indigo-100 tw:rounded-lg tw:text-xs tw:font-medium tw:hover:bg-indigo-100 tw:cursor-pointer"
-            onClick={selectProject}
+            onClick={() => selectProject()}
+            className="tw:flex tw:items-center tw:gap-2 tw:px-4 tw:py-2 tw:bg-indigo-950/50 hover:tw:bg-indigo-900/60 tw:text-indigo-300 tw:border tw:border-indigo-500/25 tw:rounded-xl tw:text-xs tw:font-bold tw:cursor-pointer tw:transition-all hover:tw:scale-[1.02]"
           >
             Cambiar Proyecto
           </button>
         </div>
       </div>
 
+      {error && (
+        <div className="tw:bg-red-950/40 tw:border-b tw:border-red-500/30 tw:px-6 tw:py-2.5 tw:text-red-300 tw:text-xs tw:font-semibold tw:flex tw:items-center tw:gap-2">
+          <AlertTriangle size={14} className="tw:text-red-450" />
+          {error}
+        </div>
+      )}
+
       {/* Main Workspace */}
       <div className="tw:flex-1 tw:flex tw:overflow-hidden">
         {/* Left Side: Stats and problematic terms */}
-        <div className="tw:w-80 tw:border-r tw:border-slate-200 tw:bg-white tw:p-4 tw:flex tw:flex-col tw:gap-4 tw:overflow-y-auto tw:flex-shrink-0">
+        <div className="tw:w-80 tw:border-r tw:border-slate-900 tw:bg-slate-950/40 tw:p-5 tw:flex tw:flex-col tw:gap-5 tw:overflow-y-auto tw:flex-shrink-0">
+          
           {/* Stats Card */}
-          <div className="tw:bg-gradient-to-br tw:from-indigo-500 tw:to-violet-600 tw:p-4 tw:rounded-xl tw:text-white tw:shadow-md tw:space-y-2">
-            <h3 className="tw:text-xs tw:font-bold tw:uppercase tw:tracking-wider tw:opacity-85">Coincidencia en {selectedBook}</h3>
-            <div className="tw:flex tw:items-baseline tw:gap-2">
-              <span className="tw:text-4xl tw:font-black">{bookStats.percent}%</span>
-              <span className="tw:text-xs tw:opacity-75">completado</span>
+          <div className="tw:relative tw:bg-gradient-to-br tw:from-indigo-600 tw:to-violet-750 tw:p-5 tw:rounded-2xl tw:text-white tw:shadow-lg tw:shadow-indigo-950/40 tw:space-y-4 tw:overflow-hidden">
+            <div className="tw:absolute tw:top-0 tw:right-0 tw:-mt-6 tw:-mr-6 tw:w-24 tw:h-24 tw:bg-white/5 tw:rounded-full tw:blur-xl"></div>
+            <div className="tw:flex tw:items-center tw:justify-between">
+              <h3 className="tw:text-[10px] tw:font-black tw:uppercase tw:tracking-widest tw:text-indigo-200">Progreso en {selectedBook}</h3>
+              <Trophy size={16} className="tw:text-indigo-200 tw:animate-pulse" />
             </div>
-            <div className="tw:text-xs tw:opacity-90 tw:border-t tw:border-white/20 tw:pt-2">
-              {bookStats.foundCount} de {bookStats.expectedCount} términos clave con traducciones aprobadas encontradas en el texto.
+            
+            <div className="tw:flex tw:items-baseline tw:gap-1">
+              <span className="tw:text-5xl tw:font-black tracking-tighter">{bookStats.percent}%</span>
+              <span className="tw:text-xs tw:text-indigo-200 tw:font-semibold">verificado</span>
+            </div>
+
+            {/* Micro Progress Bar */}
+            <div className="tw:w-full tw:h-2 tw:bg-indigo-950/50 tw:rounded-full tw:overflow-hidden">
+              <div 
+                className="tw:h-full tw:bg-gradient-to-r tw:from-emerald-450 tw:to-teal-400 tw:transition-all tw:duration-500"
+                style={{ width: `${bookStats.percent}%` }}
+              ></div>
+            </div>
+
+            <div className="tw:text-[11px] tw:text-indigo-150 tw:font-medium tw:leading-relaxed">
+              Encontrados <span className="tw:text-white tw:font-bold">{bookStats.foundCount}</span> de <span className="tw:text-white tw:font-bold">{bookStats.expectedCount}</span> términos clave correspondientes con traducciones aprobadas.
             </div>
           </div>
 
           {/* Export Action Card */}
-          <div className="tw:bg-slate-50 tw:p-4 tw:rounded-xl tw:border tw:border-slate-100 tw:space-y-3">
-            <h4 className="tw:font-bold tw:text-xs tw:text-slate-700 uppercase">Exportar Reportes</h4>
+          <div className="tw:bg-slate-900/40 tw:p-4 tw:rounded-2xl tw:border tw:border-slate-900 tw:space-y-3">
+            <h4 className="tw:font-bold tw:text-[10px] tw:text-slate-400 tw:uppercase tw:tracking-wider tw:flex tw:items-center tw:gap-1.5">
+              <Download size={12} />
+              Exportar Reportes
+            </h4>
             <div className="tw:flex tw:gap-2">
               <button
                 onClick={handleExportCSV}
-                className="tw:flex-1 tw:py-2 tw:bg-white tw:hover:bg-slate-50 tw:border tw:border-slate-200 tw:rounded-lg tw:text-[10px] tw:font-semibold tw:shadow-sm tw:cursor-pointer"
+                className="tw:flex-1 tw:py-2 tw:bg-slate-900 hover:tw:bg-slate-850 tw:border tw:border-slate-800 tw:rounded-xl tw:text-[10px] tw:font-bold tw:shadow-sm tw:cursor-pointer tw:transition-all tw:flex tw:items-center tw:justify-center tw:gap-1"
               >
-                Exportar CSV
+                <FileSpreadsheet size={12} className="tw:text-slate-400" />
+                CSV
               </button>
               <button
                 onClick={handleExportHTML}
-                className="tw:flex-1 tw:py-2 tw:bg-white tw:hover:bg-slate-50 tw:border tw:border-slate-200 tw:rounded-lg tw:text-[10px] tw:font-semibold tw:shadow-sm tw:cursor-pointer"
+                className="tw:flex-1 tw:py-2 tw:bg-slate-900 hover:tw:bg-slate-850 tw:border tw:border-slate-800 tw:rounded-xl tw:text-[10px] tw:font-bold tw:shadow-sm tw:cursor-pointer tw:transition-all tw:flex tw:items-center tw:justify-center tw:gap-1"
               >
-                Reporte HTML
+                <FileText size={12} className="tw:text-slate-400" />
+                HTML
               </button>
             </div>
           </div>
 
           {/* Problematic terms list */}
-          <div className="tw:space-y-2.5 tw:flex-1">
-            <h4 className="tw:font-bold tw:text-xs tw:text-slate-700 uppercase tw:tracking-wide">Términos Más Faltantes</h4>
-            <div className="tw:space-y-2 tw:overflow-y-auto">
+          <div className="tw:space-y-3 tw:flex-1 tw:flex tw:flex-col tw:overflow-hidden">
+            <h4 className="tw:font-bold tw:text-[10px] tw:text-slate-400 tw:uppercase tw:tracking-wider tw:flex tw:items-center tw:gap-1.5">
+              <AlertTriangle size={12} className="tw:text-rose-400" />
+              Términos Más Faltantes
+            </h4>
+            <div className="tw:space-y-2 tw:overflow-y-auto tw:flex-1 tw:pr-1">
               {problematicTerms.map(({ term, missingCount }) => (
                 <div
                   key={term.id}
                   onClick={() => handleOpenKeyTerms(term.id)}
-                  className="tw:p-2.5 tw:border tw:border-slate-100 tw:bg-slate-50/50 hover:tw:bg-slate-50 tw:rounded-lg tw:cursor-pointer tw:transition-colors tw:flex tw:items-start tw:justify-between tw:gap-2"
+                  className="tw:p-3 tw:border tw:border-slate-900 tw:bg-slate-900/20 hover:tw:bg-slate-900/50 hover:tw:border-slate-850 tw:rounded-xl tw:cursor-pointer tw:transition-all tw:flex tw:items-center tw:justify-between tw:gap-3 group"
                 >
-                  <div className="tw:space-y-0.5">
-                    <div className="tw:font-semibold tw:text-xs tw:text-slate-700">{term.gloss}</div>
-                    <div className="tw:text-[10px] tw:text-slate-400 tw:font-serif">{term.lemma}</div>
+                  <div className="tw:space-y-1">
+                    <div className="tw:font-bold tw:text-xs tw:text-slate-200 group-hover:tw:text-indigo-300 tw:transition-colors">{term.gloss}</div>
+                    <div className="tw:text-[10px] tw:text-slate-550 tw:font-serif italic">{term.lemma}</div>
                   </div>
-                  <span className="tw:px-1.5 tw:py-0.5 tw:bg-rose-50 tw:text-rose-600 tw:border tw:border-rose-100 tw:rounded-full tw:text-[9px] tw:font-bold">
-                    -{missingCount}
-                  </span>
+                  <div className="tw:flex tw:items-center tw:gap-2">
+                    <span className="tw:px-2 tw:py-0.5 tw:bg-rose-950/45 tw:text-rose-450 tw:border tw:border-rose-900/30 tw:rounded-full tw:text-[9px] tw:font-bold">
+                      -{missingCount}
+                    </span>
+                  </div>
                 </div>
               ))}
               {problematicTerms.length === 0 && (
-                <div className="tw:text-xs tw:text-slate-400 tw:text-center tw:py-4">
-                  ¡Excelente! No faltan términos clave en este libro.
+                <div className="tw:text-xs tw:text-slate-500 tw:text-center tw:py-8 tw:italic">
+                  🎉 ¡No faltan términos clave en este libro!
                 </div>
               )}
             </div>
@@ -571,7 +670,10 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
         {/* Right Side: Heatmap and chapter details */}
         <div className="tw:flex-1 tw:p-6 tw:overflow-y-auto tw:space-y-6">
           <div className="tw:space-y-3">
-            <h3 className="tw:font-bold tw:text-sm tw:text-slate-700 uppercase tw:tracking-wider">Matriz de Capítulos (Heatmap)</h3>
+            <h3 className="tw:font-bold tw:text-[10px] tw:text-slate-400 tw:uppercase tw:tracking-wider tw:flex tw:items-center tw:gap-1.5">
+              <Layers size={12} />
+              Matriz de Capítulos (Heatmap)
+            </h3>
             
             {/* Heatmap Grid */}
             <div className="tw:grid tw:grid-cols-4 sm:tw:grid-cols-6 md:tw:grid-cols-8 lg:tw:grid-cols-10 tw:gap-3">
@@ -581,14 +683,14 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
                 const found = metrics?.found ?? 0;
                 const isSelected = selectedChapter === chap;
 
-                let cardClass = 'tw:bg-slate-100 tw:border-slate-200 tw:text-slate-400';
+                let cardClass = 'tw:bg-slate-900/20 tw:border-slate-900 tw:text-slate-500 hover:tw:border-slate-800';
                 if (expected > 0) {
                   if (found === expected) {
-                    cardClass = 'tw:bg-emerald-50 tw:border-emerald-200 tw:text-emerald-700 hover:tw:bg-emerald-100/70';
+                    cardClass = 'tw:bg-emerald-950/20 tw:border-emerald-500/40 tw:text-emerald-400 hover:tw:bg-emerald-900/25 hover:tw:border-emerald-400';
                   } else if (found > 0) {
-                    cardClass = 'tw:bg-amber-50 tw:border-amber-200 tw:text-amber-700 hover:tw:bg-amber-100/70';
+                    cardClass = 'tw:bg-amber-950/15 tw:border-amber-550/40 tw:text-amber-400 hover:tw:bg-amber-900/20 hover:tw:border-amber-400';
                   } else {
-                    cardClass = 'tw:bg-rose-50 tw:border-rose-200 tw:text-rose-700 hover:tw:bg-rose-100/70';
+                    cardClass = 'tw:bg-rose-950/15 tw:border-rose-550/40 tw:text-rose-450 hover:tw:bg-rose-900/20 hover:tw:border-rose-400';
                   }
                 }
 
@@ -596,12 +698,12 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
                   <button
                     key={chap}
                     onClick={() => setSelectedChapter(chap)}
-                    className={`tw:p-3 tw:rounded-xl tw:border tw:text-center tw:transition-all tw:cursor-pointer tw:flex tw:flex-col tw:items-center tw:gap-1 ${cardClass} ${
-                      isSelected ? 'tw:ring-2 tw:ring-indigo-600 tw:scale-105' : ''
+                    className={`tw:p-3.5 tw:rounded-2xl tw:border tw:text-center tw:transition-all tw:cursor-pointer tw:flex tw:flex-col tw:items-center tw:gap-1 hover:tw:scale-[1.05] ${cardClass} ${
+                      isSelected ? 'tw:ring-2 tw:ring-indigo-500 tw:border-indigo-400 tw:bg-indigo-950/20 tw:scale-[1.05]' : ''
                     }`}
                   >
-                    <span className="tw:text-lg tw:font-black">{chap}</span>
-                    <span className="tw:text-[10px] tw:font-semibold">
+                    <span className="tw:text-lg tw:font-black tracking-tight">{chap}</span>
+                    <span className="tw:text-[9px] tw:font-bold opacity-80">
                       {expected > 0 ? `${found}/${expected}` : 'N/A'}
                     </span>
                   </button>
@@ -612,12 +714,17 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
 
           {/* Chapter detail card */}
           {selectedChapter !== null && chapterMetrics[selectedChapter] && (
-            <div className="tw:bg-white tw:p-5 tw:rounded-xl tw:border tw:border-slate-200 tw:shadow-sm tw:space-y-4">
-              <div className="tw:flex tw:items-center tw:justify-between">
-                <h3 className="tw:font-bold tw:text-sm tw:text-slate-700 uppercase">
-                  Detalles del Capítulo {selectedChapter}
-                </h3>
-                <span className="tw:text-xs tw:text-slate-400">
+            <div className="tw:bg-slate-900/35 tw:p-6 tw:rounded-2xl tw:border tw:border-slate-900 tw:shadow-xl tw:space-y-4">
+              <div className="tw:flex tw:items-center tw:justify-between tw:pb-3 tw:border-b tw:border-slate-900">
+                <div className="tw:flex tw:items-center tw:gap-2">
+                  <h3 className="tw:font-extrabold tw:text-sm tw:text-slate-100 uppercase">
+                    Detalles del Capítulo {selectedChapter}
+                  </h3>
+                  <span className="tw:px-2 tw:py-0.5 tw:bg-slate-850 tw:border tw:border-slate-800 tw:rounded-full tw:text-[9px] tw:font-bold tw:text-slate-400">
+                    {selectedBook} {selectedChapter}
+                  </span>
+                </div>
+                <span className="tw:text-xs tw:text-slate-400 tw:font-medium">
                   {selectedChapterMatches.filter(m => m.found).length} de {selectedChapterMatches.length} términos encontrados
                 </span>
               </div>
@@ -626,45 +733,51 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
               <div className="tw:overflow-x-auto">
                 <table className="tw:w-full tw:text-left tw:border-collapse">
                   <thead>
-                    <tr className="tw:border-b tw:border-slate-100 tw:text-xs tw:text-slate-400 uppercase">
-                      <th className="tw:pb-2.5 tw:font-bold">Glosas / Término</th>
-                      <th className="tw:pb-2.5 tw:font-bold">Lema</th>
-                      <th className="tw:pb-2.5 tw:font-bold">Traducciones Esperadas</th>
-                      <th className="tw:pb-2.5 tw:font-bold">Coincidencia en el texto</th>
-                      <th className="tw:pb-2.5 tw:font-bold">Acciones</th>
+                    <tr className="tw:border-b tw:border-slate-900 tw:text-[10px] tw:text-slate-400 uppercase tracking-wider">
+                      <th className="tw:pb-3 tw:font-bold">Glosas / Término</th>
+                      <th className="tw:pb-3 tw:font-bold">Lema</th>
+                      <th className="tw:pb-3 tw:font-bold">Traducciones Esperadas</th>
+                      <th className="tw:pb-3 tw:font-bold">Coincidencia en el texto</th>
+                      <th className="tw:pb-3 tw:font-bold">Acciones</th>
                     </tr>
                   </thead>
-                  <tbody className="tw:divide-y tw:divide-slate-50 tw:text-xs">
+                  <tbody className="tw:divide-y tw:divide-slate-900/60 tw:text-xs">
                     {selectedChapterMatches.map(m => (
-                      <tr key={m.termId} className="hover:tw:bg-slate-50/50">
-                        <td className="tw:py-3 tw:font-bold tw:text-slate-700">{m.gloss}</td>
-                        <td className="tw:py-3 tw:font-serif tw:text-indigo-600">{m.lemma} {m.transliteration ? `(${m.transliteration})` : ''}</td>
-                        <td className="tw:py-3 tw:text-slate-600">
-                          {m.expectedRenderings.join(', ') || <span className="tw:text-slate-400 tw:italic">Ninguno aprobado</span>}
+                      <tr key={m.termId} className="hover:tw:bg-slate-900/40 tw:transition-colors">
+                        <td className="tw:py-3.5 tw:font-bold tw:text-slate-200">{m.gloss}</td>
+                        <td className="tw:py-3.5 tw:font-serif tw:text-indigo-400 tw:text-xs">
+                          {m.lemma} {m.transliteration ? <span className="tw:text-slate-500 tw:text-[10px] tw:font-sans">({m.transliteration})</span> : ''}
                         </td>
-                        <td className="tw:py-3">
+                        <td className="tw:py-3.5 tw:text-slate-350">
+                          {m.expectedRenderings.join(', ') || <span className="tw:text-slate-655 tw:italic">Ninguno aprobado</span>}
+                        </td>
+                        <td className="tw:py-3.5">
                           {m.found ? (
-                            <span className="tw:bg-green-50 tw:text-green-700 tw:px-2 tw:py-0.5 tw:border tw:border-green-200 tw:rounded-full tw:font-semibold">
-                              ✓ {m.matchedText}
+                            <span className="tw:inline-flex tw:items-center tw:gap-1.5 tw:bg-emerald-950/45 tw:text-emerald-400 tw:px-2.5 tw:py-1 tw:border tw:border-emerald-900/35 tw:rounded-lg tw:font-bold tw:text-[10px]">
+                              <CheckCircle2 size={12} />
+                              {m.matchedText}
                             </span>
                           ) : (
-                            <span className="tw:bg-red-50 tw:text-red-700 tw:px-2 tw:py-0.5 tw:border tw:border-red-200 tw:rounded-full tw:font-semibold">
-                              ✗ Faltante
+                            <span className="tw:inline-flex tw:items-center tw:gap-1.5 tw:bg-rose-950/45 tw:text-rose-450 tw:px-2.5 tw:py-1 tw:border tw:border-rose-900/35 tw:rounded-lg tw:font-bold tw:text-[10px]">
+                              <XCircle size={12} />
+                              Faltante
                             </span>
                           )}
                         </td>
-                        <td className="tw:py-3">
-                          <div className="tw:flex tw:items-center tw:gap-2">
+                        <td className="tw:py-3.5">
+                          <div className="tw:flex tw:items-center tw:gap-3">
                             <button
                               onClick={() => handleNavigateToRef(m.ref)}
-                              className="tw:text-indigo-600 tw:hover:underline tw:cursor-pointer"
+                              className="tw:flex tw:items-center tw:gap-1 tw:text-indigo-400 hover:tw:text-indigo-300 tw:hover:underline tw:cursor-pointer tw:font-semibold"
                             >
+                              <BookOpen size={12} />
                               Ver versículo
                             </button>
                             <button
                               onClick={() => handleOpenKeyTerms(m.termId)}
-                              className="tw:text-slate-500 tw:hover:text-indigo-600 tw:cursor-pointer"
+                              className="tw:flex tw:items-center tw:gap-1 tw:text-slate-400 hover:tw:text-slate-200 tw:cursor-pointer tw:font-semibold"
                             >
+                              <Edit3 size={12} />
                               Editar
                             </button>
                           </div>
@@ -673,7 +786,7 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
                     ))}
                     {selectedChapterMatches.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="tw:text-center tw:py-6 tw:text-slate-400">
+                        <td colSpan={5} className="tw:text-center tw:py-8 tw:text-slate-500 tw:italic">
                           No hay términos clave esperados en el Capítulo {selectedChapter}.
                         </td>
                       </tr>

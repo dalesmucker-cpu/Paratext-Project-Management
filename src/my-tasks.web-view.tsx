@@ -283,8 +283,12 @@ globalThis.webViewComponent = function MyTasksWebView({
     ),
   );
 
+  const loadDataRequestRef = useRef(0);
+
   const loadData = useCallback(async () => {
     if (!projectId) return;
+    const requestId = ++loadDataRequestRef.current;
+    const isCurrentRequest = () => requestId === loadDataRequestRef.current;
     setLoading(true);
     setError('');
     try {
@@ -293,6 +297,7 @@ globalThis.webViewComponent = function MyTasksWebView({
         papi.commands.sendCommand('paratextProjectManager.getCurrentUser'),
         papi.commands.sendCommand('paratextProjectManager.getTeamMembers'),
       ]);
+      if (!isCurrentRequest()) return;
       const store = JSON.parse(tasksResult) as TaskStore;
       setTasks(store.tasks ?? []);
       setDeletedTaskIds(store.deletedTaskIds ?? []);
@@ -308,6 +313,7 @@ globalThis.webViewComponent = function MyTasksWebView({
           papi.commands.sendCommand('paratextProjectManager.getCurrentUser'),
           papi.commands.sendCommand('paratextProjectManager.getTeamMembers'),
         ]);
+        if (!isCurrentRequest()) return;
         const store = JSON.parse(tasksResult) as TaskStore;
         setTasks(store.tasks ?? []);
         setDeletedTaskIds(store.deletedTaskIds ?? []);
@@ -318,7 +324,7 @@ globalThis.webViewComponent = function MyTasksWebView({
         setError(`Error al cargar: ${retryErr}`);
       }
     } finally {
-      setLoading(false);
+      if (isCurrentRequest()) setLoading(false);
     }
   }, [projectId, persistCurrentUser]);
 
@@ -561,7 +567,7 @@ globalThis.webViewComponent = function MyTasksWebView({
         <p className="tw:text-gray-600">Ningún proyecto seleccionado.</p>
         <button
           className="tw:px-4 tw:py-2 tw:bg-slate-600 tw:text-white tw:rounded tw:hover:bg-slate-700"
-          onClick={selectProject}
+          onClick={() => selectProject()}
         >
           Seleccionar Proyecto
         </button>
@@ -617,8 +623,19 @@ globalThis.webViewComponent = function MyTasksWebView({
               title="Configurar notificaciones"
               onClick={() => setShowNotifSettings((v) => !v)}
             >
-              <svg className="tw:w-4 tw:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
+              <svg
+                className="tw:w-4 tw:h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
+                ></path>
               </svg>
               {notifications.length > 0 && (
                 <span className="tw:absolute tw:-top-0.5 tw:-right-0.5 tw:bg-red-500 tw:text-white tw:text-[10px] tw:rounded-full tw:w-4 tw:h-4 tw:flex tw:items-center tw:justify-center tw:leading-none">
@@ -628,7 +645,7 @@ globalThis.webViewComponent = function MyTasksWebView({
             </button>
             <button
               className="tw:px-2.5 tw:py-1 tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:border-slate-200 tw:rounded tw:text-xs tw:font-medium tw:text-slate-700 tw:cursor-pointer"
-              onClick={selectProject}
+              onClick={() => selectProject()}
               title="Cambiar proyecto"
             >
               Cambiar Proyecto
@@ -691,16 +708,10 @@ globalThis.webViewComponent = function MyTasksWebView({
         {/* Summary counts */}
         {sidebarVisible && (
           <div className="tw:flex tw:gap-3 tw:mt-1.5 tw:text-xs tw:flex-wrap">
-            <span className="tw:text-red-600">
-              Banderas: {counts.flagged}
-            </span>
+            <span className="tw:text-red-600">Banderas: {counts.flagged}</span>
             <span className="tw:text-yellow-700">En progreso: {counts['in-progress']}</span>
-            <span className="tw:text-gray-500">
-              Pendientes: {counts.pending}
-            </span>
-            <span className="tw:text-green-600">
-              Completadas: {counts.complete}
-            </span>
+            <span className="tw:text-gray-500">Pendientes: {counts.pending}</span>
+            <span className="tw:text-green-600">Completadas: {counts.complete}</span>
           </div>
         )}
 

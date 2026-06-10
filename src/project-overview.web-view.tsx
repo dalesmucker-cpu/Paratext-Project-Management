@@ -17,7 +17,6 @@ import {
   generateId,
   STATUS_COLORS,
   STATUS_LABELS,
-  STAGES,
 } from './types/task.types';
 
 /** Safely convert any caught value (including papi plain-object errors) to a readable string. */
@@ -269,13 +268,13 @@ function CalendarTabContent({
                       <span
                         key={t.id}
                         className={`tw:inline-block tw:w-1.5 tw:h-1.5 tw:rounded-full tw:flex-shrink-0 ${
-                          t.status === 'tw:complete'
-                            ? 'tw:bg-green-500'
-                            : t.status === 'tw:flagged'
-                              ? 'tw:bg-red-500'
-                              : t.status === 'tw:in-progress'
-                                ? 'tw:bg-yellow-500'
-                                : 'tw:bg-gray-400'
+                        t.status === 'complete'
+                          ? 'tw:bg-green-500'
+                          : t.status === 'flagged'
+                            ? 'tw:bg-red-500'
+                            : t.status === 'in-progress'
+                              ? 'tw:bg-yellow-500'
+                              : 'tw:bg-gray-400'
                         }`}
                         title={`${t.book} ${t.chapter} — ${getStageLabel(t.stage, stageConfig)} (${t.status})`}
                       />
@@ -405,11 +404,11 @@ function CalendarTabContent({
                     <li
                       key={task.id}
                       className={`tw:text-xs tw:px-2 tw:py-1 tw:rounded tw:border-l-2 ${
-                        task.status === 'tw:complete'
+                        task.status === 'complete'
                           ? 'tw:border-green-400 tw:bg-green-50'
-                          : task.status === 'tw:flagged'
+                          : task.status === 'flagged'
                             ? 'tw:border-red-400 tw:bg-red-50'
-                            : task.status === 'tw:in-progress'
+                            : task.status === 'in-progress'
                               ? 'tw:border-yellow-400 tw:bg-yellow-50'
                               : 'tw:border-gray-300 tw:bg-gray-50'
                       }`}
@@ -651,7 +650,6 @@ function CalendarTabContent({
 globalThis.webViewComponent = function ProjectOverviewWebView({
   projectId,
   updateWebViewDefinition,
-  useWebViewState,
 }: WebViewProps) {
   const [tasks, setTasks] = useState<ProjectTask[]>([]);
   const [stageConfig, setStageConfig] = useState<Record<string, StageConfig>>({});
@@ -811,8 +809,12 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
     ),
   );
 
+  const loadTasksRequestRef = useRef(0);
+
   const loadTasks = useCallback(async () => {
     if (!projectId) return;
+    const requestId = ++loadTasksRequestRef.current;
+    const isCurrentRequest = () => requestId === loadTasksRequestRef.current;
     setLoading(true);
     setError('');
     try {
@@ -821,6 +823,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         papi.commands.sendCommand('paratextProjectManager.getTeamMembers'),
         papi.commands.sendCommand('paratextProjectManager.getCurrentUser'),
       ]);
+      if (!isCurrentRequest()) return;
       const store = JSON.parse(result) as TaskStore;
       setTasks(store.tasks ?? []);
       setStageConfig(store.stageConfig ?? {});
@@ -837,6 +840,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
           papi.commands.sendCommand('paratextProjectManager.getTeamMembers'),
           papi.commands.sendCommand('paratextProjectManager.getCurrentUser'),
         ]);
+        if (!isCurrentRequest()) return;
         const store = JSON.parse(result) as TaskStore;
         setTasks(store.tasks ?? []);
         setStageConfig(store.stageConfig ?? {});
@@ -851,7 +855,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         setError(`Error al cargar: ${errMsg(e2)}`);
       }
     } finally {
-      setLoading(false);
+      if (isCurrentRequest()) setLoading(false);
     }
   }, [projectId]);
 
@@ -917,20 +921,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, [silentRefresh]);
 
-  // --- persistTasks helper ---
 
-  const persistTasks = useCallback(
-    async (updatedTasks: ProjectTask[], newStageConfig?: Record<string, StageConfig>) => {
-      const sc = newStageConfig ?? stageConfig;
-      const store = { schemaVersion: 1 as const, tasks: updatedTasks, stageConfig: sc };
-      await papi.commands.sendCommand(
-        'paratextProjectManager.saveTasks',
-        projectId,
-        JSON.stringify(store),
-      );
-    },
-    [stageConfig, projectId],
-  );
 
   // --- Google Calendar callbacks ---
 
@@ -979,6 +970,10 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
   }, []);
 
   const handleStartCollabHost = async () => {
+    if (!projectId) {
+      setCollabErrorMsg('Proyecto no seleccionado.');
+      return;
+    }
     if (!collabUsername.trim()) {
       setCollabErrorMsg('Por favor, ingresa un nombre de usuario.');
       return;
@@ -1024,6 +1019,10 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
   };
 
   const handleConnectCollabClient = async () => {
+    if (!projectId) {
+      setCollabErrorMsg('Proyecto no seleccionado.');
+      return;
+    }
     if (!collabUsername.trim()) {
       setCollabErrorMsg('Por favor, ingresa un nombre de usuario.');
       return;
@@ -1748,6 +1747,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
 
   // --- Time entry save/delete ---
   const saveTimeEntry = useCallback(async () => {
+    if (!projectId) return;
     const hours = parseFloat(logTimeHours);
     const isOtro = logTimeTask === '__otro__';
     if (!isOtro && !logTimeTask) {
@@ -1889,6 +1889,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
 
   const deleteTimeEntry = useCallback(
     async (taskId: string, entryId: string) => {
+      if (!projectId) return;
       try {
         const updatedTasks = tasks.map((task): ProjectTask => {
           if (task.id !== taskId) return task;
@@ -2104,7 +2105,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         <p className="tw:text-gray-600">Ningún proyecto seleccionado.</p>
         <button
           className="tw:px-4 tw:py-2 tw:bg-slate-600 tw:text-white tw:rounded tw:hover:bg-slate-700"
-          onClick={selectProject}
+          onClick={() => selectProject()}
         >
           Seleccionar Proyecto
         </button>
@@ -2204,7 +2205,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
           )}
           <button
             className="tw:px-2 tw:py-0.5 tw:bg-gray-100 tw:rounded tw:hover:bg-gray-200"
-            onClick={selectProject}
+            onClick={() => selectProject()}
             title="Cambiar proyecto"
           >
             ⇄
@@ -2358,7 +2359,9 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                       <span className="tw:w-2 tw:h-2 tw:rounded-full tw:bg-green-500 tw:animate-pulse" />
                     )}
                   </span>
-                  <span className="tw:text-gray-400 tw:text-xs">{showCollabSection ? '▲' : '▼'}</span>
+                  <span className="tw:text-gray-400 tw:text-xs">
+                    {showCollabSection ? '▲' : '▼'}
+                  </span>
                 </button>
 
                 {showCollabSection && (
@@ -2414,6 +2417,19 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                           }`}
                         >
                           ☁️ En Línea (Internet)
+                        </button>
+                      </div>
+                    )}
+
+                    {collabRole === 'none' && !reconnecting && hasEverConnected && (
+                      <div className="tw:bg-orange-50 tw:border tw:border-orange-300 tw:text-orange-800 tw:p-2 tw:rounded tw:text-xs tw:flex tw:justify-between tw:items-center">
+                        <span>⚠️ Sesión desconectada</span>
+                        <button
+                          type="button"
+                          onClick={handleReconnectCollab}
+                          className="tw:ml-2 tw:px-2 tw:py-0.5 tw:bg-orange-200 hover:tw:bg-orange-300 tw:rounded tw:text-[10px] tw:font-semibold"
+                        >
+                          🔌 Reconectar
                         </button>
                       </div>
                     )}
@@ -2475,7 +2491,9 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                                 type="number"
                                 className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
                                 value={collabPort}
-                                onChange={(e) => setCollabPort(parseInt(e.target.value, 10) || 49885)}
+                                onChange={(e) =>
+                                  setCollabPort(parseInt(e.target.value, 10) || 49885)
+                                }
                               />
                             </div>
                           )}
@@ -2556,7 +2574,9 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                                   type="number"
                                   className="tw:w-full tw:border tw:rounded tw:px-2 tw:py-1 tw:bg-white"
                                   value={collabPort}
-                                  onChange={(e) => setCollabPort(parseInt(e.target.value, 10) || 49885)}
+                                  onChange={(e) =>
+                                    setCollabPort(parseInt(e.target.value, 10) || 49885)
+                                  }
                                 />
                               </div>
                             </>
@@ -2666,19 +2686,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                           </div>
                         )}
 
-                        {/* Disconnected banner with reconnect */}
-                        {collabRole === 'none' && !reconnecting && hasEverConnected && (
-                          <div className="tw:bg-orange-50 tw:border tw:border-orange-300 tw:text-orange-800 tw:p-2 tw:rounded tw:text-xs tw:flex tw:justify-between tw:items-center">
-                            <span>⚠️ Sesión desconectada</span>
-                            <button
-                              type="button"
-                              onClick={handleReconnectCollab}
-                              className="tw:ml-2 tw:px-2 tw:py-0.5 tw:bg-orange-200 hover:tw:bg-orange-300 tw:rounded tw:text-[10px] tw:font-semibold"
-                            >
-                              🔌 Reconectar
-                            </button>
-                          </div>
-                        )}
+
 
                         {/* Group Chat */}
                         <div className="tw:border tw:rounded tw:bg-white">
@@ -2697,7 +2705,9 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                                   className="tw:text-[11px] tw:bg-white tw:p-1.5 tw:rounded tw:border tw:shadow-sm"
                                 >
                                   <div className="tw:flex tw:justify-between tw:mb-0.5">
-                                    <span className="tw:font-bold tw:text-slate-700">{msg.user}</span>
+                                    <span className="tw:font-bold tw:text-slate-700">
+                                      {msg.user}
+                                    </span>
                                     <span className="tw:text-[9px] tw:text-gray-400">
                                       {new Date(msg.timestamp).toLocaleTimeString([], {
                                         hour: '2-digit',
@@ -2763,7 +2773,9 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                             <div>
                               <span className="tw:text-green-600 tw:font-medium">● Conectado</span>
                               {gcalStatus.email && (
-                                <span className="tw:ml-1 tw:text-gray-500">({gcalStatus.email})</span>
+                                <span className="tw:ml-1 tw:text-gray-500">
+                                  ({gcalStatus.email})
+                                </span>
                               )}
                             </div>
                             {gcalStatus.lastSync && (
@@ -2830,8 +2842,8 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                     ) : (
                       <>
                         <p className="tw:text-xs tw:text-gray-500">
-                          Conecta Google Calendar para sincronizar fechas límite de tareas como eventos
-                          y ver el calendario del equipo.
+                          Conecta Google Calendar para sincronizar fechas límite de tareas como
+                          eventos y ver el calendario del equipo.
                         </p>
 
                         {/* One-click reconnect — shown when credentials are already saved */}
@@ -2847,8 +2859,8 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                                 : '🔑 Reconectar Google Calendar'}
                             </button>
                             <p className="tw:text-xs tw:text-gray-400">
-                              Se usarán las credenciales guardadas. El navegador se abrirá para aprobar
-                              el acceso.{' '}
+                              Se usarán las credenciales guardadas. El navegador se abrirá para
+                              aprobar el acceso.{' '}
                               <button
                                 className="tw:underline tw:hover:text-gray-600"
                                 onClick={() => setShowGcalSetup(true)}
@@ -2857,10 +2869,10 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                               </button>
                             </p>
                             <p className="tw:text-xs tw:text-amber-700 tw:bg-amber-50 tw:border tw:border-amber-200 tw:rounded tw:px-2 tw:py-1">
-                              💡 Si tienes que reconectar frecuentemente: en Google Cloud Console cambia
-                              la app de <strong>«En prueba»</strong> a <strong>«En producción»</strong>{' '}
-                              (no requiere verificación de Google). Esto evita que el token expire cada
-                              7 días.
+                              💡 Si tienes que reconectar frecuentemente: en Google Cloud Console
+                              cambia la app de <strong>«En prueba»</strong> a{' '}
+                              <strong>«En producción»</strong> (no requiere verificación de Google).
+                              Esto evita que el token expire cada 7 días.
                             </p>
                           </div>
                         )}
@@ -2898,8 +2910,8 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                                       <strong>
                                         APIs y servicios → Pantalla de consentimiento OAuth
                                       </strong>{' '}
-                                      → Tipo: <strong>Externo</strong> → crea, llena nombre y correo →
-                                      agrega tu correo en &quot;Usuarios de prueba&quot;
+                                      → Tipo: <strong>Externo</strong> → crea, llena nombre y correo
+                                      → agrega tu correo en &quot;Usuarios de prueba&quot;
                                     </li>
                                     <li>
                                       <strong>
@@ -2908,8 +2920,8 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                                       </strong>
                                     </li>
                                     <li>
-                                      Tipo de aplicación: <strong>Aplicación de escritorio</strong> (no
-                                      &quot;Aplicación web&quot;)
+                                      Tipo de aplicación: <strong>Aplicación de escritorio</strong>{' '}
+                                      (no &quot;Aplicación web&quot;)
                                     </li>
                                     <li>
                                       Copia el <strong>ID de cliente</strong> y{' '}
@@ -2918,8 +2930,8 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                                   </ol>
                                   <p className="tw:text-orange-700 tw:font-medium tw:mt-1">
                                     ⚠ Error 400 = elegiste &quot;Aplicación web&quot; en vez de
-                                    &quot;Aplicación de escritorio&quot;, o falta configurar la pantalla
-                                    de consentimiento.
+                                    &quot;Aplicación de escritorio&quot;, o falta configurar la
+                                    pantalla de consentimiento.
                                   </p>
                                 </div>
 
@@ -2964,295 +2976,301 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                             )}
                           </div>
                         )}
-                  </>
-                )}
+                      </>
+                    )}
 
-                {gcalMessage && (
-                  <p className="tw:text-xs tw:text-green-700 tw:bg-green-50 tw:border tw:border-green-200 tw:rounded tw:px-2 tw:py-1">
-                    {gcalMessage}
-                  </p>
-                )}
-                {gcalError && (
-                  <p className="tw:text-xs tw:text-red-700 tw:bg-red-50 tw:border tw:border-red-200 tw:rounded tw:px-2 tw:py-1">
-                    {gcalError}
-                  </p>
+                    {gcalMessage && (
+                      <p className="tw:text-xs tw:text-green-700 tw:bg-green-50 tw:border tw:border-green-200 tw:rounded tw:px-2 tw:py-1">
+                        {gcalMessage}
+                      </p>
+                    )}
+                    {gcalError && (
+                      <p className="tw:text-xs tw:text-red-700 tw:bg-red-50 tw:border tw:border-red-200 tw:rounded tw:px-2 tw:py-1">
+                        {gcalError}
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
-            )}
-          </div>
 
-          {/* Drive Task Sync Section */}
-          <div className="tw:border tw:border-gray-200 tw:rounded-lg tw:overflow-hidden tw:no-print">
-            <button
-              className="tw:w-full tw:flex tw:items-center tw:justify-between tw:px-3 tw:py-2 tw:bg-gray-50 tw:hover:bg-gray-100 tw:text-left"
-              onClick={() => setShowDriveSection((s) => !s)}
-            >
-              <span className="tw:font-semibold tw:text-xs tw:text-gray-700">
-                ☁ Sincronización de Tareas (Drive)
-                {driveStatus.connected ? (
-                  <span className="tw:ml-2 tw:text-green-600 tw:font-normal">● Conectado</span>
-                ) : (
-                  <span className="tw:ml-2 tw:text-gray-400 tw:font-normal">○ No configurado</span>
-                )}
-              </span>
-              <span className="tw:text-gray-400 tw:text-xs">{showDriveSection ? '▲' : '▼'}</span>
-            </button>
-
-            {showDriveSection && (
-              <div className="tw:p-3 tw:space-y-3 tw:text-xs">
-                {driveStatus.connected ? (
-                  <>
-                    <div className="tw:flex tw:items-center tw:gap-2 tw:flex-wrap">
-                      <p className="tw:text-green-700 tw:bg-green-50 tw:border tw:border-green-200 tw:rounded tw:px-2 tw:py-1 tw:flex-1">
-                        ✓ Drive conectado · {driveStatus.fileCount} proyecto(s) sincronizado(s)
-                      </p>
-                      <button
-                        className="tw:px-2 tw:py-1 tw:bg-gray-100 tw:border tw:border-gray-300 tw:text-gray-700 tw:rounded tw:text-xs tw:hover:bg-gray-200 tw:disabled:opacity-50 tw:whitespace-nowrap"
-                        onClick={driveTest}
-                        disabled={driveTesting}
-                      >
-                        {driveTesting ? '⟳ Probando…' : '🔍 Probar'}
-                      </button>
-                    </div>
-                    {driveTestResult && (
-                      <p
-                        className={`tw:text-xs tw:rounded tw:px-2 tw:py-1 tw:font-mono tw:whitespace-pre-wrap tw:break-all ${
-                          driveTestResult.startsWith('tw:✓')
-                            ? 'tw:text-green-700 tw:bg-green-50 tw:border tw:border-green-200'
-                            : 'tw:text-red-700 tw:bg-red-50 tw:border tw:border-red-200'
-                        }`}
-                      >
-                        {driveTestResult}
-                      </p>
-                    )}
-
-                    {/* Force sync button */}
-                    <div className="tw:flex tw:items-center tw:gap-2">
-                      <button
-                        className="tw:px-3 tw:py-1.5 tw:bg-green-600 tw:text-white tw:rounded tw:text-xs tw:hover:bg-green-700 tw:disabled:opacity-50"
-                        onClick={driveForceSync}
-                        disabled={driveSyncing}
-                      >
-                        {driveSyncing ? '⟳ Sincronizando…' : '↑ Sincronizar proyecto ahora'}
-                      </button>
-                    </div>
-                    {driveSyncResult && (
-                      <p
-                        className={`tw:text-xs tw:rounded tw:px-2 tw:py-1 tw:font-mono tw:whitespace-pre-wrap tw:break-all ${
-                          driveSyncResult.startsWith('tw:✓')
-                            ? 'tw:text-green-700 tw:bg-green-50 tw:border tw:border-green-200'
-                            : driveSyncResult === 'tw:Sincronizando…'
-                              ? 'tw:text-blue-700 tw:bg-blue-50 tw:border tw:border-blue-200'
-                              : 'tw:text-red-700 tw:bg-red-50 tw:border tw:border-red-200'
-                        }`}
-                      >
-                        {driveSyncResult}
-                      </p>
-                    )}
-
-                    {/* Re-import form (shown when user clicks "Actualizar config") */}
-                    {showDriveImport ? (
-                      <div className="tw:space-y-2 tw:border tw:border-blue-200 tw:rounded tw:p-2 tw:bg-blue-50">
-                        <p className="tw:font-medium tw:text-blue-800">
-                          Pega la nueva configuración del admin:
-                        </p>
-                        <textarea
-                          className="tw:w-full tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:text-xs tw:font-mono tw:h-20 tw:resize-none"
-                          value={driveImportJson}
-                          onChange={(e) => setDriveImportJson(e.target.value)}
-                          placeholder="Pega aquí el JSON actualizado…"
-                        />
-                        <div className="tw:flex tw:gap-2">
-                          <button
-                            className="tw:px-3 tw:py-1.5 tw:bg-blue-600 tw:text-white tw:rounded tw:text-xs tw:hover:bg-blue-700"
-                            onClick={driveImportConfig}
-                          >
-                            ✓ Actualizar
-                          </button>
-                          <button
-                            className="tw:px-3 tw:py-1.5 tw:bg-gray-200 tw:text-gray-700 tw:rounded tw:text-xs tw:hover:bg-gray-300"
-                            onClick={() => {
-                              setShowDriveImport(false);
-                              setDriveImportJson('');
-                              setDriveError('');
-                            }}
-                          >
-                            Cancelar
-                          </button>
-                        </div>
-                      </div>
+              {/* Drive Task Sync Section */}
+              <div className="tw:border tw:border-gray-200 tw:rounded-lg tw:overflow-hidden tw:no-print">
+                <button
+                  className="tw:w-full tw:flex tw:items-center tw:justify-between tw:px-3 tw:py-2 tw:bg-gray-50 tw:hover:bg-gray-100 tw:text-left"
+                  onClick={() => setShowDriveSection((s) => !s)}
+                >
+                  <span className="tw:font-semibold tw:text-xs tw:text-gray-700">
+                    ☁ Sincronización de Tareas (Drive)
+                    {driveStatus.connected ? (
+                      <span className="tw:ml-2 tw:text-green-600 tw:font-normal">● Conectado</span>
                     ) : (
+                      <span className="tw:ml-2 tw:text-gray-400 tw:font-normal">
+                        ○ No configurado
+                      </span>
+                    )}
+                  </span>
+                  <span className="tw:text-gray-400 tw:text-xs">
+                    {showDriveSection ? '▲' : '▼'}
+                  </span>
+                </button>
+
+                {showDriveSection && (
+                  <div className="tw:p-3 tw:space-y-3 tw:text-xs">
+                    {driveStatus.connected ? (
                       <>
-                        <div className="tw:bg-blue-50 tw:border tw:border-blue-200 tw:rounded tw:p-2 tw:space-y-1">
-                          <p className="tw:font-medium tw:text-blue-800">Comparte con el equipo:</p>
-                          <p className="tw:text-blue-700">
-                            1. Haz clic en "Exportar config" para copiar la configuración.
-                            <br />
-                            2. Envía el texto a cada compañero.
-                            <br />
-                            3. Ellos pegan el texto con el botón "Actualizar config".
+                        <div className="tw:flex tw:items-center tw:gap-2 tw:flex-wrap">
+                          <p className="tw:text-green-700 tw:bg-green-50 tw:border tw:border-green-200 tw:rounded tw:px-2 tw:py-1 tw:flex-1">
+                            ✓ Drive conectado · {driveStatus.fileCount} proyecto(s) sincronizado(s)
                           </p>
+                          <button
+                            className="tw:px-2 tw:py-1 tw:bg-gray-100 tw:border tw:border-gray-300 tw:text-gray-700 tw:rounded tw:text-xs tw:hover:bg-gray-200 tw:disabled:opacity-50 tw:whitespace-nowrap"
+                            onClick={driveTest}
+                            disabled={driveTesting}
+                          >
+                            {driveTesting ? '⟳ Probando…' : '🔍 Probar'}
+                          </button>
                         </div>
-                        {driveExportedConfig ? (
-                          <div className="tw:space-y-1">
-                            <p className="tw:font-medium tw:text-gray-700">
-                              Configuración para compartir:
+                        {driveTestResult && (
+                          <p
+                            className={`tw:text-xs tw:rounded tw:px-2 tw:py-1 tw:font-mono tw:whitespace-pre-wrap tw:break-all ${
+                              driveTestResult.startsWith('tw:✓')
+                                ? 'tw:text-green-700 tw:bg-green-50 tw:border tw:border-green-200'
+                                : 'tw:text-red-700 tw:bg-red-50 tw:border tw:border-red-200'
+                            }`}
+                          >
+                            {driveTestResult}
+                          </p>
+                        )}
+
+                        {/* Force sync button */}
+                        <div className="tw:flex tw:items-center tw:gap-2">
+                          <button
+                            className="tw:px-3 tw:py-1.5 tw:bg-green-600 tw:text-white tw:rounded tw:text-xs tw:hover:bg-green-700 tw:disabled:opacity-50"
+                            onClick={driveForceSync}
+                            disabled={driveSyncing}
+                          >
+                            {driveSyncing ? '⟳ Sincronizando…' : '↑ Sincronizar proyecto ahora'}
+                          </button>
+                        </div>
+                        {driveSyncResult && (
+                          <p
+                            className={`tw:text-xs tw:rounded tw:px-2 tw:py-1 tw:font-mono tw:whitespace-pre-wrap tw:break-all ${
+                              driveSyncResult.startsWith('tw:✓')
+                                ? 'tw:text-green-700 tw:bg-green-50 tw:border tw:border-green-200'
+                                : driveSyncResult === 'tw:Sincronizando…'
+                                  ? 'tw:text-blue-700 tw:bg-blue-50 tw:border tw:border-blue-200'
+                                  : 'tw:text-red-700 tw:bg-red-50 tw:border tw:border-red-200'
+                            }`}
+                          >
+                            {driveSyncResult}
+                          </p>
+                        )}
+
+                        {/* Re-import form (shown when user clicks "Actualizar config") */}
+                        {showDriveImport ? (
+                          <div className="tw:space-y-2 tw:border tw:border-blue-200 tw:rounded tw:p-2 tw:bg-blue-50">
+                            <p className="tw:font-medium tw:text-blue-800">
+                              Pega la nueva configuración del admin:
                             </p>
                             <textarea
                               className="tw:w-full tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:text-xs tw:font-mono tw:h-20 tw:resize-none"
-                              readOnly
-                              value={driveExportedConfig}
-                              onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+                              value={driveImportJson}
+                              onChange={(e) => setDriveImportJson(e.target.value)}
+                              placeholder="Pega aquí el JSON actualizado…"
                             />
-                            <p className="tw:text-gray-500">
-                              Haz clic en el texto para seleccionar todo, luego copia (Ctrl+C).
-                            </p>
-                          </div>
-                        ) : (
-                          <button
-                            className="tw:px-3 tw:py-1.5 tw:bg-blue-600 tw:text-white tw:rounded tw:text-xs tw:hover:bg-blue-700"
-                            onClick={driveExportConfig}
-                          >
-                            📋 Exportar config para el equipo
-                          </button>
-                        )}
-                        <button
-                          className="tw:block tw:text-blue-600 tw:underline tw:text-xs"
-                          onClick={() => {
-                            setShowDriveImport(true);
-                            setDriveError('');
-                          }}
-                        >
-                          ↺ Actualizar config (pegar nueva versión del admin)
-                        </button>
-                      </>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <p className="tw:text-gray-600">
-                      Las tareas se guardarán en Google Drive y se sincronizarán automáticamente con
-                      todo el equipo.
-                    </p>
-
-                    {/* Setup for admin */}
-                    {!showDriveImport && (
-                      <>
-                        {!driveStatus.hasCredentials || showDriveSetup ? (
-                          <div className="tw:space-y-2 tw:border tw:border-gray-200 tw:rounded tw:p-2">
-                            <p className="tw:font-medium tw:text-gray-700">
-                              Conectar Drive (admin):
-                            </p>
-                            <div>
-                              <label className="tw:block tw:text-gray-500 tw:mb-0.5">
-                                Client ID
-                              </label>
-                              <input
-                                type="text"
-                                className="tw:w-full tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:text-xs"
-                                value={driveClientId}
-                                onChange={(e) => setDriveClientId(e.target.value)}
-                                placeholder="xxxxxx.apps.googleusercontent.com"
-                              />
-                            </div>
-                            <div>
-                              <label className="tw:block tw:text-gray-500 tw:mb-0.5">
-                                Client Secret
-                              </label>
-                              <input
-                                type="password"
-                                className="tw:w-full tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:text-xs"
-                                value={driveClientSecret}
-                                onChange={(e) => setDriveClientSecret(e.target.value)}
-                                placeholder="GOCSPX-…"
-                              />
-                            </div>
                             <div className="tw:flex tw:gap-2">
                               <button
-                                className="tw:px-3 tw:py-1.5 tw:bg-blue-600 tw:text-white tw:rounded tw:text-xs tw:hover:bg-blue-700 tw:disabled:opacity-50"
-                                onClick={driveConnect}
-                                disabled={driveConnecting}
+                                className="tw:px-3 tw:py-1.5 tw:bg-blue-600 tw:text-white tw:rounded tw:text-xs tw:hover:bg-blue-700"
+                                onClick={driveImportConfig}
                               >
-                                {driveConnecting ? '⟳ Esperando…' : '🔑 Autorizar con Google'}
+                                ✓ Actualizar
                               </button>
-                              {showDriveSetup && (
-                                <button
-                                  className="tw:px-3 tw:py-1.5 tw:bg-gray-200 tw:text-gray-700 tw:rounded tw:text-xs tw:hover:bg-gray-300"
-                                  onClick={() => setShowDriveSetup(false)}
-                                >
-                                  Cancelar
-                                </button>
-                              )}
+                              <button
+                                className="tw:px-3 tw:py-1.5 tw:bg-gray-200 tw:text-gray-700 tw:rounded tw:text-xs tw:hover:bg-gray-300"
+                                onClick={() => {
+                                  setShowDriveImport(false);
+                                  setDriveImportJson('');
+                                  setDriveError('');
+                                }}
+                              >
+                                Cancelar
+                              </button>
                             </div>
                           </div>
                         ) : (
-                          <button
-                            className="tw:px-3 tw:py-1.5 tw:bg-gray-200 tw:text-gray-700 tw:rounded tw:text-xs tw:hover:bg-gray-300"
-                            onClick={() => setShowDriveSetup(true)}
-                          >
-                            🔑 Conectar Drive (admin)
-                          </button>
+                          <>
+                            <div className="tw:bg-blue-50 tw:border tw:border-blue-200 tw:rounded tw:p-2 tw:space-y-1">
+                              <p className="tw:font-medium tw:text-blue-800">
+                                Comparte con el equipo:
+                              </p>
+                              <p className="tw:text-blue-700">
+                                1. Haz clic en "Exportar config" para copiar la configuración.
+                                <br />
+                                2. Envía el texto a cada compañero.
+                                <br />
+                                3. Ellos pegan el texto con el botón "Actualizar config".
+                              </p>
+                            </div>
+                            {driveExportedConfig ? (
+                              <div className="tw:space-y-1">
+                                <p className="tw:font-medium tw:text-gray-700">
+                                  Configuración para compartir:
+                                </p>
+                                <textarea
+                                  className="tw:w-full tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:text-xs tw:font-mono tw:h-20 tw:resize-none"
+                                  readOnly
+                                  value={driveExportedConfig}
+                                  onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+                                />
+                                <p className="tw:text-gray-500">
+                                  Haz clic en el texto para seleccionar todo, luego copia (Ctrl+C).
+                                </p>
+                              </div>
+                            ) : (
+                              <button
+                                className="tw:px-3 tw:py-1.5 tw:bg-blue-600 tw:text-white tw:rounded tw:text-xs tw:hover:bg-blue-700"
+                                onClick={driveExportConfig}
+                              >
+                                📋 Exportar config para el equipo
+                              </button>
+                            )}
+                            <button
+                              className="tw:block tw:text-blue-600 tw:underline tw:text-xs"
+                              onClick={() => {
+                                setShowDriveImport(true);
+                                setDriveError('');
+                              }}
+                            >
+                              ↺ Actualizar config (pegar nueva versión del admin)
+                            </button>
+                          </>
                         )}
-                        <button
-                          className="tw:block tw:text-blue-600 tw:underline tw:text-xs"
-                          onClick={() => {
-                            setShowDriveImport(true);
-                            setDriveError('');
-                          }}
-                        >
-                          ¿Eres compañero de equipo? Importar configuración del admin →
-                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <p className="tw:text-gray-600">
+                          Las tareas se guardarán en Google Drive y se sincronizarán automáticamente
+                          con todo el equipo.
+                        </p>
+
+                        {/* Setup for admin */}
+                        {!showDriveImport && (
+                          <>
+                            {!driveStatus.hasCredentials || showDriveSetup ? (
+                              <div className="tw:space-y-2 tw:border tw:border-gray-200 tw:rounded tw:p-2">
+                                <p className="tw:font-medium tw:text-gray-700">
+                                  Conectar Drive (admin):
+                                </p>
+                                <div>
+                                  <label className="tw:block tw:text-gray-500 tw:mb-0.5">
+                                    Client ID
+                                  </label>
+                                  <input
+                                    type="text"
+                                    className="tw:w-full tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:text-xs"
+                                    value={driveClientId}
+                                    onChange={(e) => setDriveClientId(e.target.value)}
+                                    placeholder="xxxxxx.apps.googleusercontent.com"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="tw:block tw:text-gray-500 tw:mb-0.5">
+                                    Client Secret
+                                  </label>
+                                  <input
+                                    type="password"
+                                    className="tw:w-full tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:text-xs"
+                                    value={driveClientSecret}
+                                    onChange={(e) => setDriveClientSecret(e.target.value)}
+                                    placeholder="GOCSPX-…"
+                                  />
+                                </div>
+                                <div className="tw:flex tw:gap-2">
+                                  <button
+                                    className="tw:px-3 tw:py-1.5 tw:bg-blue-600 tw:text-white tw:rounded tw:text-xs tw:hover:bg-blue-700 tw:disabled:opacity-50"
+                                    onClick={driveConnect}
+                                    disabled={driveConnecting}
+                                  >
+                                    {driveConnecting ? '⟳ Esperando…' : '🔑 Autorizar con Google'}
+                                  </button>
+                                  {showDriveSetup && (
+                                    <button
+                                      className="tw:px-3 tw:py-1.5 tw:bg-gray-200 tw:text-gray-700 tw:rounded tw:text-xs tw:hover:bg-gray-300"
+                                      onClick={() => setShowDriveSetup(false)}
+                                    >
+                                      Cancelar
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            ) : (
+                              <button
+                                className="tw:px-3 tw:py-1.5 tw:bg-gray-200 tw:text-gray-700 tw:rounded tw:text-xs tw:hover:bg-gray-300"
+                                onClick={() => setShowDriveSetup(true)}
+                              >
+                                🔑 Conectar Drive (admin)
+                              </button>
+                            )}
+                            <button
+                              className="tw:block tw:text-blue-600 tw:underline tw:text-xs"
+                              onClick={() => {
+                                setShowDriveImport(true);
+                                setDriveError('');
+                              }}
+                            >
+                              ¿Eres compañero de equipo? Importar configuración del admin →
+                            </button>
+                          </>
+                        )}
+
+                        {/* Import for team members */}
+                        {showDriveImport && (
+                          <div className="tw:space-y-2 tw:border tw:border-blue-200 tw:rounded tw:p-2 tw:bg-blue-50">
+                            <p className="tw:font-medium tw:text-blue-800">
+                              Importar configuración del admin:
+                            </p>
+                            <textarea
+                              className="tw:w-full tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:text-xs tw:font-mono tw:h-20 tw:resize-none"
+                              value={driveImportJson}
+                              onChange={(e) => setDriveImportJson(e.target.value)}
+                              placeholder="Pega aquí el JSON que te dio el administrador…"
+                            />
+                            <div className="tw:flex tw:gap-2">
+                              <button
+                                className="tw:px-3 tw:py-1.5 tw:bg-blue-600 tw:text-white tw:rounded tw:text-xs tw:hover:bg-blue-700"
+                                onClick={driveImportConfig}
+                              >
+                                ✓ Importar
+                              </button>
+                              <button
+                                className="tw:px-3 tw:py-1.5 tw:bg-gray-200 tw:text-gray-700 tw:rounded tw:text-xs tw:hover:bg-gray-300"
+                                onClick={() => {
+                                  setShowDriveImport(false);
+                                  setDriveImportJson('');
+                                  setDriveError('');
+                                }}
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </>
                     )}
 
-                    {/* Import for team members */}
-                    {showDriveImport && (
-                      <div className="tw:space-y-2 tw:border tw:border-blue-200 tw:rounded tw:p-2 tw:bg-blue-50">
-                        <p className="tw:font-medium tw:text-blue-800">
-                          Importar configuración del admin:
-                        </p>
-                        <textarea
-                          className="tw:w-full tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:text-xs tw:font-mono tw:h-20 tw:resize-none"
-                          value={driveImportJson}
-                          onChange={(e) => setDriveImportJson(e.target.value)}
-                          placeholder="Pega aquí el JSON que te dio el administrador…"
-                        />
-                        <div className="tw:flex tw:gap-2">
-                          <button
-                            className="tw:px-3 tw:py-1.5 tw:bg-blue-600 tw:text-white tw:rounded tw:text-xs tw:hover:bg-blue-700"
-                            onClick={driveImportConfig}
-                          >
-                            ✓ Importar
-                          </button>
-                          <button
-                            className="tw:px-3 tw:py-1.5 tw:bg-gray-200 tw:text-gray-700 tw:rounded tw:text-xs tw:hover:bg-gray-300"
-                            onClick={() => {
-                              setShowDriveImport(false);
-                              setDriveImportJson('');
-                              setDriveError('');
-                            }}
-                          >
-                            Cancelar
-                          </button>
-                        </div>
-                      </div>
+                    {driveMessage && (
+                      <p className="tw:text-green-700 tw:bg-green-50 tw:border tw:border-green-200 tw:rounded tw:px-2 tw:py-1">
+                        {driveMessage}
+                      </p>
                     )}
-                  </>
-                )}
-
-                {driveMessage && (
-                  <p className="tw:text-green-700 tw:bg-green-50 tw:border tw:border-green-200 tw:rounded tw:px-2 tw:py-1">
-                    {driveMessage}
-                  </p>
-                )}
-                {driveError && (
-                  <p className="tw:text-red-700 tw:bg-red-50 tw:border tw:border-red-200 tw:rounded tw:px-2 tw:py-1">
-                    {driveError}
-                  </p>
+                    {driveError && (
+                      <p className="tw:text-red-700 tw:bg-red-50 tw:border tw:border-red-200 tw:rounded tw:px-2 tw:py-1">
+                        {driveError}
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
-            )}
-          </div>
             </div>
           )}
 
@@ -3334,7 +3352,9 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                               {s.total > 0 ? (
                                 <span
                                   className={
-                                    s.complete === s.total ? 'tw:text-green-600' : 'tw:text-gray-600'
+                                    s.complete === s.total
+                                      ? 'tw:text-green-600'
+                                      : 'tw:text-gray-600'
                                   }
                                   title={`${s.complete}/${s.total} completas${s.flagged > 0 ? `, ${s.flagged} banderas` : ''}`}
                                 >
@@ -3356,8 +3376,8 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                     <span>⟳ En Progreso</span>
                     <span>• Pendiente</span>
                     <span className="tw:flex tw:items-center tw:gap-1">
-                      <span className="tw:w-2 tw:h-2 tw:rounded-full tw:bg-red-500 tw:inline-block" />⚑
-                      Bandera
+                      <span className="tw:w-2 tw:h-2 tw:rounded-full tw:bg-red-500 tw:inline-block" />
+                      ⚑ Bandera
                     </span>
                   </div>
                 </>

@@ -1,7 +1,7 @@
 import { WebViewProps } from '@papi/core';
 import papi from '@papi/frontend';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import type { ParatextNoteThread, ParatextComment, NotesDisplaySettings } from './types/note.types';
+import type { ParatextNoteThread, NotesDisplaySettings } from './types/note.types';
 import { DEFAULT_NOTES_SETTINGS } from './types/note.types';
 
 import { BIBLE_BOOKS } from './types/shared.constants';
@@ -324,9 +324,13 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
   }, [loadSettings]);
 
   // Load threads
+  const loadNotesRequestRef = useRef(0);
+
   const loadNotes = useCallback(
     async (selectIdAfterLoad?: string | null) => {
       if (!projectId || !currentUser) return;
+      const requestId = ++loadNotesRequestRef.current;
+      const isCurrentRequest = () => requestId === loadNotesRequestRef.current;
       setLoading(true);
       setError('');
       try {
@@ -335,6 +339,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
           projectId,
           currentUser,
         );
+        if (!isCurrentRequest()) return;
         const parsed = JSON.parse(res) as {
           threads: ParatextNoteThread[];
           authors: string[];
@@ -363,11 +368,13 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
         // Auto-retry once after 3s — handles papi timeouts after long idle
         try {
           await new Promise((r) => setTimeout(r, 3000));
+          if (!isCurrentRequest()) return;
           const res = await papi.commands.sendCommand(
             'paratextProjectManager.getProjectNotes',
             projectId,
             currentUser,
           );
+          if (!isCurrentRequest()) return;
           const parsed = JSON.parse(res) as {
             threads: ParatextNoteThread[];
             authors: string[];
@@ -393,10 +400,10 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
             setSelectedThreadId(loadedThreads[0].threadId);
           }
         } catch (retryErr) {
-          setError(`Error al cargar notas: ${errMsg(retryErr)}`);
+          if (isCurrentRequest()) setError(`Error al cargar notas: ${errMsg(retryErr)}`);
         }
       } finally {
-        setLoading(false);
+        if (isCurrentRequest()) setLoading(false);
       }
     },
     [projectId, currentUser, selectedThreadId],
@@ -532,6 +539,8 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const pid = projectId;
+    if (!pid) return;
     const currentThread = threads.find((t) => t.threadId === selectedThreadId);
     if (!currentThread || !e.target.files || e.target.files.length === 0) return;
 
@@ -548,14 +557,14 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
 
           const saveRes = await papi.commands.sendCommand(
             'paratextProjectManager.saveAttachment',
-            projectId,
+            pid,
             cleanedName,
             base64Data,
           );
           if (saveRes && saveRes.status === 'ok') {
             const link =
               saveRes.driveUrl ||
-              `http://localhost:49876/attachment?project=${projectId}&file=${cleanedName}`;
+              `http://localhost:49876/attachment?project=${pid}&file=${cleanedName}`;
             const replyData = {
               threadId: currentThread.threadId,
               verseRef: currentThread.verseRef,
@@ -572,7 +581,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
 
             const res = await papi.commands.sendCommand(
               'paratextProjectManager.addNoteReply',
-              projectId,
+              pid,
               currentUser,
               JSON.stringify(replyData),
             );
@@ -599,6 +608,8 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
   };
 
   const startRecording = async () => {
+    const pid = projectId;
+    if (!pid) return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(stream);
@@ -625,7 +636,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
 
           const saveRes = await papi.commands.sendCommand(
             'paratextProjectManager.saveAudioNote',
-            projectId,
+            pid,
             filename,
             base64data,
           );
@@ -634,7 +645,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
             if (!currentThread) return;
             const audioLink =
               saveRes.driveUrl ||
-              `http://localhost:49876/play?project=${projectId}&file=${filename}`;
+              `http://localhost:49876/play?project=${pid}&file=${filename}`;
             const replyData = {
               threadId: currentThread.threadId,
               verseRef: currentThread.verseRef,
@@ -651,7 +662,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
 
             const res = await papi.commands.sendCommand(
               'paratextProjectManager.addNoteReply',
-              projectId,
+              pid,
               currentUser,
               JSON.stringify(replyData),
             );
@@ -717,13 +728,14 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
   };
 
   const handleDeleteCommentConfirm = async () => {
-    if (!commentToDelete) return;
+    const pid = projectId;
+    if (!pid || !commentToDelete) return;
     const target = commentToDelete;
     setCommentToDelete(null);
     try {
       const res = await papi.commands.sendCommand(
         'paratextProjectManager.deleteProjectNote',
-        projectId,
+        pid,
         target.commentAuthor,
         target.threadId,
         target.commentDate,
@@ -740,6 +752,8 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
 
   // Reply handler
   const handleReply = async (thread: ParatextNoteThread) => {
+    const pid = projectId;
+    if (!pid) return;
     const text = replyText.trim();
     if (!text) return;
 
@@ -761,7 +775,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
 
       const res = await papi.commands.sendCommand(
         'paratextProjectManager.addNoteReply',
-        projectId,
+        pid,
         currentUser,
         JSON.stringify(replyData),
       );
@@ -780,12 +794,13 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
 
   // Edit comment handler
   const handleSaveEdit = async (threadId: string) => {
-    if (!editingComment) return;
+    const pid = projectId;
+    if (!pid || !editingComment) return;
     setSavingEdit(true);
     try {
       const res = await papi.commands.sendCommand(
         'paratextProjectManager.saveProjectNote',
-        projectId,
+        pid,
         currentUser,
         threadId,
         editingComment.date,
@@ -876,10 +891,12 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
   }, [threads, selectedThreadId]);
 
   const handleNavigateToVerse = (thread: ParatextNoteThread) => {
+    const pid = projectId;
+    if (!pid) return;
     papi.commands
       .sendCommand(
         'paratextProjectManager.navigateToVerse',
-        projectId,
+        pid,
         thread.book,
         Number(thread.chapter),
         Number(thread.verse),
@@ -1013,6 +1030,12 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
         </div>
       </div>
 
+      {error && (
+        <div className="tw:bg-red-50 tw:border-b tw:border-red-200 tw:px-4 tw:py-2 tw:text-red-700 tw:text-xs tw:font-medium">
+          {error}
+        </div>
+      )}
+
       {/* Settings Dropdown Panel */}
       {showSettings && (
         <div className="tw:bg-white tw:border-b tw:border-gray-200 tw:p-4 tw:shrink-0 tw:shadow-inner tw:grid tw:grid-cols-1 sm:tw:grid-cols-5 tw:gap-4 tw:text-xs">
@@ -1093,132 +1116,132 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
             style={{ width: `${leftWidth}px` }}
             className="tw:bg-white tw:flex tw:flex-col tw:shrink-0 tw:min-w-[200px]"
           >
-          {/* Quick Filters */}
-          <div className="tw:p-3 tw:border-b tw:border-gray-100 tw:bg-slate-50/50 tw:space-y-2 tw:shrink-0">
-            {/* Search Input */}
-            <div className="tw:relative">
-              <input
-                type="text"
-                placeholder="Buscar en notas..."
-                value={searchText}
-                onChange={(e) => setSearchText(e.target.value)}
-                className="tw:w-full tw:border tw:border-gray-200 tw:rounded tw:px-2 tw:py-1 tw:text-xs tw:pr-6 tw:focus:outline-none tw:focus:border-indigo-400 tw:focus:ring-1 tw:focus:ring-indigo-100"
-              />
-              {searchText && (
-                <button
-                  onClick={() => setSearchText('')}
-                  className="tw:absolute tw:right-2 tw:top-1/2 tw:-translate-y-1/2 tw:text-gray-400 tw:hover:text-gray-600 tw:cursor-pointer"
-                >
-                  ✕
-                </button>
+            {/* Quick Filters */}
+            <div className="tw:p-3 tw:border-b tw:border-gray-100 tw:bg-slate-50/50 tw:space-y-2 tw:shrink-0">
+              {/* Search Input */}
+              <div className="tw:relative">
+                <input
+                  type="text"
+                  placeholder="Buscar en notas..."
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                  className="tw:w-full tw:border tw:border-gray-200 tw:rounded tw:px-2 tw:py-1 tw:text-xs tw:pr-6 tw:focus:outline-none tw:focus:border-indigo-400 tw:focus:ring-1 tw:focus:ring-indigo-100"
+                />
+                {searchText && (
+                  <button
+                    onClick={() => setSearchText('')}
+                    className="tw:absolute tw:right-2 tw:top-1/2 tw:-translate-y-1/2 tw:text-gray-400 tw:hover:text-gray-600 tw:cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* Book and Person Filters */}
+              <div className="tw:grid tw:grid-cols-2 tw:gap-2">
+                <div>
+                  <select
+                    value={filterBook}
+                    onChange={(e) => setFilterBook(e.target.value)}
+                    className="tw:w-full tw:border tw:border-gray-200 tw:rounded tw:px-1.5 tw:py-1 tw:bg-white tw:text-[11px] tw:text-slate-700"
+                  >
+                    <option value="all">Libro: Todos</option>
+                    {BIBLE_BOOKS.map((b) => (
+                      <option key={b} value={b}>
+                        {b}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <select
+                    value={filterAuthor}
+                    onChange={(e) => setFilterAuthor(e.target.value)}
+                    className="tw:w-full tw:border tw:border-gray-200 tw:rounded tw:px-1.5 tw:py-1 tw:bg-white tw:text-[11px] tw:text-slate-700"
+                  >
+                    <option value="all">Autor: Todos</option>
+                    {teamMembers.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* List content */}
+            <div className="tw:flex-1 tw:overflow-y-auto tw:divide-y tw:divide-gray-100">
+              {loading && threads.length === 0 ? (
+                <div className="tw:p-8 tw:text-center tw:text-slate-500 tw:text-xs">
+                  Cargando notas...
+                </div>
+              ) : filteredThreads.length === 0 ? (
+                <div className="tw:p-8 tw:text-center tw:text-slate-500 tw:text-xs">
+                  No se encontraron hilos que coincidan con los filtros.
+                </div>
+              ) : (
+                filteredThreads.map((thread) => {
+                  const isSelected = selectedThreadId === thread.threadId;
+                  const latestComment = thread.comments[thread.comments.length - 1];
+
+                  return (
+                    <button
+                      key={thread.threadId}
+                      onClick={() => handleSelectThread(thread)}
+                      className={`tw:w-full tw:text-left tw:p-3 tw:flex tw:flex-col tw:gap-1 tw:transition-all tw:cursor-pointer ${
+                        isSelected
+                          ? 'tw:bg-indigo-50/70 tw:border-l-4 tw:border-indigo-600'
+                          : 'tw:hover:bg-slate-50 tw:border-l-4 tw:border-transparent'
+                      }`}
+                    >
+                      <div className="tw:flex tw:items-center tw:justify-between tw:gap-1 tw:w-full">
+                        <span
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleNavigateToVerse(thread);
+                          }}
+                          className="tw:font-bold tw:text-xs tw:text-indigo-600 tw:hover:text-indigo-850 tw:flex tw:items-center tw:gap-1 tw:cursor-pointer tw:hover:underline"
+                          title="Ir al versículo en Texto"
+                        >
+                          {thread.book} {thread.chapter}:{thread.verse}
+                        </span>
+                        <span className="tw:text-[10px] tw:text-gray-400">
+                          {new Date(thread.latestDate).toLocaleDateString('es', {
+                            month: 'short',
+                            day: 'numeric',
+                          })}
+                        </span>
+                      </div>
+
+                      {thread.selectedText && (
+                        <div
+                          className={`tw:italic tw:text-slate-500 tw:truncate tw:font-serif tw:pl-1 tw:border-l tw:border-gray-200 ${noteQuoteSizeClass}`}
+                        >
+                          "{thread.selectedText}"
+                        </div>
+                      )}
+
+                      <div className="tw:text-xs tw:text-slate-600 tw:line-clamp-2 tw:mt-0.5">
+                        <strong>{latestComment.user}:</strong> {latestComment.plainText}
+                      </div>
+
+                      <div className="tw:flex tw:gap-1.5 tw:items-center tw:mt-1">
+                        <span className="tw:text-[9px] tw:bg-slate-100 tw:border tw:text-slate-650 tw:px-1.5 tw:py-0.5 tw:rounded">
+                          {thread.comments.length} resp.
+                        </span>
+                        {thread.assignedUser && (
+                          <span className="tw:text-[9px] tw:bg-blue-50 tw:text-blue-700 tw:px-1.5 tw:py-0.5 tw:rounded tw:font-medium">
+                            {thread.assignedUser}
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })
               )}
             </div>
-
-            {/* Book and Person Filters */}
-            <div className="tw:grid tw:grid-cols-2 tw:gap-2">
-              <div>
-                <select
-                  value={filterBook}
-                  onChange={(e) => setFilterBook(e.target.value)}
-                  className="tw:w-full tw:border tw:border-gray-200 tw:rounded tw:px-1.5 tw:py-1 tw:bg-white tw:text-[11px] tw:text-slate-700"
-                >
-                  <option value="all">Libro: Todos</option>
-                  {BIBLE_BOOKS.map((b) => (
-                    <option key={b} value={b}>
-                      {b}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <select
-                  value={filterAuthor}
-                  onChange={(e) => setFilterAuthor(e.target.value)}
-                  className="tw:w-full tw:border tw:border-gray-200 tw:rounded tw:px-1.5 tw:py-1 tw:bg-white tw:text-[11px] tw:text-slate-700"
-                >
-                  <option value="all">Autor: Todos</option>
-                  {teamMembers.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
           </div>
-
-          {/* List content */}
-          <div className="tw:flex-1 tw:overflow-y-auto tw:divide-y tw:divide-gray-100">
-            {loading && threads.length === 0 ? (
-              <div className="tw:p-8 tw:text-center tw:text-slate-500 tw:text-xs">
-                Cargando notas...
-              </div>
-            ) : filteredThreads.length === 0 ? (
-              <div className="tw:p-8 tw:text-center tw:text-slate-500 tw:text-xs">
-                No se encontraron hilos que coincidan con los filtros.
-              </div>
-            ) : (
-              filteredThreads.map((thread) => {
-                const isSelected = selectedThreadId === thread.threadId;
-                const latestComment = thread.comments[thread.comments.length - 1];
-
-                return (
-                  <button
-                    key={thread.threadId}
-                    onClick={() => handleSelectThread(thread)}
-                    className={`tw:w-full tw:text-left tw:p-3 tw:flex tw:flex-col tw:gap-1 tw:transition-all tw:cursor-pointer ${
-                      isSelected
-                        ? 'tw:bg-indigo-50/70 tw:border-l-4 tw:border-indigo-600'
-                        : 'tw:hover:bg-slate-50 tw:border-l-4 tw:border-transparent'
-                    }`}
-                  >
-                    <div className="tw:flex tw:items-center tw:justify-between tw:gap-1 tw:w-full">
-                      <span
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleNavigateToVerse(thread);
-                        }}
-                        className="tw:font-bold tw:text-xs tw:text-indigo-600 tw:hover:text-indigo-850 tw:flex tw:items-center tw:gap-1 tw:cursor-pointer tw:hover:underline"
-                        title="Ir al versículo en Texto"
-                      >
-                        {thread.book} {thread.chapter}:{thread.verse}
-                      </span>
-                      <span className="tw:text-[10px] tw:text-gray-400">
-                        {new Date(thread.latestDate).toLocaleDateString('es', {
-                          month: 'short',
-                          day: 'numeric',
-                        })}
-                      </span>
-                    </div>
-
-                    {thread.selectedText && (
-                      <div
-                        className={`tw:italic tw:text-slate-500 tw:truncate tw:font-serif tw:pl-1 tw:border-l tw:border-gray-200 ${noteQuoteSizeClass}`}
-                      >
-                        "{thread.selectedText}"
-                      </div>
-                    )}
-
-                    <div className="tw:text-xs tw:text-slate-600 tw:line-clamp-2 tw:mt-0.5">
-                      <strong>{latestComment.user}:</strong> {latestComment.plainText}
-                    </div>
-
-                    <div className="tw:flex tw:gap-1.5 tw:items-center tw:mt-1">
-                      <span className="tw:text-[9px] tw:bg-slate-100 tw:border tw:text-slate-650 tw:px-1.5 tw:py-0.5 tw:rounded">
-                        {thread.comments.length} resp.
-                      </span>
-                      {thread.assignedUser && (
-                        <span className="tw:text-[9px] tw:bg-blue-50 tw:text-blue-700 tw:px-1.5 tw:py-0.5 tw:rounded tw:font-medium">
-                          {thread.assignedUser}
-                        </span>
-                      )}
-                    </div>
-                  </button>
-                );
-              })
-            )}
-          </div>
-        </div>
         )}
 
         {/* Drag Resizer Bar */}
@@ -1391,7 +1414,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                         ) : (
                           <CommentText
                             text={comm.plainText}
-                            projectId={projectId}
+                            projectId={projectId || ''}
                             textSize={settings.textSize || 'medium'}
                           />
                         )}
@@ -1454,13 +1477,40 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                       title="Adjuntar archivo"
                     >
                       {attaching ? (
-                        <svg className="tw:w-4 tw:h-4 tw:animate-spin tw:text-slate-500" fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                          <circle className="tw:opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="tw:opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                        <svg
+                          className="tw:w-4 tw:h-4 tw:animate-spin tw:text-slate-500"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <circle
+                            className="tw:opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                          ></circle>
+                          <path
+                            className="tw:opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                          ></path>
                         </svg>
                       ) : (
-                        <svg className="tw:w-5 tw:h-5 tw:text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path>
+                        <svg
+                          className="tw:w-5 tw:h-5 tw:text-slate-600"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
+                          ></path>
                         </svg>
                       )}
                     </button>
@@ -1473,8 +1523,19 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                       }`}
                       title="Grabar nota de voz"
                     >
-                      <svg className="tw:w-5 tw:h-5 tw:text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
+                      <svg
+                        className="tw:w-5 tw:h-5 tw:text-slate-600"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2"
+                          d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
+                        ></path>
                       </svg>
                     </button>
                     {/* Collapse Toggle Button (visible only on small screens) */}
@@ -1499,12 +1560,33 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                       title={replying ? 'Enviando...' : 'Responder'}
                     >
                       {replying ? (
-                        <svg className="tw:w-4 tw:h-4 tw:animate-spin tw:text-white" fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                          <circle className="tw:opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="tw:opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                        <svg
+                          className="tw:w-4 tw:h-4 tw:animate-spin tw:text-white"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <circle
+                            className="tw:opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                          ></circle>
+                          <path
+                            className="tw:opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                          ></path>
                         </svg>
                       ) : (
-                        <svg className="tw:w-4 tw:h-4 tw:text-white" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <svg
+                          className="tw:w-4 tw:h-4 tw:text-white"
+                          fill="currentColor"
+                          viewBox="0 0 24 24"
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
                           <path d="M2 21l21-9L2 3v7l15 2-15 2v7z"></path>
                         </svg>
                       )}
