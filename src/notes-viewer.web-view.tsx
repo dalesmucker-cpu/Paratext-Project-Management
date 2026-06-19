@@ -181,6 +181,35 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
   const [replying, setReplying] = useState(false);
   const [editingComment, setEditingComment] = useState<{ date: string; text: string } | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [commentContextMenu, setCommentContextMenu] = useState<{ x: number; y: number; user: string } | null>(null);
+  const [keyTermsStore, setKeyTermsStore] = useState<any>(null);
+
+  useEffect(() => {
+    const handleGlobalClick = () => setCommentContextMenu(null);
+    window.addEventListener('click', handleGlobalClick);
+    return () => window.removeEventListener('click', handleGlobalClick);
+  }, []);
+
+  useEffect(() => {
+    if (projectId) {
+      papi.commands.sendCommand('paratextProjectManager.getKeyTermsData', projectId)
+        .then((dataStr) => {
+          if (dataStr) {
+            setKeyTermsStore(JSON.parse(dataStr));
+          }
+        })
+        .catch((err) => console.error('Failed to load key terms in notes viewer:', err));
+    }
+  }, [projectId]);
+
+  // Find related key terms for the selected thread's verse
+  const relatedKeyTerms = useMemo(() => {
+    if (!selectedThread || !keyTermsStore || !keyTermsStore.terms) return [];
+    const refStr = `${selectedThread.book} ${selectedThread.chapter}:${selectedThread.verse}`;
+    return keyTermsStore.terms.filter((term: any) =>
+      term.references && term.references.includes(refStr)
+    );
+  }, [selectedThread, keyTermsStore]);
 
   // Voice recording states
   const [isRecording, setIsRecording] = useState(false);
@@ -1321,6 +1350,37 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                 </div>
               )}
 
+              {relatedKeyTerms.length > 0 && (
+                <div className="tw:bg-slate-50 tw:border-b tw:border-gray-200 tw:px-4 tw:py-2.5 tw:shrink-0">
+                  <div className="tw:text-xs tw:text-slate-500 tw:font-semibold tw:mb-1.5 tw:uppercase tw:tracking-wider tw:text-[10px] tw:flex tw:items-center tw:gap-1">
+                    🔑 Términos Bíblicos en este versículo:
+                  </div>
+                  <div className="tw:flex tw:flex-wrap tw:gap-1.5">
+                    {relatedKeyTerms.map((kt: any) => (
+                      <button
+                        key={kt.id}
+                        onClick={() => {
+                          papi.commands.sendCommand(
+                            'paratextProjectManager.openHebrewGreekDictionary',
+                            kt.strongs || kt.lemma
+                          ).catch((err) => console.error(err));
+                        }}
+                        className="tw:inline-flex tw:items-center tw:gap-1.5 tw:px-2 tw:py-1 tw:bg-white hover:tw:bg-indigo-50 tw:text-indigo-600 hover:tw:text-indigo-700 tw:border tw:border-slate-200 hover:tw:border-indigo-200 tw:rounded-lg tw:text-[10.5px] tw:font-semibold tw:transition-all tw:cursor-pointer shadow-sm"
+                        title={kt.strongs ? `Diccionario Strong: ${kt.strongs}` : `Buscar definición: ${kt.lemma}`}
+                      >
+                        <span className="tw:font-serif">{kt.lemma}</span>
+                        <span className="tw:text-slate-400 tw:font-normal">({kt.gloss})</span>
+                        {kt.strongs && (
+                          <span className="tw:text-[9px] tw:bg-slate-100 tw:px-1 tw:py-0.2 tw:rounded tw:font-mono tw:text-slate-500">
+                            {kt.strongs}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Comments Timeline */}
               <div
                 ref={commentsTimelineRef}
@@ -1335,11 +1395,20 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                     return (
                       <div
                         key={idx}
-                        className={`tw:flex tw:flex-col tw:gap-1 tw:rounded-lg tw:border tw:shadow-sm tw:p-3.5 tw:transition-all tw:max-w-[85%] ${
+                        className={`tw:flex tw:flex-col tw:gap-1 tw:rounded-lg tw:border tw:shadow-sm tw:p-3.5 tw:transition-all tw:max-w-[85%] tw:cursor-context-menu hover:tw:brightness-[0.98] ${
                           isOwnComment
                             ? 'tw:ml-auto tw:bg-indigo-50/30 tw:border-indigo-100'
                             : 'tw:mr-auto tw:bg-white tw:border-slate-200'
                         }`}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          setCommentContextMenu({
+                            x: e.clientX,
+                            y: e.clientY,
+                            user: comm.user,
+                          });
+                        }}
+                        title="Clic derecho para responder"
                       >
                         {/* Comment Header */}
                         <div className="tw:flex tw:items-center tw:justify-between tw:gap-4 tw:text-[10px] tw:text-slate-400 tw:shrink-0 tw:border-b tw:border-slate-100/50 tw:pb-1.5 tw:mb-1.5">
@@ -1453,6 +1522,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                   <div className="tw:max-w-3xl tw:mx-auto tw:flex tw:gap-2 tw:items-end">
                     <div className="tw:flex-1">
                       <textarea
+                        id="notes-reply-textarea"
                         placeholder={`Escribe una respuesta a ${selectedThread.latestUser}...`}
                         value={replyText}
                         onChange={(e) => setReplyText(e.target.value)}
@@ -1631,6 +1701,26 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
               </button>
             </div>
           </div>
+        </div>
+      )}
+      {commentContextMenu && (
+        <div
+          className="tw:fixed tw:z-[10000] tw:bg-white tw:border tw:border-slate-200 tw:shadow-lg tw:rounded-lg tw:py-1 tw:w-40 tw:text-xs"
+          style={{ top: commentContextMenu.y, left: commentContextMenu.x }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={() => {
+              const replyPrefix = `@${commentContextMenu.user} `;
+              setReplyText((prev) => (prev.startsWith(replyPrefix) ? prev : replyPrefix + prev));
+              setCommentContextMenu(null);
+              const txtEl = document.getElementById('notes-reply-textarea');
+              if (txtEl) txtEl.focus();
+            }}
+            className="tw:w-full tw:text-left tw:px-3 tw:py-2 tw:hover:bg-slate-100 tw:text-slate-700 tw:font-semibold tw:flex tw:items-center tw:gap-1.5 tw:cursor-pointer tw:border-none tw:bg-white"
+          >
+            💬 Responder a {commentContextMenu.user}
+          </button>
         </div>
       )}
     </div>

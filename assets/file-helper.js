@@ -187,7 +187,7 @@ if (action === 'read' || action === 'readfile') {
         'HOS',
         'JOL',
         'AMO',
-        'OBD',
+        'OBA',
         'JON',
         'MIC',
         'NAM',

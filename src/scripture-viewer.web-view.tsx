@@ -581,6 +581,32 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     expected: any[];
   } | null>(null);
 
+  // Reader Settings States
+  const [versesOnOwnLine, setVersesOnOwnLine] = useState(() => {
+    return localStorage.getItem('scripture_viewer_verses_own_line') === 'true';
+  });
+  const [fontFamily, setFontFamily] = useState(() => {
+    return localStorage.getItem('scripture_viewer_font_family') || 'sans-serif';
+  });
+  const [notesDisplayStyle, setNotesDisplayStyle] = useState(() => {
+    return localStorage.getItem('scripture_viewer_notes_display_style') || 'highlight';
+  });
+  const [showSettings, setShowSettings] = useState(false);
+  const [showDraftingSidebar, setShowDraftingSidebar] = useState(() => {
+    return localStorage.getItem('scripture_viewer_drafting_sidebar') !== 'false';
+  });
+
+  // Dynamically load Inter and Outfit fonts from Google Fonts
+  useEffect(() => {
+    if (!document.getElementById('google-fonts-link')) {
+      const link = document.createElement('link');
+      link.id = 'google-fonts-link';
+      link.rel = 'stylesheet';
+      link.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Outfit:wght@400;600;700&display=swap';
+      document.head.appendChild(link);
+    }
+  }, []);
+
   const getCursorColors = (user: string) => {
     const userHash = user.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
     const palette = [
@@ -1618,25 +1644,51 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     return parts.map((part, index) => {
       const match = highlights.find((h) => h.text.toLowerCase() === part.toLowerCase());
       if (match) {
-        return (
-          <mark
-            key={index}
-            onClick={(e) => {
-              e.stopPropagation();
-              selectVerse(verseNum);
-              setNotesPopupVerseNum(verseNum);
-              setSelectedThreadIdInSidebar(match.threadId);
-            }}
-            className={`tw:cursor-pointer tw:px-0.5 tw:rounded tw:transition ${
-              selectedThreadIdInSidebar === match.threadId
-                ? 'tw:bg-yellow-400 tw:text-slate-900 tw:font-semibold tw:ring-2 tw:ring-yellow-500'
-                : 'tw:bg-yellow-200/80 tw:hover:bg-yellow-300 tw:text-slate-800'
-            }`}
-            title="Click para ver la nota"
-          >
-            {part}
-          </mark>
-        );
+        const isSelectedThread = selectedThreadIdInSidebar === match.threadId;
+        const clickHandler = (e: React.MouseEvent) => {
+          e.stopPropagation();
+          selectVerse(verseNum);
+          setNotesPopupVerseNum(verseNum);
+          setSelectedThreadIdInSidebar(match.threadId);
+        };
+
+        if (notesDisplayStyle === 'highlight') {
+          return (
+            <mark
+              key={index}
+              onClick={clickHandler}
+              className={`tw:cursor-pointer tw:px-0.5 tw:rounded tw:transition ${
+                isSelectedThread
+                  ? 'tw:bg-yellow-400 tw:text-slate-900 tw:font-semibold tw:ring-2 tw:ring-yellow-500'
+                  : 'tw:bg-yellow-200/80 tw:hover:bg-yellow-300 tw:text-slate-800'
+              }`}
+              title="Click para ver la nota"
+            >
+              {part}
+            </mark>
+          );
+        } else {
+          let symbol = '🚩';
+          if (notesDisplayStyle === 'pin') symbol = '📌';
+          else if (notesDisplayStyle === 'dialog') symbol = '💬';
+          else if (notesDisplayStyle === 'tag') symbol = '🏷️';
+
+          return (
+            <span
+              key={index}
+              onClick={clickHandler}
+              className={`tw:cursor-pointer tw:px-0.5 tw:rounded tw:transition tw:inline-flex tw:items-center tw:gap-0.5 ${
+                isSelectedThread
+                  ? 'tw:border tw:border-indigo-400 tw:bg-indigo-50 tw:text-indigo-800 tw:font-semibold'
+                  : 'tw:hover:bg-slate-100 tw:text-slate-800'
+              }`}
+              title="Click para ver la nota"
+            >
+              <span className="tw:border-b tw:border-dashed tw:border-slate-400">{part}</span>
+              <span className="tw:text-xs" role="img" aria-label="nota">{symbol}</span>
+            </span>
+          );
+        }
       }
       return part;
     });
@@ -2413,8 +2465,10 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
         style={{ display: 'none' }}
       />
 
-      {/* Left Pane: Scripture Text */}
-      <div className="tw:flex-1 tw:flex tw:flex-col tw:bg-white tw:min-w-0 tw:h-full tw:overflow-hidden">
+      {/* Main horizontal split */}
+      <div className="tw:flex-1 tw:flex tw:flex-row tw:overflow-hidden">
+        {/* Left Pane: Scripture Text */}
+        <div className="tw:flex-1 tw:flex tw:flex-col tw:bg-white tw:min-w-0 tw:h-full tw:overflow-hidden">
         {/* Toolbar */}
         <div className="tw:px-4 tw:py-2 tw:bg-white tw:border-b tw:border-gray-200 tw:flex tw:flex-wrap tw:items-center tw:justify-between tw:gap-2 tw:shrink-0 tw:shadow-sm">
           <div className="tw:flex tw:items-center tw:gap-2">
@@ -2576,6 +2630,93 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
             >
               🔑 Términos Clave
             </button>
+            <div className="tw:relative">
+              <button
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setShowSettings(!showSettings)}
+                className={`tw:px-2.5 tw:py-1 tw:border tw:rounded tw:text-xs tw:cursor-pointer tw:flex tw:items-center tw:gap-1 tw:transition-all ${
+                  showSettings
+                    ? 'tw:bg-slate-700 tw:border-slate-700 tw:text-white'
+                    : 'tw:bg-slate-50 tw:hover:bg-slate-100 tw:border-slate-300 tw:text-slate-700'
+                }`}
+                title="Configuración del Lector"
+              >
+                ⚙️ Configuración
+              </button>
+
+              {showSettings && (
+                <div className="tw:absolute tw:right-0 tw:top-full tw:mt-1.5 tw:z-[1000] tw:w-64 tw:bg-white tw:border tw:border-slate-200 tw:rounded-xl tw:shadow-xl tw:p-4 tw:space-y-3.5 tw:text-xs">
+                  <div className="tw:font-bold tw:text-slate-700 tw:border-b tw:pb-1.5">Configuración de Lectura</div>
+                  <div className="tw:flex tw:items-center tw:justify-between tw:gap-2">
+                    <span className="tw:text-slate-600 tw:font-medium">Versículo en línea propia</span>
+                    <input
+                      type="checkbox"
+                      checked={versesOnOwnLine}
+                      onChange={(e) => {
+                        const val = e.target.checked;
+                        setVersesOnOwnLine(val);
+                        localStorage.setItem('scripture_viewer_verses_own_line', String(val));
+                      }}
+                      className="tw:cursor-pointer"
+                    />
+                  </div>
+
+                  <div className="tw:flex tw:flex-col tw:gap-1">
+                    <span className="tw:text-slate-600 tw:font-medium">Fuente del Texto</span>
+                    <select
+                      value={fontFamily}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setFontFamily(val);
+                        localStorage.setItem('scripture_viewer_font_family', val);
+                      }}
+                      className="tw:border tw:border-slate-200 tw:rounded-lg tw:px-2 tw:py-1.5 tw:bg-slate-50 tw:text-slate-700 focus:tw:outline-none"
+                    >
+                      <option value="sans-serif">Predeterminado (Sans)</option>
+                      <option value="serif">Georgia (Serif)</option>
+                      <option value="monospace">Consolas (Monospace)</option>
+                      <option value="outfit">Outfit (Premium)</option>
+                      <option value="inter">Inter (Moderno)</option>
+                    </select>
+                  </div>
+
+                  <div className="tw:flex tw:flex-col tw:gap-1">
+                    <span className="tw:text-slate-600 tw:font-medium">Visualización de Notas</span>
+                    <select
+                      value={notesDisplayStyle}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setNotesDisplayStyle(val);
+                        localStorage.setItem('scripture_viewer_notes_display_style', val);
+                      }}
+                      className="tw:border tw:border-slate-200 tw:rounded-lg tw:px-2 tw:py-1.5 tw:bg-slate-50 tw:text-slate-700 focus:tw:outline-none"
+                    >
+                      <option value="highlight">Resaltado Amarillo</option>
+                      <option value="flag">Bandera (🚩)</option>
+                      <option value="pin">Pin (📌)</option>
+                      <option value="dialog">Globo de Diálogo (💬)</option>
+                      <option value="tag">Etiqueta (🏷️)</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+            </div>
+            <button
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                const nextVal = !showDraftingSidebar;
+                setShowDraftingSidebar(nextVal);
+                localStorage.setItem('scripture_viewer_drafting_sidebar', String(nextVal));
+              }}
+              className={`tw:px-2.5 tw:py-1 tw:border tw:rounded tw:text-xs tw:cursor-pointer tw:flex tw:items-center tw:gap-1 tw:transition-all ${
+                showDraftingSidebar
+                  ? 'tw:bg-violet-600 tw:hover:bg-violet-700 tw:border-violet-600 tw:text-white'
+                  : 'tw:bg-slate-50 tw:hover:bg-slate-100 tw:border-slate-300 tw:text-slate-700'
+              }`}
+              title="Alternar panel lateral de redactado"
+            >
+              ✍️ Redactar (Términos)
+            </button>
             {isEditingVerse && (
               <button
                 type="button"
@@ -2608,7 +2749,15 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
         <div className="tw:flex-1 tw:overflow-y-auto tw:p-8 tw:leading-relaxed tw:text-slate-800">
           <div
             className="tw:max-w-2xl tw:mx-auto tw:space-y-6"
-            style={{ fontSize: `${fontSize}px` }}
+            style={{
+              fontSize: `${fontSize}px`,
+              fontFamily: fontFamily === 'sans-serif' ? 'system-ui, -apple-system, sans-serif' :
+                          fontFamily === 'serif' ? 'Georgia, Cambria, "Times New Roman", serif' :
+                          fontFamily === 'monospace' ? 'Consolas, "Courier New", monospace' :
+                          fontFamily === 'outfit' ? '"Outfit", system-ui, sans-serif' :
+                          fontFamily === 'inter' ? '"Inter", system-ui, sans-serif' :
+                          'system-ui, -apple-system, sans-serif'
+            }}
           >
             {error && (
               <div className="tw:p-4 tw:text-red-750 tw:bg-red-50 tw:border tw:border-red-200 tw:rounded-lg tw:text-sm">
@@ -2626,7 +2775,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                   return (
                     <h3
                       key={bIdx}
-                      className="tw:text-lg tw:font-bold tw:text-slate-900 tw:mt-6 tw:mb-3"
+                      className="tw:text-lg tw:font-bold tw:text-slate-900 tw:mt-6 tw:mb-3 tw:text-justify"
                     >
                       {block.text}
                     </h3>
@@ -2689,7 +2838,9 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                               captureVerseHighlight(child.number, child.text);
                             }
                           }}
-                          className="tw:relative tw:inline tw:rounded tw:transition-all tw:py-0.5 tw:cursor-text"
+                          className={`tw:relative tw:rounded tw:transition-all tw:py-0.5 tw:cursor-text ${
+                            versesOnOwnLine ? 'tw:block tw:mb-2' : 'tw:inline'
+                          }`}
                           style={{
                             ...(otherEditorHighlight
                               ? {
@@ -2831,7 +2982,117 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
         </div>
       </div>
 
-      {/* Context menu for selection */}
+      {/* Right Sidebar: Key Terms for Drafting (zero clicks) */}
+      {showDraftingSidebar && (
+        <div className="tw:w-80 tw:border-l tw:border-slate-200 tw:bg-slate-50 tw:flex tw:flex-col tw:h-full tw:overflow-hidden tw:shrink-0 tw:no-print">
+          {/* Sidebar Header */}
+          <div className="tw:px-4 tw:py-3 tw:bg-white tw:border-b tw:border-slate-200 tw:flex tw:items-center tw:justify-between tw:shrink-0">
+            <span className="tw:font-bold tw:text-slate-800 tw:text-xs uppercase tw:tracking-wider">
+              ✍️ Términos para Redactar
+            </span>
+            {selectedVerseNum && (
+              <span className="tw:px-2 tw:py-0.5 tw:bg-slate-100 tw:text-slate-600 tw:rounded-full tw:text-[10px] tw:font-semibold">
+                Versículo {selectedVerseNum}
+              </span>
+            )}
+          </div>
+
+          {/* Sidebar Content */}
+          <div className="tw:flex-grow tw:overflow-y-auto tw:p-4 tw:space-y-4">
+            {!selectedVerseNum ? (
+              <div className="tw:text-center tw:text-slate-400 tw:italic tw:py-12 tw:text-xs">
+                Haz clic en un versículo para ver los términos clave que debes usar.
+              </div>
+            ) : (
+              (() => {
+                const verseRef = `${selectedBook} ${selectedChapter}:${selectedVerseNum}`;
+                const verseMatches = Object.values(chapterKeyTermsMatches).filter(
+                  (m: any) =>
+                    isVerseInRef(
+                      selectedBook,
+                      selectedChapter,
+                      selectedVerseNum,
+                      m.reference,
+                    ),
+                );
+
+                if (verseMatches.length === 0) {
+                  return (
+                    <div className="tw:text-center tw:text-slate-400 tw:italic tw:py-12 tw:text-xs">
+                      No hay términos clave registrados para {selectedBook} {selectedChapter}:{selectedVerseNum}.
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="tw:space-y-3">
+                    <div className="tw:text-[10.5px] tw:font-bold tw:text-slate-500 uppercase tw:tracking-wider">
+                      Términos requeridos en {selectedBook} {selectedChapter}:{selectedVerseNum}:
+                    </div>
+                    <div className="tw:space-y-2.5">
+                      {verseMatches.map((m: any) => (
+                        <div
+                          key={m.termId}
+                          className="tw:bg-white tw:p-3 tw:rounded-xl tw:border tw:border-slate-200 tw:shadow-sm tw:space-y-2 tw:transition-all hover:tw:shadow-md"
+                        >
+                          <div className="tw:flex tw:items-start tw:justify-between tw:gap-2">
+                            <div>
+                              <button
+                                onClick={() => {
+                                  papi.commands.sendCommand(
+                                    'paratextProjectManager.openHebrewGreekDictionary',
+                                    m.strongs || m.lemma
+                                  ).catch((err) => console.error(err));
+                                }}
+                                className="tw:text-left tw:font-bold tw:text-xs tw:text-slate-700 hover:tw:text-indigo-600 hover:tw:underline tw:cursor-pointer tw:bg-transparent tw:border-none tw:p-0"
+                                title={m.strongs ? `Diccionario Strong: ${m.strongs}` : `Buscar definición: ${m.lemma}`}
+                              >
+                                {m.gloss}
+                              </button>
+                              <div className="tw:text-[10px] tw:text-slate-400 tw:font-serif tw:mt-0.5">{m.lemma}</div>
+                            </div>
+                            {m.matchResult?.found ? (
+                              <span className="tw:text-[9px] tw:bg-emerald-50 tw:text-emerald-700 tw:px-2 tw:py-0.5 tw:border tw:border-emerald-250 tw:rounded-full tw:font-semibold tw:whitespace-nowrap">
+                                ✓ Usado
+                              </span>
+                            ) : (
+                              <span className="tw:text-[9px] tw:bg-rose-50 tw:text-rose-700 tw:px-2 tw:py-0.5 tw:border tw:border-rose-250 tw:rounded-full tw:font-semibold tw:whitespace-nowrap">
+                                ✗ Faltante
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Expected Renderings */}
+                          <div className="tw:text-[10px] tw:text-slate-500">
+                            <span className="tw:font-semibold">Traducciones sugeridas:</span>
+                            {m.expectedRenderings && m.expectedRenderings.length > 0 ? (
+                              <div className="tw:flex tw:flex-wrap tw:gap-1 tw:mt-1">
+                                {m.expectedRenderings.map((r: string, rIdx: number) => (
+                                  <span
+                                    key={rIdx}
+                                    className="tw:text-[9px] tw:bg-indigo-50/50 tw:text-indigo-600 tw:px-1.5 tw:py-0.5 tw:rounded tw:border tw:border-indigo-100"
+                                  >
+                                    {r}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="tw:italic tw:text-slate-400 tw:ml-1">Ninguna registrada</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+
+    {/* Context menu for selection */}
       {contextMenu && (
         <div
           className="tw:fixed tw:z-[10000] tw:bg-white tw:border tw:border-slate-200 tw:shadow-lg tw:rounded-lg tw:py-1 tw:w-40 tw:text-xs"

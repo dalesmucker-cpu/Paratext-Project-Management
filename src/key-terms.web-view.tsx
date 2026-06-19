@@ -37,22 +37,41 @@ globalThis.webViewComponent = function KeyTermsWebView({
   const [newNoteText, setNewNoteText] = useState('');
   const [currentUser, setCurrentUser] = useState('Traductor');
 
+  // Refs for scrolling and selection tracking
+  const rightPanelRef = useRef<HTMLDivElement | null>(null);
+  const isExternalSelectionRef = useRef(false);
+
+  const selectTerm = useCallback((id: string, isExternal = false) => {
+    isExternalSelectionRef.current = isExternal;
+    setSelectedTermId(id);
+  }, [setSelectedTermId]);
+
   // Sidebar resizable width & selected button scroll tracking
   const [sidebarWidth, setSidebarWidth] = useState(320);
   const selectedButtonRef = useRef<HTMLButtonElement | null>(null);
   const sidebarListRef = useRef<HTMLDivElement | null>(null);
 
+  // Scroll right panel to top on selectedTermId changes
+  useEffect(() => {
+    if (rightPanelRef.current) {
+      rightPanelRef.current.scrollTop = 0;
+    }
+  }, [selectedTermId]);
+
   // When selectedTermId changes, scroll the button into view within the sidebar only
   useEffect(() => {
     if (selectedTermId && selectedButtonRef.current && sidebarListRef.current) {
-      const container = sidebarListRef.current;
-      const btn = selectedButtonRef.current;
-      const containerTop = container.scrollTop;
-      const containerBottom = containerTop + container.clientHeight;
-      const btnTop = btn.offsetTop;
-      const btnBottom = btnTop + btn.offsetHeight;
-      if (btnTop < containerTop || btnBottom > containerBottom) {
-        container.scrollTop = btnTop - container.clientHeight / 2 + btn.offsetHeight / 2;
+      if (isExternalSelectionRef.current) {
+        isExternalSelectionRef.current = false; // Reset
+        const container = sidebarListRef.current;
+        const btn = selectedButtonRef.current;
+        const containerTop = container.scrollTop;
+        const containerBottom = containerTop + container.clientHeight;
+        const btnTop = btn.offsetTop;
+        const btnBottom = btnTop + btn.offsetHeight;
+        if (btnTop < containerTop || btnBottom > containerBottom) {
+          container.scrollTop = btnTop - container.clientHeight / 2 + btn.offsetHeight / 2;
+        }
       }
     }
   }, [selectedTermId]);
@@ -71,7 +90,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
           if (event.projectId && event.projectId !== projectId) {
             updateWebViewDefinition({ projectId: event.projectId });
           }
-          setSelectedTermId(event.termId);
+          selectTerm(event.termId, true);
         }
       },
     );
@@ -783,7 +802,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
                 <button
                   key={term.id}
                   ref={isSelected ? selectedButtonRef : null}
-                  onClick={() => setSelectedTermId(term.id)}
+                  onClick={() => selectTerm(term.id, false)}
                   className={`tw:w-full tw:text-left tw:p-3 tw:flex tw:flex-col tw:gap-1.5 tw:transition-colors tw:cursor-pointer ${
                     isSelected ? 'tw:bg-indigo-50/70' : 'tw:hover:bg-slate-50'
                   }`}
@@ -876,7 +895,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
 
         {/* Workspace area */}
         {selectedTerm ? (
-          <div className="tw:flex-1 tw:overflow-y-auto tw:p-4 tw:space-y-4">
+          <div ref={rightPanelRef} className="tw:flex-1 tw:overflow-y-auto tw:p-4 tw:space-y-4">
             {/* Term Summary Card */}
             <div className="tw:bg-white tw:p-4 tw:rounded-xl tw:border tw:border-slate-200 tw:shadow-sm tw:space-y-3">
               <div className="tw:flex tw:items-start tw:justify-between">

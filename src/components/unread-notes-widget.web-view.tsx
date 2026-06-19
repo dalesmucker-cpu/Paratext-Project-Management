@@ -120,6 +120,13 @@ export default function UnreadNotesWidget({
     commentDate: string;
     commentAuthor: string;
   } | null>(null);
+  const [commentContextMenu, setCommentContextMenu] = useState<{ x: number; y: number; user: string; threadId: string } | null>(null);
+
+  useEffect(() => {
+    const handleGlobalClick = () => setCommentContextMenu(null);
+    window.addEventListener('click', handleGlobalClick);
+    return () => window.removeEventListener('click', handleGlobalClick);
+  }, []);
 
   // File attachments state & inputs
   const [attachingThreadId, setAttachingThreadId] = useState<string | null>(null);
@@ -857,7 +864,20 @@ export default function UnreadNotesWidget({
                       editingComment?.date === comm.date;
 
                     return (
-                      <div key={idx} className="tw:space-y-0.5">
+                      <div
+                        key={idx}
+                        className="tw:space-y-0.5 tw:cursor-context-menu hover:tw:bg-slate-50/50 tw:transition-colors tw:p-0.5 tw:rounded"
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          setCommentContextMenu({
+                            x: e.clientX,
+                            y: e.clientY,
+                            user: comm.user,
+                            threadId: thread.threadId,
+                          });
+                        }}
+                        title="Clic derecho para responder"
+                      >
                         <div className="tw:flex tw:items-center tw:justify-between tw:text-[10px] tw:text-gray-400">
                           <span>
                             <strong>{comm.user}</strong> •{' '}
@@ -961,6 +981,7 @@ export default function UnreadNotesWidget({
                   <div className="tw:mt-2 tw:pt-1.5 tw:border-t tw:border-gray-50">
                     <div className="tw:flex tw:gap-1.5 tw:items-center">
                       <input
+                        id={`unread-reply-input-${thread.threadId}`}
                         type="text"
                         value={replyTexts[thread.threadId] || ''}
                         onChange={(e) =>
@@ -1045,6 +1066,32 @@ export default function UnreadNotesWidget({
               </button>
             </div>
           </div>
+        </div>
+      )}
+      {commentContextMenu && (
+        <div
+          className="tw:fixed tw:z-[10000] tw:bg-white tw:border tw:border-slate-200 tw:shadow-lg tw:rounded-lg tw:py-1 tw:w-40 tw:text-xs"
+          style={{ top: commentContextMenu.y, left: commentContextMenu.x }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={() => {
+              const replyPrefix = `@${commentContextMenu.user} `;
+              setReplyTexts((prev) => {
+                const currentVal = prev[commentContextMenu.threadId] || '';
+                return {
+                  ...prev,
+                  [commentContextMenu.threadId]: currentVal.startsWith(replyPrefix) ? currentVal : replyPrefix + currentVal,
+                };
+              });
+              setCommentContextMenu(null);
+              const inputEl = document.getElementById(`unread-reply-input-${commentContextMenu.threadId}`);
+              if (inputEl) inputEl.focus();
+            }}
+            className="tw:w-full tw:text-left tw:px-3 tw:py-2 tw:hover:bg-slate-100 tw:text-slate-700 tw:font-semibold tw:flex tw:items-center tw:gap-1.5 tw:cursor-pointer tw:border-none tw:bg-white"
+          >
+            💬 Responder a {commentContextMenu.user}
+          </button>
         </div>
       )}
     </div>

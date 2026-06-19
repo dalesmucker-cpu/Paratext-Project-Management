@@ -125,7 +125,9 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
     for (const term of store.terms) {
       for (const ref of term.references) {
         const book = ref.split(' ')[0];
-        if (book) books.add(book);
+        if (book && (BIBLE_BOOKS as readonly string[]).includes(book)) {
+          books.add(book);
+        }
       }
     }
     return Array.from(books).sort((a, b) => {
@@ -512,7 +514,7 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
   return (
     <div className="tw:flex tw:flex-col tw:h-full tw:bg-slate-950 tw:text-slate-200 tw:font-sans">
       {/* Top Header */}
-      <div className="tw:px-6 tw:py-4 tw:bg-slate-900/60 tw:border-b tw:border-slate-800/80 tw:flex tw:items-center tw:justify-between tw:flex-shrink-0 tw:backdrop-blur-md">
+      <div className="tw:px-6 tw:py-4 tw:bg-slate-900/60 tw:border-b tw:border-slate-800/80 tw:flex tw:flex-col md:tw:flex-row tw:items-start md:tw:items-center tw:gap-4 tw:justify-between tw:flex-shrink-0 tw:backdrop-blur-md">
         <div className="tw:flex tw:items-center tw:gap-3">
           <div className="tw:bg-gradient-to-br tw:from-indigo-500 tw:to-violet-600 tw:p-2 tw:rounded-xl tw:shadow-lg tw:shadow-indigo-500/20">
             <PieChart size={20} className="tw:text-white" />
@@ -580,57 +582,60 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
       )}
 
       {/* Main Workspace */}
-      <div className="tw:flex-1 tw:flex tw:overflow-hidden">
+      <div className="tw:flex-1 tw:flex tw:flex-col lg:tw:flex-row tw:overflow-y-auto lg:tw:overflow-hidden">
         {/* Left Side: Stats and problematic terms */}
-        <div className="tw:w-80 tw:border-r tw:border-slate-900 tw:bg-slate-950/40 tw:p-5 tw:flex tw:flex-col tw:gap-5 tw:overflow-y-auto tw:flex-shrink-0">
+        <div className="tw:w-full lg:tw:w-80 tw:border-b lg:tw:border-b-0 lg:tw:border-r tw:border-slate-900 tw:bg-slate-950/40 tw:p-5 tw:flex tw:flex-col sm:tw:grid sm:tw:grid-cols-2 lg:tw:flex lg:tw:flex-col tw:gap-5 tw:overflow-y-auto lg:tw:max-h-full tw:flex-shrink-0">
           
-          {/* Stats Card */}
-          <div className="tw:relative tw:bg-gradient-to-br tw:from-indigo-600 tw:to-violet-750 tw:p-5 tw:rounded-2xl tw:text-white tw:shadow-lg tw:shadow-indigo-950/40 tw:space-y-4 tw:overflow-hidden">
-            <div className="tw:absolute tw:top-0 tw:right-0 tw:-mt-6 tw:-mr-6 tw:w-24 tw:h-24 tw:bg-white/5 tw:rounded-full tw:blur-xl"></div>
-            <div className="tw:flex tw:items-center tw:justify-between">
-              <h3 className="tw:text-[10px] tw:font-black tw:uppercase tw:tracking-widest tw:text-indigo-200">Progreso en {selectedBook}</h3>
-              <Trophy size={16} className="tw:text-indigo-200 tw:animate-pulse" />
-            </div>
-            
-            <div className="tw:flex tw:items-baseline tw:gap-1">
-              <span className="tw:text-5xl tw:font-black tracking-tighter">{bookStats.percent}%</span>
-              <span className="tw:text-xs tw:text-indigo-200 tw:font-semibold">verificado</span>
+          {/* Group Stats Card & Export Action Card for tablet grids */}
+          <div className="tw:flex tw:flex-col tw:gap-5">
+            {/* Stats Card */}
+            <div className="tw:relative tw:bg-gradient-to-br tw:from-indigo-600 tw:to-violet-750 tw:p-5 tw:rounded-2xl tw:text-white tw:shadow-lg tw:shadow-indigo-950/40 tw:space-y-4 tw:overflow-hidden">
+              <div className="tw:absolute tw:top-0 tw:right-0 tw:-mt-6 tw:-mr-6 tw:w-24 tw:h-24 tw:bg-white/5 tw:rounded-full tw:blur-xl"></div>
+              <div className="tw:flex tw:items-center tw:justify-between">
+                <h3 className="tw:text-[10px] tw:font-black tw:uppercase tw:tracking-widest tw:text-indigo-200">Progreso en {selectedBook}</h3>
+                <Trophy size={16} className="tw:text-indigo-200 tw:animate-pulse" />
+              </div>
+              
+              <div className="tw:flex tw:items-baseline tw:gap-1">
+                <span className="tw:text-5xl tw:font-black tracking-tighter">{bookStats.percent}%</span>
+                <span className="tw:text-xs tw:text-indigo-200 tw:font-semibold">verificado</span>
+              </div>
+
+              {/* Micro Progress Bar */}
+              <div className="tw:w-full tw:h-2 tw:bg-indigo-950/50 tw:rounded-full tw:overflow-hidden">
+                <div 
+                  className="tw:h-full tw:bg-gradient-to-r tw:from-emerald-450 tw:to-teal-400 tw:transition-all tw:duration-500"
+                  style={{ width: `${bookStats.percent}%` }}
+                ></div>
+              </div>
+
+              <div className="tw:text-[11px] tw:text-indigo-150 tw:font-medium tw:leading-relaxed">
+                Encontrados <span className="tw:text-white tw:font-bold">{bookStats.foundCount}</span> de <span className="tw:text-white tw:font-bold">{bookStats.expectedCount}</span> términos clave correspondientes con traducciones aprobadas.
+              </div>
             </div>
 
-            {/* Micro Progress Bar */}
-            <div className="tw:w-full tw:h-2 tw:bg-indigo-950/50 tw:rounded-full tw:overflow-hidden">
-              <div 
-                className="tw:h-full tw:bg-gradient-to-r tw:from-emerald-450 tw:to-teal-400 tw:transition-all tw:duration-500"
-                style={{ width: `${bookStats.percent}%` }}
-              ></div>
-            </div>
-
-            <div className="tw:text-[11px] tw:text-indigo-150 tw:font-medium tw:leading-relaxed">
-              Encontrados <span className="tw:text-white tw:font-bold">{bookStats.foundCount}</span> de <span className="tw:text-white tw:font-bold">{bookStats.expectedCount}</span> términos clave correspondientes con traducciones aprobadas.
-            </div>
-          </div>
-
-          {/* Export Action Card */}
-          <div className="tw:bg-slate-900/40 tw:p-4 tw:rounded-2xl tw:border tw:border-slate-900 tw:space-y-3">
-            <h4 className="tw:font-bold tw:text-[10px] tw:text-slate-400 tw:uppercase tw:tracking-wider tw:flex tw:items-center tw:gap-1.5">
-              <Download size={12} />
-              Exportar Reportes
-            </h4>
-            <div className="tw:flex tw:gap-2">
-              <button
-                onClick={handleExportCSV}
-                className="tw:flex-1 tw:py-2 tw:bg-slate-900 hover:tw:bg-slate-850 tw:border tw:border-slate-800 tw:rounded-xl tw:text-[10px] tw:font-bold tw:shadow-sm tw:cursor-pointer tw:transition-all tw:flex tw:items-center tw:justify-center tw:gap-1"
-              >
-                <FileSpreadsheet size={12} className="tw:text-slate-400" />
-                CSV
-              </button>
-              <button
-                onClick={handleExportHTML}
-                className="tw:flex-1 tw:py-2 tw:bg-slate-900 hover:tw:bg-slate-850 tw:border tw:border-slate-800 tw:rounded-xl tw:text-[10px] tw:font-bold tw:shadow-sm tw:cursor-pointer tw:transition-all tw:flex tw:items-center tw:justify-center tw:gap-1"
-              >
-                <FileText size={12} className="tw:text-slate-400" />
-                HTML
-              </button>
+            {/* Export Action Card */}
+            <div className="tw:bg-slate-900/40 tw:p-4 tw:rounded-2xl tw:border tw:border-slate-900 tw:space-y-3">
+              <h4 className="tw:font-bold tw:text-[10px] tw:text-slate-400 tw:uppercase tw:tracking-wider tw:flex tw:items-center tw:gap-1.5">
+                <Download size={12} />
+                Exportar Reportes
+              </h4>
+              <div className="tw:flex tw:gap-2">
+                <button
+                  onClick={handleExportCSV}
+                  className="tw:flex-1 tw:py-2 tw:bg-slate-900 hover:tw:bg-slate-850 tw:border tw:border-slate-800 tw:rounded-xl tw:text-[10px] tw:font-bold tw:shadow-sm tw:cursor-pointer tw:transition-all tw:flex tw:items-center tw:justify-center tw:gap-1"
+                >
+                  <FileSpreadsheet size={12} className="tw:text-slate-400" />
+                  CSV
+                </button>
+                <button
+                  onClick={handleExportHTML}
+                  className="tw:flex-1 tw:py-2 tw:bg-slate-900 hover:tw:bg-slate-850 tw:border tw:border-slate-800 tw:rounded-xl tw:text-[10px] tw:font-bold tw:shadow-sm tw:cursor-pointer tw:transition-all tw:flex tw:items-center tw:justify-center tw:gap-1"
+                >
+                  <FileText size={12} className="tw:text-slate-400" />
+                  HTML
+                </button>
+              </div>
             </div>
           </div>
 

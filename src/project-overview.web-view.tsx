@@ -681,6 +681,13 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
   const [collabConnecting, setCollabConnecting] = useState(false);
   const [showCollabSection, setShowCollabSection] = useState(false);
   const [chatInput, setChatInput] = useState('');
+  const [chatContextMenu, setChatContextMenu] = useState<{ x: number; y: number; user: string } | null>(null);
+
+  useEffect(() => {
+    const handleGlobalClick = () => setChatContextMenu(null);
+    window.addEventListener('click', handleGlobalClick);
+    return () => window.removeEventListener('click', handleGlobalClick);
+  }, []);
 
   useEffect(() => {
     if (!collabRoomId && projectId) {
@@ -2702,7 +2709,16 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                               collabChatMessages.map((msg, idx) => (
                                 <div
                                   key={idx}
-                                  className="tw:text-[11px] tw:bg-white tw:p-1.5 tw:rounded tw:border tw:shadow-sm"
+                                  className="tw:text-[11px] tw:bg-white tw:p-1.5 tw:rounded tw:border tw:shadow-sm tw:cursor-context-menu hover:tw:bg-slate-50/50 tw:transition-colors"
+                                  onContextMenu={(e) => {
+                                    e.preventDefault();
+                                    setChatContextMenu({
+                                      x: e.clientX,
+                                      y: e.clientY,
+                                      user: msg.user,
+                                    });
+                                  }}
+                                  title="Clic derecho para responder"
                                 >
                                   <div className="tw:flex tw:justify-between tw:mb-0.5">
                                     <span className="tw:font-bold tw:text-slate-700">
@@ -2722,6 +2738,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                           </div>
                           <div className="tw:flex tw:border-t">
                             <input
+                              id="coordination-chat-input"
                               className="tw:flex-1 tw:px-2 tw:py-1.5 tw:text-xs tw:outline-none"
                               placeholder="Escribe un mensaje para el equipo…"
                               value={chatInput}
@@ -2743,6 +2760,27 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                             </button>
                           </div>
                         </div>
+
+                        {chatContextMenu && (
+                          <div
+                            className="tw:fixed tw:z-[10000] tw:bg-white tw:border tw:border-slate-200 tw:shadow-lg tw:rounded-lg tw:py-1 tw:w-40 tw:text-xs"
+                            style={{ top: chatContextMenu.y, left: chatContextMenu.x }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <button
+                              onClick={() => {
+                                const replyPrefix = `@${chatContextMenu.user} `;
+                                setChatInput((prev) => (prev.startsWith(replyPrefix) ? prev : replyPrefix + prev));
+                                setChatContextMenu(null);
+                                const inputEl = document.getElementById('coordination-chat-input');
+                                if (inputEl) inputEl.focus();
+                              }}
+                              className="tw:w-full tw:text-left tw:px-3 tw:py-2 tw:hover:bg-slate-100 tw:text-slate-700 tw:font-semibold tw:flex tw:items-center tw:gap-1.5 tw:cursor-pointer tw:border-none tw:bg-white"
+                            >
+                              💬 Responder a {chatContextMenu.user}
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

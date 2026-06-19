@@ -2698,6 +2698,28 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     },
   );
 
+  const openHebrewGreekDictionaryPromise = papi.commands.registerCommand(
+    'paratextProjectManager.openHebrewGreekDictionary',
+    async (term: string): Promise<string> => {
+      try {
+        if (!term) return 'error: term is empty';
+        const cleanTerm = term.trim();
+        let url = '';
+        const isStrongs = /^[GH]\d+/i.test(cleanTerm);
+        if (isStrongs) {
+          url = `https://www.stepbible.org/?q=version=SpaRV1909|strong=${encodeURIComponent(cleanTerm)}`;
+        } else {
+          url = `https://www.stepbible.org/?q=${encodeURIComponent(cleanTerm)}`;
+        }
+        await sendToNotesHelper('openExternal', [url]);
+        return 'ok';
+      } catch (e) {
+        logger.warn(`openHebrewGreekDictionary failed: ${e}`);
+        return `error: ${e}`;
+      }
+    },
+  );
+
   // --- Google Calendar commands ---
 
   /** Returns JSON { connected, email, calendarId, lastSync, clientId, hasCredentials } */
@@ -3360,6 +3382,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     await getAttachmentPromise,
     await openAttachmentPromise,
     await openExternalPromise,
+    await openHebrewGreekDictionaryPromise,
     await navigateToVersePromise,
     await getLastNavigatedVersePromise,
     navigateToVerseEmitter,
