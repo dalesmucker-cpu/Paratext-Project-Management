@@ -3,6 +3,7 @@ import papi from '@papi/frontend';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { ParatextNoteThread, NotesDisplaySettings } from './types/note.types';
 import { DEFAULT_NOTES_SETTINGS } from './types/note.types';
+import { papiRetry } from './utils/papi-retry';
 
 import { BIBLE_BOOKS } from './types/shared.constants';
 
@@ -157,6 +158,15 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [currentUser, setCurrentUser] = useState('');
+
+  // Auto-dismiss error after 15 seconds
+  useEffect(() => {
+    if (!error) return;
+    const timer = setTimeout(() => {
+      setError('');
+    }, 15000);
+    return () => clearTimeout(timer);
+  }, [error]);
   const [teamMembers, setTeamMembers] = useState<string[]>([]);
   const [showUserPicker, setShowUserPicker] = useState(false);
 
@@ -320,10 +330,10 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
   // Fetch user information and list of members
   const loadUserAndMembers = useCallback(async () => {
     try {
-      const [userResult, membersResult] = await Promise.all([
+      const [userResult, membersResult] = await papiRetry(() => Promise.all([
         papi.commands.sendCommand('paratextProjectManager.getCurrentUser'),
         papi.commands.sendCommand('paratextProjectManager.getTeamMembers'),
-      ]);
+      ]));
       if (userResult) {
         setCurrentUser(userResult);
         loadSettings(userResult);
@@ -331,24 +341,8 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
       if (membersResult) {
         setTeamMembers(JSON.parse(membersResult as string) as string[]);
       }
-    } catch (_) {
-      // Auto-retry once after 3s — handles papi timeouts after long idle
-      try {
-        await new Promise((r) => setTimeout(r, 3000));
-        const [userResult, membersResult] = await Promise.all([
-          papi.commands.sendCommand('paratextProjectManager.getCurrentUser'),
-          papi.commands.sendCommand('paratextProjectManager.getTeamMembers'),
-        ]);
-        if (userResult) {
-          setCurrentUser(userResult);
-          loadSettings(userResult);
-        }
-        if (membersResult) {
-          setTeamMembers(JSON.parse(membersResult as string) as string[]);
-        }
-      } catch (retryErr) {
-        console.error('Failed to load user and members after retry:', retryErr);
-      }
+    } catch (retryErr) {
+      console.error('Failed to load user and members after retry:', retryErr);
     }
   }, [loadSettings]);
 
@@ -363,10 +357,14 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
       setLoading(true);
       setError('');
       try {
-        const res = await papi.commands.sendCommand(
-          'paratextProjectManager.getProjectNotes',
-          projectId,
-          currentUser,
+        const res = await papiRetry(
+          () =>
+            papi.commands.sendCommand(
+              'paratextProjectManager.getProjectNotes',
+              projectId,
+              currentUser,
+            ),
+          { isCancelled: () => !isCurrentRequest() },
         );
         if (!isCurrentRequest()) return;
         const parsed = JSON.parse(res) as {
@@ -393,44 +391,8 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
         } else if (loadedThreads.length > 0 && !selectedThreadId) {
           setSelectedThreadId(loadedThreads[0].threadId);
         }
-      } catch (e) {
-        // Auto-retry once after 3s — handles papi timeouts after long idle
-        try {
-          await new Promise((r) => setTimeout(r, 3000));
-          if (!isCurrentRequest()) return;
-          const res = await papi.commands.sendCommand(
-            'paratextProjectManager.getProjectNotes',
-            projectId,
-            currentUser,
-          );
-          if (!isCurrentRequest()) return;
-          const parsed = JSON.parse(res) as {
-            threads: ParatextNoteThread[];
-            authors: string[];
-            error?: string;
-          };
-          if (parsed.error) {
-            setError(parsed.error);
-            return;
-          }
-          const loadedThreads = parsed.threads || [];
-          setThreads(loadedThreads);
-
-          if (selectIdAfterLoad) {
-            const exists = loadedThreads.some((t) => t.threadId === selectIdAfterLoad);
-            if (exists) {
-              setSelectedThreadId(selectIdAfterLoad);
-            } else if (loadedThreads.length > 0) {
-              setSelectedThreadId(loadedThreads[0].threadId);
-            } else {
-              setSelectedThreadId(null);
-            }
-          } else if (loadedThreads.length > 0 && !selectedThreadId) {
-            setSelectedThreadId(loadedThreads[0].threadId);
-          }
-        } catch (retryErr) {
-          if (isCurrentRequest()) setError(`Error al cargar notas: ${errMsg(retryErr)}`);
-        }
+      } catch (retryErr) {
+        if (isCurrentRequest()) setError(`Error al cargar notas: ${errMsg(retryErr)}`);
       } finally {
         if (isCurrentRequest()) setLoading(false);
       }
@@ -471,12 +433,12 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
     };
   }, [projectId, loadNotes]);
 
-  // Refresh on visibility change but no more than once every 2 minutes
+  // Refresh on visibility change but no more than once every 30 seconds
   const lastRefreshRef = useRef(0);
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return;
-      if (Date.now() - lastRefreshRef.current > 120_000) {
+      if (Date.now() - lastRefreshRef.current > 30_000) {
         lastRefreshRef.current = Date.now();
         loadNotes();
       }
@@ -1060,8 +1022,14 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
       </div>
 
       {error && (
-        <div className="tw:bg-red-50 tw:border-b tw:border-red-200 tw:px-4 tw:py-2 tw:text-red-700 tw:text-xs tw:font-medium">
-          {error}
+        <div className="tw:bg-red-50 tw:border-b tw:border-red-200 tw:px-4 tw:py-2 tw:text-red-700 tw:text-xs tw:font-medium tw:flex tw:justify-between tw:items-center">
+          <span>{error}</span>
+          <button
+            onClick={() => loadNotes(selectedThreadId)}
+            className="tw:text-red-700 tw:underline tw:hover:text-red-900 tw:ml-2 tw:cursor-pointer"
+          >
+            (reintentar)
+          </button>
         </div>
       )}
 

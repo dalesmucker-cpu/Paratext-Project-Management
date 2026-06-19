@@ -4,6 +4,7 @@ import { useDialogCallback } from '@papi/frontend/react';
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import type { ParatextNoteThread } from './types/note.types';
 import { ScrollGroupSelector } from 'platform-bible-react';
+import { papiRetry } from './utils/papi-retry';
 
 import { AudioPlayer, AttachmentViewer } from './components/note-media-components';
 
@@ -535,19 +536,18 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   const [chapterBlocks, setChapterBlocks] = useState<ChapterBlock[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const errorTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // Auto-dismiss error after 15 seconds
+  useEffect(() => {
+    if (!error) return;
+    const timer = setTimeout(() => {
+      setError('');
+    }, 15000);
+    return () => clearTimeout(timer);
+  }, [error]);
 
   const showErrorMessage = useCallback((msg: string) => {
     console.error(msg);
     setError(msg);
-    if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
-    errorTimerRef.current = setTimeout(() => setError(''), 6000);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
-    };
   }, []);
 
   // Note integration states
@@ -750,10 +750,14 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     const requestId = ++loadNotesRequestRef.current;
     const isCurrentRequest = () => requestId === loadNotesRequestRef.current;
     try {
-      const notesRes = await papi.commands.sendCommand(
-        'paratextProjectManager.getProjectNotes',
-        projectId,
-        currentUser,
+      const notesRes = await papiRetry(
+        () =>
+          papi.commands.sendCommand(
+            'paratextProjectManager.getProjectNotes',
+            projectId,
+            currentUser,
+          ),
+        { isCancelled: () => !isCurrentRequest() },
       );
       if (!isCurrentRequest()) return;
       const parsedNotes = JSON.parse(notesRes) as { threads: ParatextNoteThread[] };
@@ -771,11 +775,15 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       const requestId = ++loadKeyTermsMatchesRequestRef.current;
       const isCurrentRequest = () => requestId === loadKeyTermsMatchesRequestRef.current;
       try {
-        const res = (await papi.commands.sendCommand(
-          'paratextProjectManager.scanChapterRenderings',
-          projectId,
-          bookCode,
-          chapterNum,
+        const res = (await papiRetry(
+          () =>
+            papi.commands.sendCommand(
+              'paratextProjectManager.scanChapterRenderings',
+              projectId,
+              bookCode,
+              chapterNum,
+            ),
+          { isCancelled: () => !isCurrentRequest() },
         )) as string;
         if (!isCurrentRequest()) return;
         const parsed = JSON.parse(res) as { matches: any[] };
@@ -929,11 +937,15 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       const isCurrentRequest = () => requestId === loadChapterRequestRef.current;
       setLoading(true);
       try {
-        const textRes = await papi.commands.sendCommand(
-          'paratextProjectManager.getChapterText',
-          projectId,
-          bookCode,
-          chapterNum,
+        const textRes = await papiRetry(
+          () =>
+            papi.commands.sendCommand(
+              'paratextProjectManager.getChapterText',
+              projectId,
+              bookCode,
+              chapterNum,
+            ),
+          { isCancelled: () => !isCurrentRequest() },
         );
         if (!isCurrentRequest()) return;
         const parsedText = JSON.parse(textRes) as {
@@ -957,41 +969,9 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
         loadKeyTermsMatches(bookCode, chapterNum).catch((err) => {
           console.error('Failed to load key terms matches in background:', err);
         });
-      } catch (err) {
-        // Auto-retry once after 3s — handles papi timeouts after long idle
-        try {
-          await new Promise((r) => setTimeout(r, 3000));
-          if (!isCurrentRequest()) return;
-          const textRes = await papi.commands.sendCommand(
-            'paratextProjectManager.getChapterText',
-            projectId,
-            bookCode,
-            chapterNum,
-          );
-          if (!isCurrentRequest()) return;
-          const parsedText = JSON.parse(textRes) as {
-            blocks: ChapterBlock[];
-            totalChapters: number;
-            error?: string;
-          };
-          if (parsedText.error) {
-            setError(`Error del archivo USFM: ${parsedText.error}`);
-            setChapterBlocks([]);
-          } else {
-            setChapterBlocks(parsedText.blocks);
-            setTotalChapters(parsedText.totalChapters || 1);
-            setError('');
-          }
-          loadNotes().catch((nErr) => {
-            console.error('Failed to load notes in background on retry:', nErr);
-          });
-          loadKeyTermsMatches(bookCode, chapterNum).catch((ktErr) => {
-            console.error('Failed to load key terms matches in background on retry:', ktErr);
-          });
-        } catch (retryErr) {
-          console.error(retryErr);
-          if (isCurrentRequest()) setError('Error al cargar texto o notas.');
-        }
+      } catch (retryErr) {
+        console.error(retryErr);
+        if (isCurrentRequest()) setError('Error al cargar texto o notas.');
       } finally {
         if (isCurrentRequest()) setLoading(false);
       }
@@ -1784,12 +1764,12 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     setLoading(true);
     setError('');
     try {
-      const [uRes, tmRes, bRes, collabRes] = await Promise.all([
+      const [uRes, tmRes, bRes, collabRes] = await papiRetry(() => Promise.all([
         papi.commands.sendCommand('paratextProjectManager.getCurrentUser'),
         papi.commands.sendCommand('paratextProjectManager.getTeamMembers'),
         papi.commands.sendCommand('paratextProjectManager.getProjectBooks', projectId),
         papi.commands.sendCommand('paratextProjectManager.getCollabStatus'),
-      ]);
+      ]));
       if (uRes) {
         setCurrentUser(uRes);
       } else if (collabRes && collabRes.username) {
@@ -1801,10 +1781,10 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       setBooks(bookList);
 
       if (bookList.length > 0) {
-        const lastNav = await papi.commands.sendCommand(
+        const lastNav = await papiRetry(() => papi.commands.sendCommand(
           'paratextProjectManager.getLastNavigatedVerse',
           projectId,
-        );
+        ));
         if (lastNav) {
           setSelectedBook(lastNav.bookCode);
           setSelectedChapter(lastNav.chapter);
@@ -1836,62 +1816,8 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
         setError('No se encontraron libros de Escritura en este proyecto (archivos .SFM).');
       }
     } catch (err) {
-      // Auto-retry once after 3s — handles papi timeouts after long idle
-      try {
-        await new Promise((r) => setTimeout(r, 3000));
-        const [uRes, tmRes, bRes, collabRes] = await Promise.all([
-          papi.commands.sendCommand('paratextProjectManager.getCurrentUser'),
-          papi.commands.sendCommand('paratextProjectManager.getTeamMembers'),
-          papi.commands.sendCommand('paratextProjectManager.getProjectBooks', projectId),
-          papi.commands.sendCommand('paratextProjectManager.getCollabStatus'),
-        ]);
-        if (uRes) {
-          setCurrentUser(uRes);
-        } else if (collabRes && collabRes.username) {
-          setCurrentUser(collabRes.username);
-        }
-        if (tmRes) setTeamMembers(JSON.parse(tmRes as string) as string[]);
-
-        const bookList = JSON.parse(bRes as string) as BookInfo[];
-        setBooks(bookList);
-
-        if (bookList.length > 0) {
-          const lastNav = await papi.commands.sendCommand(
-            'paratextProjectManager.getLastNavigatedVerse',
-            projectId,
-          );
-          if (lastNav) {
-            setSelectedBook(lastNav.bookCode);
-            setSelectedChapter(lastNav.chapter);
-            pendingVerseRef.current = lastNav.verse;
-            if (scrollGroupId !== undefined && setScrRef) {
-              setScrRef({
-                book: lastNav.bookCode,
-                chapterNum: lastNav.chapter,
-                verseNum: lastNav.verse,
-              });
-            }
-          } else if (scrRefRef.current && scrRefRef.current.book) {
-            setSelectedBook(scrRefRef.current.book);
-            setSelectedChapter(scrRefRef.current.chapterNum);
-            pendingVerseRef.current = scrRefRef.current.verseNum;
-          } else {
-            const defaultBook = bookList.find((b) => b.code === 'RUT') || bookList[0];
-            setSelectedBook(defaultBook.code);
-            setSelectedChapter(1);
-            if (scrollGroupId !== undefined && setScrRef) {
-              setScrRef({
-                book: defaultBook.code,
-                chapterNum: 1,
-                verseNum: 1,
-              });
-            }
-          }
-        }
-      } catch (retryErr) {
-        console.error(retryErr);
-        setError('Error al cargar libros de Escritura.');
-      }
+      console.error(err);
+      setError('Error al cargar libros de Escritura.');
     } finally {
       setLoading(false);
     }
@@ -1902,12 +1828,12 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     initData();
   }, [initData]);
 
-  // Refresh on visibility change but no more than once every 2 minutes
+  // Refresh on visibility change but no more than once every 30 seconds
   const lastRefreshRef = useRef(0);
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return;
-      if (Date.now() - lastRefreshRef.current > 120_000) {
+      if (Date.now() - lastRefreshRef.current > 30_000) {
         lastRefreshRef.current = Date.now();
         if (selectedBook) {
           loadChapter(selectedBook, selectedChapter);
@@ -2765,8 +2691,14 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
             }}
           >
             {error && (
-              <div className="tw:p-4 tw:text-red-750 tw:bg-red-50 tw:border tw:border-red-200 tw:rounded-lg tw:text-sm">
-                {error}
+              <div className="tw:p-4 tw:text-red-750 tw:bg-red-50 tw:border tw:border-red-200 tw:rounded-lg tw:text-sm tw:flex tw:justify-between tw:items-center">
+                <span>{error}</span>
+                <button
+                  onClick={() => loadChapter(selectedBook, selectedChapter)}
+                  className="tw:text-red-700 tw:underline tw:hover:text-red-900 tw:ml-2 tw:cursor-pointer"
+                >
+                  (reintentar)
+                </button>
               </div>
             )}
 

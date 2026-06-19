@@ -2,6 +2,7 @@ import { WebViewProps } from '@papi/core';
 import papi from '@papi/frontend';
 import { useDialogCallback } from '@papi/frontend/react';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { papiRetry } from './utils/papi-retry';
 import type {
   KeyTermsStore,
   KeyTerm,
@@ -21,6 +22,15 @@ globalThis.webViewComponent = function KeyTermsWebView({
   const [store, setStore] = useState<KeyTermsStore | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Auto-dismiss error after 15 seconds
+  useEffect(() => {
+    if (!error) return;
+    const timer = setTimeout(() => {
+      setError('');
+    }, 15000);
+    return () => clearTimeout(timer);
+  }, [error]);
   const [saving, setSaving] = useState(false);
 
   // Selected Term ID
@@ -147,20 +157,26 @@ globalThis.webViewComponent = function KeyTermsWebView({
     setLoading(true);
     setError('');
     try {
-      const dataStr = await papi.commands.sendCommand(
-        'paratextProjectManager.getKeyTermsData',
-        projectId,
+      const dataStr = await papiRetry(
+        () =>
+          papi.commands.sendCommand(
+            'paratextProjectManager.getKeyTermsData',
+            projectId,
+          ),
+        { isCancelled: () => !isCurrentRequest() },
       );
       if (!isCurrentRequest()) return;
       const parsed = JSON.parse(dataStr) as KeyTermsStore;
       setStore(parsed);
 
-      const user = await papi.commands.sendCommand('paratextProjectManager.getCurrentUser');
+      const user = await papiRetry(
+        () => papi.commands.sendCommand('paratextProjectManager.getCurrentUser'),
+        { isCancelled: () => !isCurrentRequest() },
+      );
       if (!isCurrentRequest()) return;
       if (user) setCurrentUser(user);
     } catch (e: any) {
-      if (!isCurrentRequest()) return;
-      setError(`Error al cargar datos de términos clave: ${e.message || e}`);
+      if (isCurrentRequest()) setError(`Error al cargar datos de términos clave: ${e.message || e}`);
     } finally {
       if (isCurrentRequest()) setLoading(false);
     }
@@ -888,8 +904,14 @@ globalThis.webViewComponent = function KeyTermsWebView({
         </div>
 
         {error && (
-          <div className="tw:bg-red-50 tw:border-b tw:border-red-200 tw:px-4 tw:py-2 tw:text-red-700 tw:text-xs tw:font-medium">
-            {error}
+          <div className="tw:bg-red-50 tw:border-b tw:border-red-200 tw:px-4 tw:py-2 tw:text-red-700 tw:text-xs tw:font-medium tw:flex tw:justify-between tw:items-center">
+            <span>{error}</span>
+            <button
+              onClick={loadData}
+              className="tw:text-red-700 tw:underline tw:hover:text-red-900 tw:ml-2 tw:cursor-pointer"
+            >
+              (reintentar)
+            </button>
           </div>
         )}
 

@@ -2,6 +2,7 @@ import { WebViewProps } from '@papi/core';
 import papi from '@papi/frontend';
 import { useDialogCallback } from '@papi/frontend/react';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { papiRetry } from './utils/papi-retry';
 import type { ProjectTask, TaskStatus, StageConfig, TaskStore } from './types/task.types';
 import {
   STATUS_LABELS,
@@ -234,6 +235,15 @@ globalThis.webViewComponent = function MyTasksWebView({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  // Auto-dismiss error after 15 seconds
+  useEffect(() => {
+    if (!error) return;
+    const timer = setTimeout(() => {
+      setError('');
+    }, 15000);
+    return () => clearTimeout(timer);
+  }, [error]);
   const [filterStatus, setFilterStatus] = useWebViewState<string>('filterStatus', 'active');
   const [searchText, setSearchText] = useState('');
   const [showUserPicker, setShowUserPicker] = useState(false);
@@ -292,11 +302,11 @@ globalThis.webViewComponent = function MyTasksWebView({
     setLoading(true);
     setError('');
     try {
-      const [tasksResult, userResult, membersResult] = await Promise.all([
+      const [tasksResult, userResult, membersResult] = await papiRetry(() => Promise.all([
         papi.commands.sendCommand('paratextProjectManager.getTasks', projectId),
         papi.commands.sendCommand('paratextProjectManager.getCurrentUser'),
         papi.commands.sendCommand('paratextProjectManager.getTeamMembers'),
-      ]);
+      ]), { isCancelled: () => !isCurrentRequest() });
       if (!isCurrentRequest()) return;
       const store = JSON.parse(tasksResult) as TaskStore;
       setTasks(store.tasks ?? []);
@@ -304,25 +314,8 @@ globalThis.webViewComponent = function MyTasksWebView({
       setStageConfig(store.stageConfig ?? {});
       if (userResult) persistCurrentUser(userResult);
       if (membersResult) setTeamMembers(JSON.parse(membersResult as string) as string[]);
-    } catch (e) {
-      // Auto-retry once after 3s — handles papi timeouts after long idle
-      try {
-        await new Promise((r) => setTimeout(r, 3000));
-        const [tasksResult, userResult, membersResult] = await Promise.all([
-          papi.commands.sendCommand('paratextProjectManager.getTasks', projectId),
-          papi.commands.sendCommand('paratextProjectManager.getCurrentUser'),
-          papi.commands.sendCommand('paratextProjectManager.getTeamMembers'),
-        ]);
-        if (!isCurrentRequest()) return;
-        const store = JSON.parse(tasksResult) as TaskStore;
-        setTasks(store.tasks ?? []);
-        setDeletedTaskIds(store.deletedTaskIds ?? []);
-        setStageConfig(store.stageConfig ?? {});
-        if (userResult) persistCurrentUser(userResult);
-        if (membersResult) setTeamMembers(JSON.parse(membersResult as string) as string[]);
-      } catch (retryErr) {
-        setError(`Error al cargar: ${retryErr}`);
-      }
+    } catch (retryErr) {
+      if (isCurrentRequest()) setError(`Error al cargar: ${retryErr}`);
     } finally {
       if (isCurrentRequest()) setLoading(false);
     }
@@ -345,7 +338,7 @@ globalThis.webViewComponent = function MyTasksWebView({
     if (!projectId || savingRef.current || refreshInProgressRef.current) return;
     refreshInProgressRef.current = true;
     try {
-      const result = await papi.commands.sendCommand('paratextProjectManager.getTasks', projectId);
+      const result = await papiRetry(() => papi.commands.sendCommand('paratextProjectManager.getTasks', projectId));
       const store = JSON.parse(result as string) as TaskStore;
       lastRefreshRef.current = Date.now();
       const incomingDeleted = new Set(store.deletedTaskIds ?? []);
@@ -382,11 +375,11 @@ globalThis.webViewComponent = function MyTasksWebView({
     return () => clearInterval(interval);
   }, [projectId, silentRefresh]);
 
-  // Refresh on visibility change but no more than once every 2 minutes
+  // Refresh on visibility change but no more than once every 30 seconds
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return;
-      if (Date.now() - lastRefreshRef.current > 120_000) silentRefresh();
+      if (Date.now() - lastRefreshRef.current > 30_000) silentRefresh();
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
@@ -815,8 +808,14 @@ globalThis.webViewComponent = function MyTasksWebView({
       </div>
 
       {error && (
-        <div className="tw:bg-red-50 tw:border-b tw:border-red-200 tw:px-3 tw:py-1.5 tw:text-red-700 tw:text-xs">
-          {error}
+        <div className="tw:bg-red-50 tw:border-b tw:border-red-200 tw:px-3 tw:py-1.5 tw:text-red-700 tw:text-xs tw:font-medium tw:flex tw:justify-between tw:items-center">
+          <span>{error}</span>
+          <button
+            onClick={loadData}
+            className="tw:text-red-700 tw:underline tw:hover:text-red-900 tw:ml-2 tw:cursor-pointer"
+          >
+            (reintentar)
+          </button>
         </div>
       )}
 

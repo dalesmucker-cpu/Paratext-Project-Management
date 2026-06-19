@@ -2,6 +2,7 @@ import { WebViewProps } from '@papi/core';
 import papi from '@papi/frontend';
 import { useDialogCallback } from '@papi/frontend/react';
 import { useState, useEffect, useCallback, useMemo, useRef, type ChangeEvent } from 'react';
+import { papiRetry } from './utils/papi-retry';
 import type {
   ProjectTask,
   TranslationStage,
@@ -1059,6 +1060,15 @@ globalThis.webViewComponent = function TaskBoardWebView({
   const [saving, setSaving] = useState(false);
   const [syncPending, setSyncPending] = useState(false);
   const [error, setError] = useState('');
+
+  // Auto-dismiss error after 15 seconds
+  useEffect(() => {
+    if (!error) return;
+    const timer = setTimeout(() => {
+      setError('');
+    }, 15000);
+    return () => clearTimeout(timer);
+  }, [error]);
   const [filterAssignee, setFilterAssignee] = useWebViewState<string>('filterAssignee', 'all');
   const [filterBook, setFilterBook] = useWebViewState<string>('filterBook', 'all');
   const [showNewTask, setShowNewTask] = useState(false);
@@ -1109,10 +1119,10 @@ globalThis.webViewComponent = function TaskBoardWebView({
     setLoading(true);
     setError('');
     try {
-      const [result, membersResult] = await Promise.all([
+      const [result, membersResult] = await papiRetry(() => Promise.all([
         papi.commands.sendCommand('paratextProjectManager.getTasks', projectId),
         papi.commands.sendCommand('paratextProjectManager.getTeamMembers'),
-      ]);
+      ]), { isCancelled: () => !isCurrentRequest() });
       if (!isCurrentRequest()) return;
       const store = JSON.parse(result) as TaskStore;
       const knownDeleted = store.deletedTaskIds ?? [];
@@ -1121,25 +1131,8 @@ globalThis.webViewComponent = function TaskBoardWebView({
       setStageConfig(store.stageConfig ?? {});
       setActivityLog(store.activityLog ?? []);
       if (membersResult) setTeamMembers(JSON.parse(membersResult as string) as string[]);
-    } catch (e) {
-      // Auto-retry once after 3s — handles papi timeouts after long idle
-      try {
-        await new Promise((r) => setTimeout(r, 3000));
-        const [result, membersResult] = await Promise.all([
-          papi.commands.sendCommand('paratextProjectManager.getTasks', projectId),
-          papi.commands.sendCommand('paratextProjectManager.getTeamMembers'),
-        ]);
-        if (!isCurrentRequest()) return;
-        const store = JSON.parse(result) as TaskStore;
-        const knownDeleted = store.deletedTaskIds ?? [];
-        setDeletedTaskIds(knownDeleted);
-        setTasks((store.tasks ?? []).filter((t) => !knownDeleted.includes(t.id)));
-        setStageConfig(store.stageConfig ?? {});
-        setActivityLog(store.activityLog ?? []);
-        if (membersResult) setTeamMembers(JSON.parse(membersResult as string) as string[]);
-      } catch (retryErr) {
-        setError(`Error al cargar tareas: ${errMsg(retryErr)}`);
-      }
+    } catch (retryErr) {
+      if (isCurrentRequest()) setError(`Error al cargar tareas: ${errMsg(retryErr)}`);
     } finally {
       if (isCurrentRequest()) setLoading(false);
     }
@@ -1163,7 +1156,7 @@ globalThis.webViewComponent = function TaskBoardWebView({
     if (!projectId || savingRef.current || refreshInProgressRef.current) return;
     refreshInProgressRef.current = true;
     try {
-      const result = await papi.commands.sendCommand('paratextProjectManager.getTasks', projectId);
+      const result = await papiRetry(() => papi.commands.sendCommand('paratextProjectManager.getTasks', projectId));
       const store = JSON.parse(result as string) as TaskStore;
       lastRefreshRef.current = Date.now();
       const incomingDeleted = new Set(store.deletedTaskIds ?? []);
@@ -1191,9 +1184,9 @@ globalThis.webViewComponent = function TaskBoardWebView({
       if (store.activityLog) setActivityLog(store.activityLog);
       // Check whether any pending syncs have been resolved by the background loop
       try {
-        const pendingRaw = await papi.commands.sendCommand(
+        const pendingRaw = await papiRetry(() => papi.commands.sendCommand(
           'paratextProjectManager.tasksDriveGetPendingSync',
-        );
+        ));
         const pending = JSON.parse(pendingRaw as string) as string[];
         if (!pending.includes(projectId)) setSyncPending(false);
       } catch (_) {
@@ -1213,11 +1206,11 @@ globalThis.webViewComponent = function TaskBoardWebView({
     return () => clearInterval(interval);
   }, [projectId, silentRefresh]);
 
-  // Refresh on visibility change but no more than once every 2 minutes
+  // Refresh on visibility change but no more than once every 30 seconds
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return;
-      if (Date.now() - lastRefreshRef.current > 120_000) silentRefresh();
+      if (Date.now() - lastRefreshRef.current > 30_000) silentRefresh();
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
@@ -1664,8 +1657,14 @@ globalThis.webViewComponent = function TaskBoardWebView({
       )}
 
       {error && (
-        <div className="tw:bg-red-50 tw:border-b tw:border-red-200 tw:px-3 tw:py-1.5 tw:text-red-700 tw:text-xs">
-          {error}
+        <div className="tw:bg-red-50 tw:border-b tw:border-red-200 tw:px-3 tw:py-1.5 tw:text-red-700 tw:text-xs tw:font-medium tw:flex tw:justify-between tw:items-center">
+          <span>{error}</span>
+          <button
+            onClick={loadTasks}
+            className="tw:text-red-700 tw:underline tw:hover:text-red-900 tw:ml-2 tw:cursor-pointer"
+          >
+            (reintentar)
+          </button>
         </div>
       )}
 

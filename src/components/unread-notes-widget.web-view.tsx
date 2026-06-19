@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import papi from '@papi/frontend';
 import type { ParatextNoteThread, NotesDisplaySettings } from '../types/note.types';
 import { DEFAULT_NOTES_SETTINGS } from '../types/note.types';
+import { papiRetry } from '../utils/papi-retry';
 
 import { AudioPlayer, AttachmentViewer } from './note-media-components';
 
@@ -103,6 +104,15 @@ export default function UnreadNotesWidget({
   const [threads, setThreads] = useState<ParatextNoteThread[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Auto-dismiss error after 15 seconds
+  useEffect(() => {
+    if (!error) return;
+    const timer = setTimeout(() => {
+      setError('');
+    }, 15000);
+    return () => clearTimeout(timer);
+  }, [error]);
   const [settings, setSettings] = useState<NotesDisplaySettings>(DEFAULT_NOTES_SETTINGS);
   const [showSettings, setShowSettings] = useState(false);
 
@@ -426,10 +436,12 @@ export default function UnreadNotesWidget({
     setLoading(true);
     setError('');
     try {
-      const res = await papi.commands.sendCommand(
-        'paratextProjectManager.getProjectNotes',
-        projectId,
-        currentUser,
+      const res = await papiRetry(() =>
+        papi.commands.sendCommand(
+          'paratextProjectManager.getProjectNotes',
+          projectId,
+          currentUser,
+        ),
       );
       const parsed = JSON.parse(res) as {
         threads: ParatextNoteThread[];
@@ -442,27 +454,7 @@ export default function UnreadNotesWidget({
       }
       setThreads(parsed.threads || []);
     } catch (e) {
-      // Auto-retry once after 3s — handles papi timeouts after long idle
-      try {
-        await new Promise((r) => setTimeout(r, 3000));
-        const res = await papi.commands.sendCommand(
-          'paratextProjectManager.getProjectNotes',
-          projectId,
-          currentUser,
-        );
-        const parsed = JSON.parse(res) as {
-          threads: ParatextNoteThread[];
-          authors: string[];
-          error?: string;
-        };
-        if (parsed.error) {
-          setError(parsed.error);
-          return;
-        }
-        setThreads(parsed.threads || []);
-      } catch (retryErr) {
-        setError(`Error al cargar notas: ${retryErr}`);
-      }
+      setError(`Error al cargar notas: ${e}`);
     } finally {
       setLoading(false);
     }
@@ -499,12 +491,12 @@ export default function UnreadNotesWidget({
     };
   }, [projectId, loadNotes]);
 
-  // Refresh on visibility change but no more than once every 2 minutes
+  // Refresh on visibility change but no more than once every 30 seconds
   const lastRefreshRef = useRef(0);
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return;
-      if (Date.now() - lastRefreshRef.current > 120_000) {
+      if (Date.now() - lastRefreshRef.current > 30_000) {
         lastRefreshRef.current = Date.now();
         loadNotes();
       }
@@ -783,7 +775,15 @@ export default function UnreadNotesWidget({
       )}
 
       {error && (
-        <div className="tw:p-3 tw:text-red-600 tw:bg-red-50 tw:text-xs tw:border-b">{error}</div>
+        <div className="tw:p-3 tw:text-red-600 tw:bg-red-50 tw:text-xs tw:border-b tw:flex tw:justify-between tw:items-center">
+          <span>{error}</span>
+          <button
+            onClick={loadNotes}
+            className="tw:text-red-600 tw:underline tw:hover:text-red-800 tw:ml-2 tw:cursor-pointer"
+          >
+            (reintentar)
+          </button>
+        </div>
       )}
 
       {/* Note List */}
