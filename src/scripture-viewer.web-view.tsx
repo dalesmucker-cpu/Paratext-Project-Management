@@ -2645,10 +2645,13 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
               </button>
 
               {showSettings && (
-                <div className="tw:absolute tw:right-0 tw:top-full tw:mt-1.5 tw:z-[1000] tw:w-64 tw:bg-white tw:border tw:border-slate-200 tw:rounded-xl tw:shadow-xl tw:p-4 tw:space-y-3.5 tw:text-xs">
-                  <div className="tw:font-bold tw:text-slate-700 tw:border-b tw:pb-1.5">Configuración de Lectura</div>
+                <div 
+                  className="tw:absolute tw:right-0 tw:top-full tw:mt-1.5 tw:w-64 tw:border tw:border-slate-200 tw:rounded-xl tw:shadow-xl tw:p-4 tw:space-y-3.5 tw:text-xs"
+                  style={{ backgroundColor: '#ffffff', color: '#1e293b', zIndex: 10000 }}
+                >
+                  <div className="tw:font-bold tw:border-b tw:pb-1.5" style={{ borderColor: '#e2e8f0', color: '#1e293b' }}>Configuración de Lectura</div>
                   <div className="tw:flex tw:items-center tw:justify-between tw:gap-2">
-                    <span className="tw:text-slate-600 tw:font-medium">Versículo en línea propia</span>
+                    <span className="tw:font-medium" style={{ color: '#475569' }}>Versículo en línea propia</span>
                     <input
                       type="checkbox"
                       checked={versesOnOwnLine}
@@ -2662,7 +2665,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                   </div>
 
                   <div className="tw:flex tw:flex-col tw:gap-1">
-                    <span className="tw:text-slate-600 tw:font-medium">Fuente del Texto</span>
+                    <span className="tw:font-medium" style={{ color: '#475569' }}>Fuente del Texto</span>
                     <select
                       value={fontFamily}
                       onChange={(e) => {
@@ -2670,7 +2673,8 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                         setFontFamily(val);
                         localStorage.setItem('scripture_viewer_font_family', val);
                       }}
-                      className="tw:border tw:border-slate-200 tw:rounded-lg tw:px-2 tw:py-1.5 tw:bg-slate-50 tw:text-slate-700 focus:tw:outline-none"
+                      className="tw:border tw:rounded-lg tw:px-2 tw:py-1.5 focus:tw:outline-none"
+                      style={{ backgroundColor: '#f8fafc', color: '#334155', borderColor: '#cbd5e1' }}
                     >
                       <option value="sans-serif">Predeterminado (Sans)</option>
                       <option value="serif">Georgia (Serif)</option>
@@ -2681,7 +2685,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                   </div>
 
                   <div className="tw:flex tw:flex-col tw:gap-1">
-                    <span className="tw:text-slate-600 tw:font-medium">Visualización de Notas</span>
+                    <span className="tw:font-medium" style={{ color: '#475569' }}>Visualización de Notas</span>
                     <select
                       value={notesDisplayStyle}
                       onChange={(e) => {
@@ -2689,7 +2693,8 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                         setNotesDisplayStyle(val);
                         localStorage.setItem('scripture_viewer_notes_display_style', val);
                       }}
-                      className="tw:border tw:border-slate-200 tw:rounded-lg tw:px-2 tw:py-1.5 tw:bg-slate-50 tw:text-slate-700 focus:tw:outline-none"
+                      className="tw:border tw:rounded-lg tw:px-2 tw:py-1.5 focus:tw:outline-none"
+                      style={{ backgroundColor: '#f8fafc', color: '#334155', borderColor: '#cbd5e1' }}
                     >
                       <option value="highlight">Resaltado Amarillo</option>
                       <option value="flag">Bandera (🚩)</option>
