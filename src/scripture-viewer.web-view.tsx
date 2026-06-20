@@ -532,6 +532,11 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   const scrRefRef = useRef(scrRef);
   scrRefRef.current = scrRef;
 
+  const scrollGroupIdRef = useRef(scrollGroupId);
+  scrollGroupIdRef.current = scrollGroupId;
+  const setScrRefRef = useRef(setScrRef);
+  setScrRefRef.current = setScrRef;
+
   // Content states
   const [chapterBlocks, setChapterBlocks] = useState<ChapterBlock[]>([]);
   const [loading, setLoading] = useState(false);
@@ -1789,8 +1794,8 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
           setSelectedBook(lastNav.bookCode);
           setSelectedChapter(lastNav.chapter);
           pendingVerseRef.current = lastNav.verse;
-          if (scrollGroupId !== undefined && setScrRef) {
-            setScrRef({
+          if (scrollGroupIdRef.current !== undefined && setScrRefRef.current) {
+            setScrRefRef.current({
               book: lastNav.bookCode,
               chapterNum: lastNav.chapter,
               verseNum: lastNav.verse,
@@ -1804,8 +1809,8 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
           const defaultBook = bookList.find((b) => b.code === 'RUT') || bookList[0];
           setSelectedBook(defaultBook.code);
           setSelectedChapter(1);
-          if (scrollGroupId !== undefined && setScrRef) {
-            setScrRef({
+          if (scrollGroupIdRef.current !== undefined && setScrRefRef.current) {
+            setScrRefRef.current({
               book: defaultBook.code,
               chapterNum: 1,
               verseNum: 1,
@@ -1822,7 +1827,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, scrollGroupId, setScrRef]);
+  }, [projectId]);
 
   useEffect(() => {
     initData();

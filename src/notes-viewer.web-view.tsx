@@ -200,7 +200,6 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
   const [editingComment, setEditingComment] = useState<{ date: string; text: string } | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
   const [commentContextMenu, setCommentContextMenu] = useState<{ x: number; y: number; user: string } | null>(null);
-  const [keyTermsStore, setKeyTermsStore] = useState<any>(null);
 
   useEffect(() => {
     const handleGlobalClick = () => setCommentContextMenu(null);
@@ -208,26 +207,6 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
     return () => window.removeEventListener('click', handleGlobalClick);
   }, []);
 
-  useEffect(() => {
-    if (projectId) {
-      papi.commands.sendCommand('paratextProjectManager.getKeyTermsData', projectId)
-        .then((dataStr) => {
-          if (dataStr) {
-            setKeyTermsStore(JSON.parse(dataStr));
-          }
-        })
-        .catch((err) => console.error('Failed to load key terms in notes viewer:', err));
-    }
-  }, [projectId]);
-
-  // Find related key terms for the selected thread's verse
-  const relatedKeyTerms = useMemo(() => {
-    if (!selectedThread || !keyTermsStore || !keyTermsStore.terms) return [];
-    const refStr = `${selectedThread.book} ${selectedThread.chapter}:${selectedThread.verse}`;
-    return keyTermsStore.terms.filter((term: any) =>
-      term.references && term.references.includes(refStr)
-    );
-  }, [selectedThread, keyTermsStore]);
 
   // Voice recording states
   const [isRecording, setIsRecording] = useState(false);
@@ -1356,36 +1335,6 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                 </div>
               )}
 
-              {relatedKeyTerms.length > 0 && (
-                <div className="tw:bg-slate-50 tw:border-b tw:border-gray-200 tw:px-4 tw:py-2.5 tw:shrink-0">
-                  <div className="tw:text-xs tw:text-slate-500 tw:font-semibold tw:mb-1.5 tw:uppercase tw:tracking-wider tw:text-[10px] tw:flex tw:items-center tw:gap-1">
-                    🔑 Términos Bíblicos en este versículo:
-                  </div>
-                  <div className="tw:flex tw:flex-wrap tw:gap-1.5">
-                    {relatedKeyTerms.map((kt: any) => (
-                      <button
-                        key={kt.id}
-                        onClick={() => {
-                          papi.commands.sendCommand(
-                            'paratextProjectManager.openHebrewGreekDictionary',
-                            kt.strongs || kt.lemma
-                          ).catch((err) => console.error(err));
-                        }}
-                        className="tw:inline-flex tw:items-center tw:gap-1.5 tw:px-2 tw:py-1 tw:bg-white hover:tw:bg-indigo-50 tw:text-indigo-600 hover:tw:text-indigo-700 tw:border tw:border-slate-200 hover:tw:border-indigo-200 tw:rounded-lg tw:text-[10.5px] tw:font-semibold tw:transition-all tw:cursor-pointer shadow-sm"
-                        title={kt.strongs ? `Diccionario Strong: ${kt.strongs}` : `Buscar definición: ${kt.lemma}`}
-                      >
-                        <span className="tw:font-serif">{kt.lemma}</span>
-                        <span className="tw:text-slate-400 tw:font-normal">({kt.gloss})</span>
-                        {kt.strongs && (
-                          <span className="tw:text-[9px] tw:bg-slate-100 tw:px-1 tw:py-0.2 tw:rounded tw:font-mono tw:text-slate-500">
-                            {kt.strongs}
-                          </span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
 
               {/* Comments Timeline */}
               <div
