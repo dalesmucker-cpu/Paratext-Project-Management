@@ -1,8 +1,28 @@
 import { WebViewProps } from '@papi/core';
 import papi from '@papi/frontend';
 import { useDialogCallback } from '@papi/frontend/react';
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import {
+  Menu,
+  X,
+  Search,
+  RefreshCw,
+  ThumbsUp,
+  ThumbsDown,
+  ChevronUp,
+  ChevronDown,
+  Plus,
+  Trash2,
+  AlertTriangle,
+  Languages,
+  Check,
+  CircleX,
+  BookOpen,
+  ChevronRight,
+  CheckCircle2,
+} from 'lucide-react';
 import { papiRetry } from './utils/papi-retry';
+import { useLocalizedStrings } from './utils/i18n';
 import type {
   KeyTermsStore,
   KeyTerm,
@@ -18,22 +38,21 @@ globalThis.webViewComponent = function KeyTermsWebView({
   useWebViewState,
   updateWebViewDefinition,
 }: WebViewProps) {
+  const [lang, setLang] = useWebViewState<string>('lang', 'es');
+  const { tx, toggleLang } = useLocalizedStrings(lang, setLang, 'verifier');
+
   // Key Terms Store state
   const [store, setStore] = useState<KeyTermsStore | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Auto-dismiss error after 15 seconds
   useEffect(() => {
-    if (!error) return;
-    const timer = setTimeout(() => {
-      setError('');
-    }, 15000);
+    if (!error) return undefined;
+    const timer = setTimeout(() => setError(''), 15000);
     return () => clearTimeout(timer);
   }, [error]);
   const [saving, setSaving] = useState(false);
 
-  // Selected Term ID
   const [selectedTermId, setSelectedTermId] = useWebViewState<string>('selectedTermId', '');
 
   // UI states
@@ -47,32 +66,33 @@ globalThis.webViewComponent = function KeyTermsWebView({
   const [newNoteText, setNewNoteText] = useState('');
   const [currentUser, setCurrentUser] = useState('Traductor');
 
-  // Refs for scrolling and selection tracking
   const rightPanelRef = useRef<HTMLDivElement | null>(null);
   const isExternalSelectionRef = useRef(false);
 
-  const selectTerm = useCallback((id: string, isExternal = false) => {
-    isExternalSelectionRef.current = isExternal;
-    setSelectedTermId(id);
-  }, [setSelectedTermId]);
+  const selectTerm = useCallback(
+    (id: string, isExternal = false) => {
+      isExternalSelectionRef.current = isExternal;
+      setSelectedTermId(id);
+    },
+    [setSelectedTermId],
+  );
 
-  // Sidebar resizable width & selected button scroll tracking
-  const [sidebarWidth, setSidebarWidth] = useState(320);
+  // Sidebar resizable width & persistence
+  const [sidebarWidth, setSidebarWidth] = useState(260);
+  const [sidebarVisible, setSidebarVisible] = useState(true);
   const selectedButtonRef = useRef<HTMLButtonElement | null>(null);
   const sidebarListRef = useRef<HTMLDivElement | null>(null);
 
-  // Scroll right panel to top on selectedTermId changes
   useEffect(() => {
     if (rightPanelRef.current) {
       rightPanelRef.current.scrollTop = 0;
     }
   }, [selectedTermId]);
 
-  // When selectedTermId changes, scroll the button into view within the sidebar only
   useEffect(() => {
     if (selectedTermId && selectedButtonRef.current && sidebarListRef.current) {
       if (isExternalSelectionRef.current) {
-        isExternalSelectionRef.current = false; // Reset
+        isExternalSelectionRef.current = false;
         const container = sidebarListRef.current;
         const btn = selectedButtonRef.current;
         const containerTop = container.scrollTop;
@@ -86,12 +106,11 @@ globalThis.webViewComponent = function KeyTermsWebView({
     }
   }, [selectedTermId]);
 
-  // Clear the tag input fields whenever we navigate to a different term
   useEffect(() => {
     setNewContextTags({});
   }, [selectedTermId]);
 
-  // Listen to external key term selection events
+  // External selection events
   useEffect(() => {
     if (!papi.network || !papi.network.getNetworkEvent) return undefined;
     const unsubscribe = papi.network.getNetworkEvent<any>('paratextProjectManager.onSelectKeyTerm')(
@@ -107,10 +126,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
     return () => {
       unsubscribe();
     };
-  }, [projectId, setSelectedTermId, updateWebViewDefinition]);
-
-  // Sidebar visibility
-  const [sidebarVisible, setSidebarVisible] = useState(true);
+  }, [projectId, setSelectedTermId, updateWebViewDefinition, selectTerm]);
 
   // Collapsible panels
   const [morphPanelOpen, setMorphPanelOpen] = useState(false);
@@ -128,16 +144,15 @@ globalThis.webViewComponent = function KeyTermsWebView({
   const [verseMatches, setVerseMatches] = useState<Record<string, VerseMatchStatus>>({});
   const [scanning, setScanning] = useState(false);
 
-  // Dialog to select project
   const selectProject = useDialogCallback(
     'platform.selectProject',
     useMemo(
       () => ({
-        title: 'Seleccionar Proyecto',
-        prompt: 'Elige un proyecto para verificar términos clave:',
+        title: tx('selectProjectTitle'),
+        prompt: tx('selectProjectPrompt'),
         includeProjectInterfaces: ['platformScripture.USJ_Chapter'],
       }),
-      [],
+      [tx],
     ),
     useCallback(
       (selectedId) => {
@@ -147,7 +162,6 @@ globalThis.webViewComponent = function KeyTermsWebView({
     ),
   );
 
-  // Load key terms data from backend
   const loadDataRequestRef = useRef(0);
 
   const loadData = useCallback(async () => {
@@ -158,11 +172,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
     setError('');
     try {
       const dataStr = await papiRetry(
-        () =>
-          papi.commands.sendCommand(
-            'paratextProjectManager.getKeyTermsData',
-            projectId,
-          ),
+        () => papi.commands.sendCommand('paratextProjectManager.getKeyTermsData', projectId),
         { isCancelled: () => !isCurrentRequest() },
       );
       if (!isCurrentRequest()) return;
@@ -176,22 +186,21 @@ globalThis.webViewComponent = function KeyTermsWebView({
       if (!isCurrentRequest()) return;
       if (user) setCurrentUser(user);
     } catch (e: any) {
-      if (isCurrentRequest()) setError(`Error al cargar datos de términos clave: ${e.message || e}`);
+      if (isCurrentRequest()) setError(tx('errorLoading', e.message || String(e)));
     } finally {
       if (isCurrentRequest()) setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, tx]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
-  // Persist updated store to backend
   const persistStore = useCallback(
     async (updated: KeyTermsStore) => {
       if (!projectId) return;
       setSaving(true);
-      setStore(updated); // Optimistic update
+      setStore(updated);
       try {
         await papi.commands.sendCommand(
           'paratextProjectManager.saveKeyTermsData',
@@ -199,15 +208,14 @@ globalThis.webViewComponent = function KeyTermsWebView({
           JSON.stringify(updated, null, 2),
         );
       } catch (e: any) {
-        setError(`Error al guardar datos: ${e.message || e}`);
+        setError(tx('errorSaving', e.message || String(e)));
       } finally {
         setSaving(false);
       }
     },
-    [projectId],
+    [projectId, tx],
   );
 
-  // Periodic scan of the current book/chapter to update match status checkboxes
   const scanChapterRequestRef = useRef(0);
 
   const scanChapter = useCallback(async () => {
@@ -219,8 +227,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
 
     setScanning(true);
     try {
-      // Find all chapters we need to scan for this term
-      const chaptersToScan = new Set<string>(); // Format: "BOOK C"
+      const chaptersToScan = new Set<string>();
       for (const ref of term.references) {
         const parts = ref.split(' ');
         if (parts.length >= 2) {
@@ -248,12 +255,15 @@ globalThis.webViewComponent = function KeyTermsWebView({
               newMatches[`${match.termId}-${match.reference}`] = match;
             }
           }
-        } catch (_) {}
+        } catch (e) {
+          console.warn('scanChapter failed for', bkChap, e);
+        }
       });
 
       await Promise.all(scanPromises);
       if (isCurrentRequest()) setVerseMatches(newMatches);
-    } catch (_) {
+    } catch (e) {
+      console.warn('scanChapter error', e);
     } finally {
       if (isCurrentRequest()) setScanning(false);
     }
@@ -263,9 +273,8 @@ globalThis.webViewComponent = function KeyTermsWebView({
     if (selectedTermId) {
       scanChapter();
     }
-  }, [selectedTermId]);
+  }, [selectedTermId, scanChapter]);
 
-  // Navigate to specific verse reference
   const handleVerseClick = useCallback(
     async (ref: string) => {
       if (!projectId) return;
@@ -291,7 +300,6 @@ globalThis.webViewComponent = function KeyTermsWebView({
     [projectId],
   );
 
-  // Modify morphology config
   const handleMorphologyChange = useCallback(
     async (updates: Partial<MorphologyConfig>) => {
       if (!store) return;
@@ -308,125 +316,82 @@ globalThis.webViewComponent = function KeyTermsWebView({
     [store, persistStore, scanChapter],
   );
 
-  // Add Prefix Affix Rule
-  const addPrefixRule = useCallback(async () => {
-    if (!store || !newPrefix.trim()) return;
-    const newRule: AffixRule = {
-      id: `p-${Date.now()}`,
-      affix: newPrefix.trim(),
-      label: newPrefixLabel.trim() || 'Prefijo',
-      enabled: true,
-    };
-    const updatedStore = {
-      ...store,
-      morphologyConfig: {
-        ...store.morphologyConfig,
-        prefixes: [...(store.morphologyConfig.prefixes || []), newRule],
-      },
-    };
-    setNewPrefix('');
-    setNewPrefixLabel('');
-    await persistStore(updatedStore);
-    setTimeout(scanChapter, 300);
-  }, [store, newPrefix, newPrefixLabel, persistStore, scanChapter]);
+  const addAffixRule = useCallback(
+    async (
+      type: 'prefix' | 'suffix' | 'infix',
+      affix: string,
+      label: string,
+      defaultLabel: string,
+      clearAffix: () => void,
+      clearLabel: () => void,
+    ) => {
+      if (!store || !affix.trim()) return;
+      const newRule: AffixRule = {
+        id: `${type[0]}-${Date.now()}`,
+        affix: affix.trim(),
+        label: label.trim() || defaultLabel,
+        enabled: true,
+      };
+      const key = type === 'prefix' ? 'prefixes' : type === 'suffix' ? 'suffixes' : 'infixes';
+      const updatedStore = {
+        ...store,
+        morphologyConfig: {
+          ...store.morphologyConfig,
+          [key]: [...((store.morphologyConfig as any)[key] || []), newRule],
+        },
+      };
+      clearAffix();
+      clearLabel();
+      await persistStore(updatedStore);
+      setTimeout(scanChapter, 300);
+    },
+    [store, persistStore, scanChapter],
+  );
 
-  // Add Suffix Affix Rule
-  const addSuffixRule = useCallback(async () => {
-    if (!store || !newSuffix.trim()) return;
-    const newRule: AffixRule = {
-      id: `s-${Date.now()}`,
-      affix: newSuffix.trim(),
-      label: newSuffixLabel.trim() || 'Sufijo',
-      enabled: true,
-    };
-    const updatedStore = {
-      ...store,
-      morphologyConfig: {
-        ...store.morphologyConfig,
-        suffixes: [...(store.morphologyConfig.suffixes || []), newRule],
-      },
-    };
-    setNewSuffix('');
-    setNewSuffixLabel('');
-    await persistStore(updatedStore);
-    setTimeout(scanChapter, 300);
-  }, [store, newSuffix, newSuffixLabel, persistStore, scanChapter]);
+  const addPrefixRule = useCallback(
+    () => addAffixRule('prefix', newPrefix, newPrefixLabel, 'Prefijo', () => setNewPrefix(''), () => setNewPrefixLabel('')),
+    [addAffixRule, newPrefix, newPrefixLabel],
+  );
+  const addSuffixRule = useCallback(
+    () => addAffixRule('suffix', newSuffix, newSuffixLabel, 'Sufijo', () => setNewSuffix(''), () => setNewSuffixLabel('')),
+    [addAffixRule, newSuffix, newSuffixLabel],
+  );
+  const addInfixRule = useCallback(
+    () => addAffixRule('infix', newInfix, newInfixLabel, 'Infijo', () => setNewInfix(''), () => setNewInfixLabel('')),
+    [addAffixRule, newInfix, newInfixLabel],
+  );
 
-  // Add Infix Affix Rule
-  const addInfixRule = useCallback(async () => {
-    if (!store || !newInfix.trim()) return;
-    const newRule: AffixRule = {
-      id: `i-${Date.now()}`,
-      affix: newInfix.trim(),
-      label: newInfixLabel.trim() || 'Infijo',
-      enabled: true,
-    };
-    const updatedStore = {
-      ...store,
-      morphologyConfig: {
-        ...store.morphologyConfig,
-        infixes: [...(store.morphologyConfig.infixes || []), newRule],
-      },
-    };
-    setNewInfix('');
-    setNewInfixLabel('');
-    await persistStore(updatedStore);
-    setTimeout(scanChapter, 300);
-  }, [store, newInfix, newInfixLabel, persistStore, scanChapter]);
-
-  // Toggle Affix Rule
   const toggleRule = useCallback(
     async (ruleId: string, type: 'prefix' | 'suffix' | 'infix') => {
       if (!store) return;
       const config = store.morphologyConfig;
-      if (type === 'prefix') {
-        const prefixes = (config.prefixes || []).map((r) =>
-          r.id === ruleId ? { ...r, enabled: !r.enabled } : r,
-        );
-        await persistStore({ ...store, morphologyConfig: { ...config, prefixes } });
-      } else if (type === 'suffix') {
-        const suffixes = (config.suffixes || []).map((r) =>
-          r.id === ruleId ? { ...r, enabled: !r.enabled } : r,
-        );
-        await persistStore({ ...store, morphologyConfig: { ...config, suffixes } });
-      } else {
-        const infixes = (config.infixes || []).map((r) =>
-          r.id === ruleId ? { ...r, enabled: !r.enabled } : r,
-        );
-        await persistStore({ ...store, morphologyConfig: { ...config, infixes } });
-      }
+      const key = type === 'prefix' ? 'prefixes' : type === 'suffix' ? 'suffixes' : 'infixes';
+      const updated = ((config as any)[key] || []).map((r: AffixRule) =>
+        r.id === ruleId ? { ...r, enabled: !r.enabled } : r,
+      );
+      await persistStore({ ...store, morphologyConfig: { ...config, [key]: updated } });
       setTimeout(scanChapter, 300);
     },
     [store, persistStore, scanChapter],
   );
 
-  // Delete Affix Rule
   const deleteRule = useCallback(
     async (ruleId: string, type: 'prefix' | 'suffix' | 'infix') => {
       if (!store) return;
       const config = store.morphologyConfig;
-      if (type === 'prefix') {
-        const prefixes = (config.prefixes || []).filter((r) => r.id !== ruleId);
-        await persistStore({ ...store, morphologyConfig: { ...config, prefixes } });
-      } else if (type === 'suffix') {
-        const suffixes = (config.suffixes || []).filter((r) => r.id !== ruleId);
-        await persistStore({ ...store, morphologyConfig: { ...config, suffixes } });
-      } else {
-        const infixes = (config.infixes || []).filter((r) => r.id !== ruleId);
-        await persistStore({ ...store, morphologyConfig: { ...config, infixes } });
-      }
+      const key = type === 'prefix' ? 'prefixes' : type === 'suffix' ? 'suffixes' : 'infixes';
+      const updated = ((config as any)[key] || []).filter((r: AffixRule) => r.id !== ruleId);
+      await persistStore({ ...store, morphologyConfig: { ...config, [key]: updated } });
       setTimeout(scanChapter, 300);
     },
     [store, persistStore, scanChapter],
   );
 
-  // Selected term details
   const selectedTerm = useMemo(() => {
     if (!store || !selectedTermId) return null;
     return store.terms.find((t) => t.id === selectedTermId) || null;
   }, [store, selectedTermId]);
 
-  // Add a rendering to selected term
   const addRendering = useCallback(async () => {
     if (!store || !selectedTermId || !newRenderingText.trim()) return;
     const now = new Date().toISOString();
@@ -457,7 +422,6 @@ globalThis.webViewComponent = function KeyTermsWebView({
     setTimeout(scanChapter, 300);
   }, [store, selectedTermId, newRenderingText, currentUser, persistStore, scanChapter]);
 
-  // Change rendering status
   const updateRenderingStatus = useCallback(
     async (renderingId: string, status: RenderingStatus) => {
       if (!store || !selectedTermId) return;
@@ -477,7 +441,6 @@ globalThis.webViewComponent = function KeyTermsWebView({
     [store, selectedTermId, persistStore, scanChapter],
   );
 
-  // Vote on rendering
   const voteRendering = useCallback(
     async (renderingId: string, value: 'up' | 'down') => {
       if (!store || !selectedTermId) return;
@@ -488,18 +451,11 @@ globalThis.webViewComponent = function KeyTermsWebView({
             if (r.id === renderingId) {
               const existingVote = (r.votes || []).find((v) => v.user === currentUser);
               const cleanVotes = (r.votes || []).filter((v) => v.user !== currentUser);
-
-              // If clicking the same button they already voted for, remove the vote entirely (retract)
               const shouldRetract = existingVote && existingVote.value === value;
               const updatedVotes = shouldRetract
                 ? cleanVotes
                 : [...cleanVotes, { user: currentUser, value, timestamp: now }];
-
-              return {
-                ...r,
-                votes: updatedVotes,
-                updatedAt: now,
-              };
+              return { ...r, votes: updatedVotes, updatedAt: now };
             }
             return r;
           });
@@ -512,14 +468,12 @@ globalThis.webViewComponent = function KeyTermsWebView({
     [store, selectedTermId, currentUser, persistStore],
   );
 
-  // Add context tag to rendering
   const addContextTag = useCallback(
     async (renderingId: string) => {
       const rawTag = newContextTags[renderingId] || '';
       if (!store || !selectedTermId || !rawTag.trim()) return;
       const now = new Date().toISOString();
       const tag = rawTag.trim().toLowerCase();
-
       const terms = store.terms.map((t) => {
         if (t.id === selectedTermId) {
           const renderings = t.renderings.map((r) => {
@@ -533,14 +487,12 @@ globalThis.webViewComponent = function KeyTermsWebView({
         }
         return t;
       });
-
       setNewContextTags((prev) => ({ ...prev, [renderingId]: '' }));
       await persistStore({ ...store, terms });
     },
     [store, selectedTermId, newContextTags, persistStore],
   );
 
-  // Remove context tag from rendering
   const removeContextTag = useCallback(
     async (renderingId: string, tag: string) => {
       if (!store || !selectedTermId) return;
@@ -549,7 +501,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
         if (t.id === selectedTermId) {
           const renderings = t.renderings.map((r) => {
             if (r.id === renderingId) {
-              const contextTags = (r.contextTags || []).filter((t) => t !== tag);
+              const contextTags = (r.contextTags || []).filter((tt) => tt !== tag);
               return { ...r, contextTags, updatedAt: now };
             }
             return r;
@@ -563,7 +515,6 @@ globalThis.webViewComponent = function KeyTermsWebView({
     [store, selectedTermId, persistStore],
   );
 
-  // Add Note to key term
   const addNote = useCallback(async () => {
     if (!store || !selectedTermId || !newNoteText.trim()) return;
     const now = new Date().toISOString();
@@ -573,7 +524,6 @@ globalThis.webViewComponent = function KeyTermsWebView({
       text: newNoteText.trim(),
       timestamp: now,
     };
-
     const terms = store.terms.map((t) => {
       if (t.id === selectedTermId) {
         return {
@@ -584,12 +534,10 @@ globalThis.webViewComponent = function KeyTermsWebView({
       }
       return t;
     });
-
     setNewNoteText('');
     await persistStore({ ...store, terms });
   }, [store, selectedTermId, newNoteText, currentUser, persistStore]);
 
-  // Get list of all unique semantic domains for filtering
   const allDomains = useMemo(() => {
     if (!store) return [];
     const domainsSet = new Set<string>();
@@ -603,10 +551,6 @@ globalThis.webViewComponent = function KeyTermsWebView({
     return Array.from(domainsSet).sort();
   }, [store]);
 
-  // Check term completion status:
-  // - Complete: Has at least one approved rendering AND all references are matched
-  // - Missing: Has no approved renderings
-  // - Partial: Has approved renderings but some references are missing matches
   const getTermStatus = useCallback(
     (term: KeyTerm): 'complete' | 'missing' | 'partial' => {
       const approved = term.renderings
@@ -614,7 +558,6 @@ globalThis.webViewComponent = function KeyTermsWebView({
         : [];
       if (approved.length === 0) return 'missing';
 
-      // Check if we scanned references
       let allFound = true;
       let hasScan = false;
       for (const ref of term.references) {
@@ -626,19 +569,16 @@ globalThis.webViewComponent = function KeyTermsWebView({
           }
         }
       }
-
       if (hasScan && !allFound) return 'partial';
       return 'complete';
     },
     [verseMatches],
   );
 
-  // Filtered terms list
   const filteredTerms = useMemo(() => {
     if (!store) return [];
     return store.terms
       .filter((t) => {
-        // Search filter
         const q = searchTerm.toLowerCase().trim();
         if (q) {
           const glossMatch = t.gloss.toLowerCase().includes(q);
@@ -647,52 +587,48 @@ globalThis.webViewComponent = function KeyTermsWebView({
           const translitMatch = t.transliteration && t.transliteration.toLowerCase().includes(q);
           if (!glossMatch && !lemmaMatch && !strongMatch && !translitMatch) return false;
         }
-
-        // Domain filter
         if (filterDomain !== 'all' && (!t.domains || !t.domains.includes(filterDomain))) {
           return false;
         }
-
-        // Completion filter
         const status = getTermStatus(t);
         if (filterCompletion !== 'all' && status !== filterCompletion) {
           return false;
         }
-
         return true;
       })
       .sort((a, b) => a.gloss.localeCompare(b.gloss));
   }, [store, searchTerm, filterDomain, filterCompletion, getTermStatus]);
 
-  // Percentage complete overall
   const completionStats = useMemo(() => {
     if (!store || store.terms.length === 0)
       return { percent: 0, missing: 0, partial: 0, complete: 0 };
     let missing = 0;
     let partial = 0;
     let complete = 0;
-
     for (const t of store.terms) {
       const s = getTermStatus(t);
-      if (s === 'missing') missing++;
-      else if (s === 'partial') partial++;
-      else complete++;
+      if (s === 'missing') missing += 1;
+      else if (s === 'partial') partial += 1;
+      else complete += 1;
     }
-
     const percent = Math.round((complete / store.terms.length) * 100);
     return { percent, missing, partial, complete };
   }, [store, getTermStatus]);
 
-  // Render loading / empty states
+  // Render: empty / loading states
   if (!projectId) {
     return (
-      <div className="tw:flex tw:flex-col tw:items-center tw:justify-center tw:h-full tw:p-8 tw:text-center tw:gap-4 tw:text-sm">
-        <p className="tw:text-gray-600">Ningún proyecto seleccionado.</p>
+      <div className="tw:flex tw:flex-col tw:items-center tw:justify-center tw:h-full tw:p-8 tw:text-center tw:gap-4 tw:text-sm tw:bg-background tw:text-foreground">
+        <div className="tw:p-4 tw:bg-card tw:rounded-full tw:border tw:border-border tw:text-muted-foreground">
+          <BookOpen size={36} />
+        </div>
+        <p className="tw:text-muted-foreground">{tx('selectProjectEmpty')}</p>
         <button
-          className="tw:px-4 tw:py-2 tw:bg-indigo-600 tw:text-white tw:rounded-lg tw:hover:bg-indigo-700 tw:cursor-pointer"
+          type="button"
+          className="tw:inline-flex tw:items-center tw:gap-2 tw:px-4 tw:py-2 tw:bg-primary tw:text-primary-foreground tw:rounded-lg hover:tw:opacity-90 tw:cursor-pointer tw:font-semibold tw:shadow-sm tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring tw:focus-visible:ring-offset-2 tw:focus-visible:ring-offset-background"
           onClick={() => selectProject()}
         >
-          Seleccionar Proyecto
+          {tx('selectProject')}
         </button>
       </div>
     );
@@ -700,62 +636,113 @@ globalThis.webViewComponent = function KeyTermsWebView({
 
   if (loading && !store) {
     return (
-      <div className="tw:flex tw:items-center tw:justify-center tw:h-full tw:text-sm tw:text-gray-500">
-        Cargando términos clave de Paratext...
+      <div
+        role="status"
+        aria-live="polite"
+        className="tw:flex tw:flex-col tw:items-center tw:justify-center tw:h-full tw:gap-4 tw:bg-background tw:text-foreground"
+      >
+        <div className="tw:flex tw:items-center tw:gap-3">
+          <div className="tw:w-2 tw:h-2 tw:bg-primary tw:rounded-full tw:animate-ping" />
+          <div className="tw:w-2 tw:h-2 tw:bg-primary tw:rounded-full tw:animate-pulse" />
+          <div className="tw:w-2 tw:h-2 tw:bg-primary tw:rounded-full tw:animate-pulse tw:[animation-delay:0.2s]" />
+        </div>
+        <span className="tw:text-sm tw:text-muted-foreground tw:font-medium">
+          {tx('loading')}
+        </span>
       </div>
     );
   }
 
+  // Filter tab config (localized)
+  const filterTabs: { key: typeof filterCompletion; label: string }[] = [
+    { key: 'all', label: tx('filterAll') },
+    { key: 'complete', label: tx('filterComplete') },
+    { key: 'partial', label: tx('filterPartial') },
+    { key: 'missing', label: tx('filterMissing') },
+  ];
+
+  // Status badge styling (semantic colors that read well in both themes)
+  const statusBadge = (status: 'complete' | 'missing' | 'partial') => {
+    if (status === 'complete') {
+      return {
+        cls: 'tw:bg-emerald-500/15 tw:text-emerald-700 dark:tw:text-emerald-400 tw:border tw:border-emerald-500/30',
+        text: tx('statusComplete'),
+      };
+    }
+    if (status === 'partial') {
+      return {
+        cls: 'tw:bg-amber-500/15 tw:text-amber-700 dark:tw:text-amber-400 tw:border tw:border-amber-500/30',
+        text: tx('statusPartial'),
+      };
+    }
+    return {
+      cls: 'tw:bg-destructive/15 tw:text-destructive tw:border tw:border-destructive/30',
+      text: tx('statusMissing'),
+    };
+  };
+
   return (
-    <div className="tw:flex tw:h-full tw:bg-slate-50 tw:text-slate-800 tw:font-sans">
+    <div className="tw:flex tw:h-full tw:bg-background tw:text-foreground tw:font-sans">
       {/* Sidebar - Terms list */}
       {sidebarVisible && (
-        <div
+        <aside
+          aria-label="Key terms list"
           style={{ width: `${sidebarWidth}px` }}
-          className="tw:bg-white tw:border-r tw:border-slate-200 tw:flex tw:flex-col tw:h-full tw:flex-shrink-0"
+          className="tw:bg-card tw:border-r tw:border-border tw:flex tw:flex-col tw:h-full tw:flex-shrink-0"
         >
-          {/* Header search & filters */}
-          <div className="tw:p-3 tw:border-b tw:border-slate-100 tw:space-y-2.5">
-            <div className="tw:flex tw:items-center tw:justify-between">
-              <span className="tw:font-bold tw:text-sm tw:text-slate-700">Términos Clave</span>
+          <div className="tw:p-3 tw:border-b tw:border-border tw:space-y-2.5">
+            <div className="tw:flex tw:items-center tw:justify-between tw:gap-2">
+              <span className="tw:font-bold tw:text-sm tw:text-foreground tw:truncate">
+                {tx('title')}
+              </span>
               <button
-                className="tw:text-xs tw:text-slate-500 tw:hover:text-indigo-600"
+                type="button"
                 onClick={loadData}
+                title={tx('refresh')}
+                aria-label={tx('refresh')}
+                className="tw:inline-flex tw:items-center tw:gap-1 tw:text-xs tw:text-muted-foreground hover:tw:text-primary tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring tw:rounded"
               >
-                Actualizar
+                <RefreshCw size={12} />
               </button>
             </div>
 
             {/* Search Input */}
             <div className="tw:relative">
+              <Search
+                size={12}
+                className="tw:absolute tw:left-2.5 tw:top-1/2 tw:-translate-y-1/2 tw:text-muted-foreground tw:pointer-events-none"
+                aria-hidden="true"
+              />
               <input
                 type="text"
-                placeholder="Buscar término, glosa, strong..."
+                placeholder={tx('searchPlaceholder')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="tw:w-full tw:border tw:border-slate-200 tw:rounded-lg tw:px-2.5 tw:py-1.5 tw:text-xs tw:pr-7 tw:focus:outline-none tw:focus:border-indigo-400"
+                className="tw:w-full tw:border tw:border-border tw:rounded-lg tw:pl-7 tw:pr-7 tw:py-1.5 tw:text-xs tw:bg-background tw:text-foreground tw:placeholder:tw:text-muted-foreground tw:focus:outline-none tw:focus:border-primary tw:focus:ring-1 tw:focus:ring-primary"
               />
               {searchTerm && (
                 <button
-                  className="tw:absolute tw:right-2 tw:top-1/2 tw:-translate-y-1/2 tw:text-slate-400 tw:hover:text-slate-600"
+                  type="button"
                   onClick={() => setSearchTerm('')}
+                  aria-label="Clear search"
+                  className="tw:absolute tw:right-2 tw:top-1/2 tw:-translate-y-1/2 tw:text-muted-foreground hover:tw:text-foreground tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring tw:rounded"
                 >
-                  ✕
+                  <X size={12} />
                 </button>
               )}
             </div>
 
             {/* Semantic Domain Filter */}
             <div className="tw:flex tw:flex-col tw:gap-1">
-              <label className="tw:text-[10px] tw:text-slate-400 tw:font-semibold uppercase">
-                Dominio Semántico
+              <label className="tw:text-[10px] tw:text-muted-foreground tw:font-semibold tw:uppercase">
+                {tx('semanticDomain')}
               </label>
               <select
                 value={filterDomain}
                 onChange={(e) => setFilterDomain(e.target.value)}
-                className="tw:w-full tw:border tw:border-slate-200 tw:rounded-lg tw:px-2 tw:py-1 tw:text-xs"
+                className="tw:w-full tw:border tw:border-border tw:rounded-lg tw:px-2 tw:py-1 tw:text-xs tw:bg-background tw:text-foreground tw:focus:outline-none tw:focus:ring-1 tw:focus:ring-primary"
               >
-                <option value="all">Todos los dominios</option>
+                <option value="all">{tx('allDomains')}</option>
                 {allDomains.map((d) => (
                   <option key={d} value={d}>
                     {d}
@@ -765,20 +752,17 @@ globalThis.webViewComponent = function KeyTermsWebView({
             </div>
 
             {/* Completion Filter */}
-            <div className="tw:flex tw:gap-1">
-              {[
-                { key: 'all', label: 'Todos' },
-                { key: 'complete', label: 'Completos' },
-                { key: 'partial', label: 'Parciales' },
-                { key: 'missing', label: 'Faltantes' },
-              ].map((opt) => (
+            <div className="tw:flex tw:gap-1 tw:flex-wrap">
+              {filterTabs.map((opt) => (
                 <button
+                  type="button"
                   key={opt.key}
-                  onClick={() => setFilterCompletion(opt.key as any)}
-                  className={`tw:flex-1 tw:py-0.5 tw:px-1.5 tw:text-[10px] tw:rounded-md tw:border ${
+                  onClick={() => setFilterCompletion(opt.key)}
+                  aria-pressed={filterCompletion === opt.key}
+                  className={`tw:flex-1 tw:min-w-[60px] tw:py-0.5 tw:px-1.5 tw:text-[10px] tw:rounded-md tw:border tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring ${
                     filterCompletion === opt.key
-                      ? 'tw:bg-indigo-50 tw:text-indigo-700 tw:border-indigo-200 tw:font-medium'
-                      : 'tw:bg-white tw:text-slate-600 tw:border-slate-200 tw:hover:bg-slate-50'
+                      ? 'tw:bg-primary/15 tw:text-primary tw:border-primary/30 tw:font-medium'
+                      : 'tw:bg-card tw:text-muted-foreground tw:border-border hover:tw:bg-accent'
                   }`}
                 >
                   {opt.label}
@@ -786,11 +770,30 @@ globalThis.webViewComponent = function KeyTermsWebView({
               ))}
             </div>
 
+            {/* Status legend (always visible) */}
+            <div
+              aria-label="Status legend"
+              className="tw:flex tw:items-center tw:gap-2 tw:flex-wrap tw:pt-1 tw:text-[9px] tw:text-muted-foreground"
+            >
+              <span className="tw:inline-flex tw:items-center tw:gap-1">
+                <span className="tw:w-1.5 tw:h-1.5 tw:rounded-full tw:bg-emerald-500" />
+                {tx('statusComplete')}
+              </span>
+              <span className="tw:inline-flex tw:items-center tw:gap-1">
+                <span className="tw:w-1.5 tw:h-1.5 tw:rounded-full tw:bg-amber-500" />
+                {tx('statusPartial')}
+              </span>
+              <span className="tw:inline-flex tw:items-center tw:gap-1">
+                <span className="tw:w-1.5 tw:h-1.5 tw:rounded-full tw:bg-destructive" />
+                {tx('statusMissing')}
+              </span>
+            </div>
+
             {/* Micro stats bar */}
-            <div className="tw:pt-1 tw:text-[10px] tw:text-slate-400 tw:flex tw:justify-between">
-              <span>{completionStats.percent}% Completado</span>
+            <div className="tw:pt-1 tw:text-[10px] tw:text-muted-foreground tw:flex tw:justify-between tw:flex-wrap tw:gap-1">
+              <span>{tx('completed', String(completionStats.percent))}</span>
               <span>
-                {filteredTerms.length} / {store?.terms.length || 0} términos
+                {tx('termsCount', String(filteredTerms.length), String(store?.terms.length || 0))}
               </span>
             </div>
           </div>
@@ -798,60 +801,63 @@ globalThis.webViewComponent = function KeyTermsWebView({
           {/* List area */}
           <div
             ref={sidebarListRef}
-            className="tw:flex-1 tw:overflow-y-auto tw:divide-y tw:divide-slate-100"
+            className="tw:flex-1 tw:overflow-y-auto tw:divide-y tw:divide-border"
           >
             {filteredTerms.map((term) => {
               const status = getTermStatus(term);
               const isSelected = term.id === selectedTermId;
-
-              let statusBg = 'tw:bg-red-100 tw:text-red-700';
-              let statusText = 'Faltante';
-              if (status === 'complete') {
-                statusBg = 'tw:bg-green-100 tw:text-green-700';
-                statusText = 'Completo';
-              } else if (status === 'partial') {
-                statusBg = 'tw:bg-yellow-100 tw:text-yellow-800';
-                statusText = 'Parcial';
-              }
-
+              const badge = statusBadge(status);
               return (
                 <button
+                  type="button"
                   key={term.id}
                   ref={isSelected ? selectedButtonRef : null}
                   onClick={() => selectTerm(term.id, false)}
-                  className={`tw:w-full tw:text-left tw:p-3 tw:flex tw:flex-col tw:gap-1.5 tw:transition-colors tw:cursor-pointer ${
-                    isSelected ? 'tw:bg-indigo-50/70' : 'tw:hover:bg-slate-50'
+                  aria-current={isSelected ? 'true' : undefined}
+                  className={`tw:w-full tw:text-left tw:p-3 tw:flex tw:flex-col tw:gap-1.5 tw:transition-colors tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring ${
+                    isSelected ? 'tw:bg-primary/10' : 'hover:tw:bg-accent'
                   }`}
                 >
-                  <div className="tw:flex tw:items-start tw:justify-between tw:gap-2">
-                    <span className="tw:font-semibold tw:text-sm tw:text-slate-700 tw:truncate">
+                  <div className="tw:flex tw:items-start tw:justify-between tw:gap-2 tw:min-w-0">
+                    <span className="tw:font-semibold tw:text-sm tw:text-foreground tw:truncate">
                       {term.gloss}
                     </span>
                     <span
-                      className={`tw:text-[9px] tw:px-1.5 tw:py-0.5 tw:rounded-full tw:font-medium ${statusBg}`}
+                      className={`tw:flex-shrink-0 tw:text-[9px] tw:px-1.5 tw:py-0.5 tw:rounded-full tw:font-medium ${badge.cls}`}
                     >
-                      {statusText}
+                      {badge.text}
                     </span>
                   </div>
-                  <div className="tw:flex tw:items-center tw:justify-between tw:text-xs tw:text-slate-400">
-                    <span className="tw:font-serif">{term.lemma}</span>
-                    {term.strongs && <span>{term.strongs}</span>}
+                  <div className="tw:flex tw:items-center tw:justify-between tw:gap-2 tw:text-xs tw:text-muted-foreground tw:min-w-0">
+                    <span className="tw:font-serif tw:truncate">{term.lemma}</span>
+                    {term.strongs && (
+                      <span className="tw:font-mono tw:text-[10px] tw:flex-shrink-0">
+                        {term.strongs}
+                      </span>
+                    )}
                   </div>
                 </button>
               );
             })}
 
             {filteredTerms.length === 0 && (
-              <div className="tw:p-4 tw:text-center tw:text-xs tw:text-slate-400">
-                Ningún término coincide con los filtros.
+              <div className="tw:p-4 tw:text-center tw:text-xs tw:text-muted-foreground">
+                {tx('emptyList')}
               </div>
             )}
           </div>
-        </div>
+        </aside>
       )}
+
+      {/* Resizer */}
       {sidebarVisible && (
+        // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/no-noninteractive-tabindex
         <div
-          className="tw:w-1 tw:cursor-col-resize tw:bg-slate-200 hover:tw:bg-indigo-400 tw:transition-colors tw:h-full tw:flex-shrink-0"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize sidebar"
+          tabIndex={0}
+          className="tw:w-1 tw:cursor-col-resize tw:bg-border hover:tw:bg-primary/50 tw:transition-colors tw:h-full tw:flex-shrink-0 tw:focus-visible:outline-none tw:focus-visible:ring-1 tw:focus-visible:ring-primary"
           onMouseDown={(e) => {
             e.preventDefault();
             const startX = e.clientX;
@@ -867,89 +873,121 @@ globalThis.webViewComponent = function KeyTermsWebView({
             document.addEventListener('mousemove', handleMouseMove);
             document.addEventListener('mouseup', handleMouseUp);
           }}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowLeft') {
+              e.preventDefault();
+              setSidebarWidth((w) => Math.max(200, w - 16));
+            } else if (e.key === 'ArrowRight') {
+              e.preventDefault();
+              setSidebarWidth((w) => Math.min(600, w + 16));
+            }
+          }}
         />
       )}
 
       {/* Main panel - Detail view */}
-      <div className="tw:flex-1 tw:flex tw:flex-col tw:h-full tw:overflow-hidden">
+      <div className="tw:flex-1 tw:flex tw:flex-col tw:h-full tw:overflow-hidden tw:min-w-0">
         {/* Top toolbar */}
-        <div className="tw:px-4 tw:py-3 tw:bg-white tw:border-b tw:border-slate-200 tw:flex tw:items-center tw:justify-between">
-          <div className="tw:flex tw:items-center tw:gap-3">
+        <div className="tw:px-3 sm:tw:px-4 tw:py-3 tw:bg-card tw:border-b tw:border-border tw:flex tw:items-center tw:justify-between tw:gap-2 tw:flex-wrap">
+          <div className="tw:flex tw:items-center tw:gap-2 sm:tw:gap-3 tw:min-w-0 tw:flex-1">
             <button
+              type="button"
               onClick={() => setSidebarVisible((v) => !v)}
-              className="tw:p-1.5 tw:rounded-md tw:text-slate-600 tw:hover:bg-slate-100"
-              title={sidebarVisible ? 'Ocultar panel lateral' : 'Mostrar panel lateral'}
+              title={sidebarVisible ? tx('toggleSidebarHide') : tx('toggleSidebarShow')}
+              aria-label={sidebarVisible ? tx('toggleSidebarHide') : tx('toggleSidebarShow')}
+              className="tw:p-1.5 tw:rounded-md tw:text-muted-foreground hover:tw:bg-accent tw:cursor-pointer tw:flex-shrink-0 tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring"
             >
-              <svg className="tw:w-5 tw:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M4 6h16M4 12h16M4 18h16"
-                />
-              </svg>
+              <Menu size={18} />
             </button>
-            <span className="tw:font-bold tw:text-slate-700">Verificador de Términos Clave</span>
+            <span className="tw:font-bold tw:text-foreground tw:truncate tw:text-sm sm:tw:text-base">
+              {tx('title')}
+            </span>
           </div>
 
-          <div className="tw:flex tw:items-center tw:gap-3">
-            {saving && <span className="tw:text-xs tw:text-slate-400">Guardando...</span>}
+          <div className="tw:flex tw:items-center tw:gap-2 sm:tw:gap-3 tw:flex-wrap">
+            {saving && (
+              <span
+                role="status"
+                aria-live="polite"
+                className="tw:inline-flex tw:items-center tw:gap-1.5 tw:text-xs tw:text-muted-foreground"
+              >
+                <span className="tw:w-1.5 tw:h-1.5 tw:bg-primary tw:rounded-full tw:animate-pulse" />
+                <span className="tw:hidden sm:tw:inline">{tx('saving')}</span>
+              </span>
+            )}
             <button
-              className="tw:px-3 tw:py-1.5 tw:bg-indigo-50 tw:text-indigo-700 tw:border tw:border-indigo-100 tw:rounded-lg tw:text-xs tw:font-medium tw:hover:bg-indigo-100 tw:cursor-pointer"
+              type="button"
+              onClick={toggleLang}
+              title={tx('toggleLanguage')}
+              aria-label={tx('toggleLanguage')}
+              className="tw:inline-flex tw:items-center tw:gap-1 tw:px-2 tw:py-1.5 tw:bg-card tw:border tw:border-border tw:rounded-md tw:text-xs tw:font-semibold tw:text-muted-foreground hover:tw:bg-accent tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring"
+            >
+              <Languages size={12} />
+              <span className="tw:uppercase">{lang}</span>
+            </button>
+            <button
+              type="button"
+              className="tw:inline-flex tw:items-center tw:gap-1.5 tw:px-2.5 sm:tw:px-3 tw:py-1.5 tw:bg-primary/10 tw:text-primary tw:border tw:border-primary/20 tw:rounded-lg tw:text-xs tw:font-medium hover:tw:bg-primary/20 tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring"
               onClick={() => selectProject()}
             >
-              Cambiar Proyecto
+              {tx('changeProject')}
             </button>
           </div>
         </div>
 
         {error && (
-          <div className="tw:bg-red-50 tw:border-b tw:border-red-200 tw:px-4 tw:py-2 tw:text-red-700 tw:text-xs tw:font-medium tw:flex tw:justify-between tw:items-center">
-            <span>{error}</span>
+          <div
+            role="alert"
+            className="tw:bg-destructive/10 tw:border-b tw:border-destructive/30 tw:px-3 sm:tw:px-4 tw:py-2 tw:text-destructive tw:text-xs tw:font-medium tw:flex tw:justify-between tw:items-center tw:gap-2"
+          >
+            <span className="tw:flex tw:items-center tw:gap-2 tw:min-w-0 tw:truncate">
+              <AlertTriangle size={14} className="tw:flex-shrink-0" />
+              <span className="tw:truncate">{error}</span>
+            </span>
             <button
+              type="button"
               onClick={loadData}
-              className="tw:text-red-700 tw:underline tw:hover:text-red-900 tw:ml-2 tw:cursor-pointer"
+              className="tw:text-destructive tw:underline hover:tw:opacity-80 tw:cursor-pointer tw:flex-shrink-0 tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring tw:rounded"
             >
-              (reintentar)
+              ({tx('retry')})
             </button>
           </div>
         )}
 
         {/* Workspace area */}
         {selectedTerm ? (
-          <div ref={rightPanelRef} className="tw:flex-1 tw:overflow-y-auto tw:p-4 tw:space-y-4">
+          <div ref={rightPanelRef} className="tw:flex-1 tw:overflow-y-auto tw:p-3 sm:tw:p-4 tw:space-y-4 tw:min-w-0">
             {/* Term Summary Card */}
-            <div className="tw:bg-white tw:p-4 tw:rounded-xl tw:border tw:border-slate-200 tw:shadow-sm tw:space-y-3">
-              <div className="tw:flex tw:items-start tw:justify-between">
-                <div>
-                  <h2 className="tw:text-xl tw:font-bold tw:text-slate-700">
+            <div className="tw:bg-card tw:p-4 tw:rounded-xl tw:border tw:border-border tw:shadow-sm tw:space-y-3">
+              <div className="tw:flex tw:items-start tw:justify-between tw:gap-3 tw:min-w-0">
+                <div className="tw:min-w-0 tw:flex-1">
+                  <h2 className="tw:text-xl tw:font-bold tw:text-foreground tw:break-words">
                     {selectedTerm.gloss}
                   </h2>
-                  <div className="tw:flex tw:items-center tw:gap-2 tw:mt-1">
-                    <span className="tw:font-serif tw:text-lg tw:text-indigo-600">
+                  <div className="tw:flex tw:items-center tw:gap-2 tw:mt-1 tw:flex-wrap">
+                    <span className="tw:font-serif tw:text-lg tw:text-primary tw:break-all">
                       {selectedTerm.lemma}
                     </span>
                     {selectedTerm.transliteration && (
-                      <span className="tw:text-sm tw:text-slate-400 tw:italic">
+                      <span className="tw:text-sm tw:text-muted-foreground tw:italic tw:break-words">
                         ({selectedTerm.transliteration})
                       </span>
                     )}
                   </div>
                 </div>
                 {selectedTerm.strongs && (
-                  <span className="tw:px-2.5 tw:py-1 tw:bg-slate-100 tw:text-slate-600 tw:rounded-md tw:text-xs tw:font-mono">
+                  <span className="tw:px-2.5 tw:py-1 tw:bg-secondary tw:text-secondary-foreground tw:rounded-md tw:text-xs tw:font-mono tw:flex-shrink-0">
                     {selectedTerm.strongs}
                   </span>
                 )}
               </div>
 
-              {/* Domains tags */}
               {selectedTerm.domains && selectedTerm.domains.length > 0 && (
                 <div className="tw:flex tw:gap-1.5 tw:flex-wrap">
                   {selectedTerm.domains.map((dom) => (
                     <span
                       key={dom}
-                      className="tw:text-[10px] tw:px-2 tw:py-0.5 tw:bg-indigo-50 tw:text-indigo-600 tw:rounded-md tw:font-semibold uppercase"
+                      className="tw:text-[10px] tw:px-2 tw:py-0.5 tw:bg-primary/10 tw:text-primary tw:rounded-md tw:font-semibold tw:uppercase"
                     >
                       {dom}
                     </span>
@@ -958,35 +996,34 @@ globalThis.webViewComponent = function KeyTermsWebView({
               )}
             </div>
 
-            {/* Renderings Card (Feature 2 & 5) */}
-            <div className="tw:bg-white tw:p-4 tw:rounded-xl tw:border tw:border-slate-200 tw:shadow-sm tw:space-y-4">
-              <h3 className="tw:font-bold tw:text-sm tw:text-slate-700 uppercase tw:tracking-wider">
-                Traducciones en el idioma meta
+            {/* Renderings Card */}
+            <div className="tw:bg-card tw:p-4 tw:rounded-xl tw:border tw:border-border tw:shadow-sm tw:space-y-4">
+              <h3 className="tw:font-bold tw:text-sm tw:text-foreground tw:uppercase tw:tracking-wider">
+                {tx('renderingsTitle')}
               </h3>
 
-              {/* Add Rendering Input */}
-              <div className="tw:flex tw:gap-2">
+              <div className="tw:flex tw:gap-2 tw:flex-wrap sm:tw:flex-nowrap">
                 <input
                   type="text"
-                  placeholder="Agregar nueva traducción..."
+                  placeholder={tx('addRenderingPlaceholder')}
                   value={newRenderingText}
                   onChange={(e) => setNewRenderingText(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && addRendering()}
-                  className="tw:flex-1 tw:border tw:border-slate-200 tw:rounded-lg tw:px-3 tw:py-2 tw:text-xs tw:focus:outline-none tw:focus:border-indigo-400"
+                  className="tw:flex-1 tw:min-w-0 tw:border tw:border-border tw:rounded-lg tw:px-3 tw:py-2 tw:text-xs tw:bg-background tw:text-foreground tw:placeholder:tw:text-muted-foreground tw:focus:outline-none tw:focus:ring-1 tw:focus:ring-primary"
                 />
                 <button
+                  type="button"
                   onClick={addRendering}
-                  className="tw:px-4 tw:py-2 tw:bg-indigo-600 tw:text-white tw:rounded-lg tw:text-xs tw:font-medium tw:hover:bg-indigo-700 tw:cursor-pointer"
+                  className="tw:inline-flex tw:items-center tw:gap-1 tw:px-4 tw:py-2 tw:bg-primary tw:text-primary-foreground tw:rounded-lg tw:text-xs tw:font-medium hover:tw:opacity-90 tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring"
                 >
-                  Agregar
+                  <Plus size={12} />
+                  {tx('add')}
                 </button>
               </div>
 
-              {/* Renderings List */}
               <div className="tw:space-y-3">
                 {selectedTerm.renderings &&
                   selectedTerm.renderings.map((rend, rendIdx) => {
-                    // Safety: ensure each rendering has a stable ID (legacy terms may lack one)
                     const rendId =
                       rend.id || `rend-${selectedTermId}-${rendIdx}-${rend.text.slice(0, 8)}`;
                     const upVotes = rend.votes
@@ -995,7 +1032,6 @@ globalThis.webViewComponent = function KeyTermsWebView({
                     const downVotes = rend.votes
                       ? rend.votes.filter((v) => v.value === 'down').length
                       : 0;
-
                     const hasUpvoted =
                       rend.votes &&
                       rend.votes.some((v) => v.user === currentUser && v.value === 'up');
@@ -1006,88 +1042,97 @@ globalThis.webViewComponent = function KeyTermsWebView({
                     return (
                       <div
                         key={rendId}
-                        className="tw:p-3 tw:bg-slate-50 tw:rounded-lg tw:border tw:border-slate-100 tw:space-y-2"
+                        className="tw:p-3 tw:bg-secondary tw:rounded-lg tw:border tw:border-border tw:space-y-2"
                       >
-                        <div className="tw:flex tw:items-start tw:justify-between tw:gap-4">
-                          <div className="tw:space-y-1">
-                            <span className="tw:font-bold tw:text-sm tw:text-slate-700">
+                        <div className="tw:flex tw:items-start tw:justify-between tw:gap-3 tw:min-w-0">
+                          <div className="tw:space-y-1 tw:min-w-0 tw:flex-1">
+                            <span className="tw:font-bold tw:text-sm tw:text-foreground tw:break-words tw:block">
                               {rend.text}
                             </span>
-                            <div className="tw:flex tw:items-center tw:gap-1.5">
-                              <span className="tw:text-[10px] tw:text-slate-400">
-                                Propuesto por: {rend.proposedBy}
+                            <div className="tw:flex tw:items-center tw:gap-1.5 tw:flex-wrap">
+                              <span className="tw:text-[10px] tw:text-muted-foreground">
+                                {tx('proposedBy', rend.proposedBy)}
                               </span>
                             </div>
                           </div>
 
-                          {/* Status select dropdown */}
                           <select
                             value={rend.status}
-                            onChange={(e) => updateRenderingStatus(rendId, e.target.value as any)}
-                            className={`tw:text-xs tw:px-2 tw:py-1 tw:rounded-md tw:border tw:font-medium ${
+                            onChange={(e) =>
+                              updateRenderingStatus(rendId, e.target.value as RenderingStatus)
+                            }
+                            aria-label="Rendering status"
+                            className={`tw:flex-shrink-0 tw:text-xs tw:px-2 tw:py-1 tw:rounded-md tw:border tw:font-medium tw:focus:outline-none tw:focus:ring-1 tw:focus:ring-primary ${
                               rend.status === 'approved'
-                                ? 'tw:bg-green-50 tw:text-green-700 tw:border-green-200'
+                                ? 'tw:bg-emerald-500/15 tw:text-emerald-700 dark:tw:text-emerald-400 tw:border-emerald-500/30'
                                 : rend.status === 'disputed'
-                                  ? 'tw:bg-red-50 tw:text-red-700 tw:border-red-200'
+                                  ? 'tw:bg-destructive/15 tw:text-destructive tw:border-destructive/30'
                                   : rend.status === 'proposed'
-                                    ? 'tw:bg-yellow-50 tw:text-yellow-700 tw:border-yellow-200'
-                                    : 'tw:bg-slate-100 tw:text-slate-600 tw:border-slate-300'
+                                    ? 'tw:bg-amber-500/15 tw:text-amber-700 dark:tw:text-amber-400 tw:border-amber-500/30'
+                                    : 'tw:bg-secondary tw:text-secondary-foreground tw:border-border'
                             }`}
                           >
-                            <option value="draft">Borrador</option>
-                            <option value="proposed">Propuesto</option>
-                            <option value="disputed">Discutido</option>
-                            <option value="approved">Aprobado</option>
+                            <option value="draft">{tx('statusDraft')}</option>
+                            <option value="proposed">{tx('statusProposed')}</option>
+                            <option value="disputed">{tx('statusDisputed')}</option>
+                            <option value="approved">{tx('statusApproved')}</option>
                           </select>
                         </div>
 
-                        {/* Vote & tag widgets */}
                         <div className="tw:flex tw:items-center tw:justify-between tw:pt-1 tw:gap-2 tw:flex-wrap">
-                          {/* Vote buttons */}
                           <div className="tw:flex tw:items-center tw:gap-2">
                             <button
+                              type="button"
                               onClick={() => voteRendering(rendId, 'up')}
-                              className={`tw:flex tw:items-center tw:gap-1 tw:px-2 tw:py-1 tw:rounded-md tw:border tw:text-xs tw:cursor-pointer ${
+                              aria-label="Up vote"
+                              aria-pressed={hasUpvoted}
+                              className={`tw:inline-flex tw:items-center tw:gap-1 tw:px-2 tw:py-1 tw:rounded-md tw:border tw:text-xs tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring ${
                                 hasUpvoted
-                                  ? 'tw:bg-indigo-50 tw:text-indigo-600 tw:border-indigo-200'
-                                  : 'tw:bg-white tw:text-slate-500 tw:border-slate-200 hover:tw:bg-slate-100'
+                                  ? 'tw:bg-primary/10 tw:text-primary tw:border-primary/30'
+                                  : 'tw:bg-card tw:text-muted-foreground tw:border-border hover:tw:bg-accent'
                               }`}
                             >
-                              👍 <span className="tw:font-semibold">{upVotes}</span>
+                              <ThumbsUp size={12} />
+                              <span className="tw:font-semibold">{upVotes}</span>
                             </button>
                             <button
+                              type="button"
                               onClick={() => voteRendering(rendId, 'down')}
-                              className={`tw:flex tw:items-center tw:gap-1 tw:px-2 tw:py-1 tw:rounded-md tw:border tw:text-xs tw:cursor-pointer ${
+                              aria-label="Down vote"
+                              aria-pressed={hasDownvoted}
+                              className={`tw:inline-flex tw:items-center tw:gap-1 tw:px-2 tw:py-1 tw:rounded-md tw:border tw:text-xs tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring ${
                                 hasDownvoted
-                                  ? 'tw:bg-red-50 tw:text-red-600 tw:border-red-200'
-                                  : 'tw:bg-white tw:text-slate-500 tw:border-slate-200 hover:tw:bg-slate-100'
+                                  ? 'tw:bg-destructive/10 tw:text-destructive tw:border-destructive/30'
+                                  : 'tw:bg-card tw:text-muted-foreground tw:border-border hover:tw:bg-accent'
                               }`}
                             >
-                              👎 <span className="tw:font-semibold">{downVotes}</span>
+                              <ThumbsDown size={12} />
+                              <span className="tw:font-semibold">{downVotes}</span>
                             </button>
                           </div>
 
-                          {/* Context Tags widget */}
                           <div className="tw:flex tw:items-center tw:gap-1 tw:flex-wrap">
                             {rend.contextTags &&
                               rend.contextTags.map((tag) => (
                                 <span
                                   key={tag}
-                                  className="tw:inline-flex tw:items-center tw:gap-1 tw:text-[10px] tw:bg-slate-200 tw:text-slate-600 tw:rounded tw:px-1.5 tw:py-0.5 font-medium"
+                                  className="tw:inline-flex tw:items-center tw:gap-1 tw:text-[10px] tw:bg-secondary tw:text-secondary-foreground tw:rounded tw:px-1.5 tw:py-0.5 tw:font-medium"
                                 >
                                   #{tag}
                                   <button
+                                    type="button"
                                     onClick={() => removeContextTag(rendId, tag)}
-                                    className="tw:text-slate-400 tw:hover:text-slate-600 font-bold"
+                                    aria-label={`Remove tag ${tag}`}
+                                    className="tw:text-muted-foreground hover:tw:text-foreground tw:font-bold tw:focus-visible:outline-none tw:focus-visible:ring-1 tw:focus-visible:ring-ring tw:rounded"
                                   >
-                                    ✕
+                                    <X size={10} />
                                   </button>
                                 </span>
                               ))}
                             <div className="tw:flex tw:gap-1">
                               <input
                                 type="text"
-                                placeholder="+tag"
+                                placeholder={tx('tagPlaceholder')}
                                 value={newContextTags[rendId] || ''}
                                 onChange={(e) =>
                                   setNewContextTags((prev) => ({
@@ -1096,13 +1141,16 @@ globalThis.webViewComponent = function KeyTermsWebView({
                                   }))
                                 }
                                 onKeyDown={(e) => e.key === 'Enter' && addContextTag(rendId)}
-                                className="tw:border tw:border-slate-200 tw:rounded tw:px-1 tw:py-0.5 tw:text-[10px] tw:w-16"
+                                aria-label="Add context tag"
+                                className="tw:border tw:border-border tw:rounded tw:px-1 tw:py-0.5 tw:text-[10px] tw:w-16 tw:bg-background tw:text-foreground tw:focus:outline-none tw:focus:ring-1 tw:focus:ring-primary"
                               />
                               <button
+                                type="button"
                                 onClick={() => addContextTag(rendId)}
-                                className="tw:px-1.5 tw:bg-slate-200 tw:rounded tw:text-[10px] tw:hover:bg-slate-300"
+                                aria-label="Add tag"
+                                className="tw:inline-flex tw:items-center tw:justify-center tw:px-1.5 tw:bg-secondary tw:rounded tw:text-[10px] tw:hover:tw:bg-accent tw:focus-visible:outline-none tw:focus-visible:ring-1 tw:focus-visible:ring-ring"
                               >
-                                +
+                                <Plus size={10} />
                               </button>
                             </div>
                           </div>
@@ -1112,62 +1160,68 @@ globalThis.webViewComponent = function KeyTermsWebView({
                   })}
 
                 {(!selectedTerm.renderings || selectedTerm.renderings.length === 0) && (
-                  <div className="tw:text-xs tw:text-slate-400 tw:text-center tw:py-2">
-                    No hay traducciones propuestas para este término.
+                  <div className="tw:text-xs tw:text-muted-foreground tw:text-center tw:py-4 tw:italic">
+                    {tx('noRenderings')}
                   </div>
                 )}
               </div>
             </div>
 
             {/* Expected Verse References List */}
-            <div className="tw:bg-white tw:p-4 tw:rounded-xl tw:border tw:border-slate-200 tw:shadow-sm tw:space-y-3">
-              <div className="tw:flex tw:items-center tw:justify-between">
-                <h3 className="tw:font-bold tw:text-sm tw:text-slate-700 uppercase tw:tracking-wider">
-                  Pasajes esperados
+            <div className="tw:bg-card tw:p-4 tw:rounded-xl tw:border tw:border-border tw:shadow-sm tw:space-y-3">
+              <div className="tw:flex tw:items-center tw:justify-between tw:flex-wrap tw:gap-2">
+                <h3 className="tw:font-bold tw:text-sm tw:text-foreground tw:uppercase tw:tracking-wider">
+                  {tx('expectedPassages')}
                 </h3>
                 {scanning && (
-                  <span className="tw:text-xs tw:text-slate-400 tw:animate-pulse">
-                    Escaneando...
+                  <span
+                    role="status"
+                    aria-live="polite"
+                    className="tw:inline-flex tw:items-center tw:gap-1.5 tw:text-xs tw:text-muted-foreground"
+                  >
+                    <RefreshCw size={12} className="tw:animate-spin" />
+                    {tx('scanning')}
                   </span>
                 )}
               </div>
 
-              <div className="tw:divide-y tw:divide-slate-100 tw:max-h-72 tw:overflow-y-auto">
+              <div className="tw:divide-y tw:divide-border tw:max-h-72 tw:overflow-y-auto">
                 {selectedTerm.references &&
                   selectedTerm.references.map((ref) => {
                     const match = verseMatches[`${selectedTerm.id}-${ref}`];
-
-                    let badge = (
-                      <span className="tw:px-2 tw:py-0.5 tw:bg-slate-100 tw:text-slate-500 tw:rounded-md tw:text-[10px]">
-                        No escaneado
-                      </span>
-                    );
-
-                    if (match) {
-                      if (match.matchResult.found) {
-                        badge = (
-                          <span className="tw:px-2 tw:py-0.5 tw:bg-green-100 tw:text-green-700 tw:rounded-md tw:text-[10px] tw:font-semibold">
-                            ✓ Encontrado ({match.matchResult.matchedText})
-                          </span>
-                        );
-                      } else {
-                        badge = (
-                          <span className="tw:px-2 tw:py-0.5 tw:bg-red-100 tw:text-red-700 tw:rounded-md tw:text-[10px] tw:font-semibold">
-                            ✗ Falta
-                          </span>
-                        );
-                      }
+                    let badge: React.ReactElement;
+                    if (match?.matchResult.found) {
+                      badge = (
+                        <span className="tw:inline-flex tw:items-center tw:gap-1 tw:px-2 tw:py-0.5 tw:bg-emerald-500/15 tw:text-emerald-700 dark:tw:text-emerald-400 tw:border tw:border-emerald-500/30 tw:rounded-md tw:text-[10px] tw:font-semibold">
+                          <Check size={10} />
+                          {tx('found', match.matchResult.matchedText || '')}
+                        </span>
+                      );
+                    } else if (match) {
+                      badge = (
+                        <span className="tw:inline-flex tw:items-center tw:gap-1 tw:px-2 tw:py-0.5 tw:bg-destructive/15 tw:text-destructive tw:border tw:border-destructive/30 tw:rounded-md tw:text-[10px] tw:font-semibold">
+                          <CircleX size={10} />
+                          {tx('missing')}
+                        </span>
+                      );
+                    } else {
+                      badge = (
+                        <span className="tw:px-2 tw:py-0.5 tw:bg-secondary tw:text-muted-foreground tw:rounded-md tw:text-[10px]">
+                          {tx('notScanned')}
+                        </span>
+                      );
                     }
-
                     return (
                       <div
                         key={ref}
-                        className="tw:py-2 tw:flex tw:items-center tw:justify-between tw:gap-4"
+                        className="tw:py-2 tw:flex tw:items-center tw:justify-between tw:gap-3 tw:min-w-0"
                       >
                         <button
+                          type="button"
                           onClick={() => handleVerseClick(ref)}
-                          className="tw:text-xs tw:text-indigo-600 tw:font-semibold tw:hover:underline tw:cursor-pointer text-left"
+                          className="tw:inline-flex tw:items-center tw:gap-1 tw:text-xs tw:text-primary tw:font-semibold hover:tw:underline tw:cursor-pointer tw:text-left tw:focus-visible:outline-none tw:focus-visible:ring-1 tw:focus-visible:ring-ring tw:rounded"
                         >
+                          <ChevronRight size={12} />
                           {ref}
                         </button>
                         {badge}
@@ -1177,49 +1231,55 @@ globalThis.webViewComponent = function KeyTermsWebView({
               </div>
             </div>
 
-            {/* Morphology Configuration Panel (Feature 1) */}
-            <div className="tw:bg-white tw:rounded-xl tw:border tw:border-slate-200 tw:shadow-sm tw:overflow-hidden">
+            {/* Morphology Configuration Panel */}
+            <div className="tw:bg-card tw:rounded-xl tw:border tw:border-border tw:shadow-sm tw:overflow-hidden">
               <button
+                type="button"
                 onClick={() => setMorphPanelOpen((o) => !o)}
-                className="tw:w-full tw:px-4 tw:py-3 tw:bg-slate-50 tw:flex tw:items-center tw:justify-between tw:cursor-pointer tw:border-b tw:border-slate-100"
+                aria-expanded={morphPanelOpen}
+                className="tw:w-full tw:px-4 tw:py-3 tw:bg-secondary tw:flex tw:items-center tw:justify-between tw:cursor-pointer tw:border-b tw:border-border hover:tw:bg-accent tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring"
               >
-                <span className="tw:font-bold tw:text-xs tw:text-slate-500 uppercase tw:tracking-wider">
-                  Configuración Morfológica
+                <span className="tw:font-bold tw:text-xs tw:text-muted-foreground tw:uppercase tw:tracking-wider">
+                  {tx('morphologyTitle')}
                 </span>
-                <span>{morphPanelOpen ? '▲' : '▼'}</span>
+                {morphPanelOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
               </button>
 
               {morphPanelOpen && store && (
                 <div className="tw:p-4 tw:space-y-4">
-                  {/* Language and Fuzzy match settings */}
                   <div className="tw:grid tw:grid-cols-1 md:tw:grid-cols-2 tw:gap-4">
                     <div className="tw:space-y-1">
-                      <label className="tw:text-xs tw:font-semibold tw:text-slate-500">
-                        Nombre del idioma
+                      <label className="tw:text-xs tw:font-semibold tw:text-muted-foreground">
+                        {tx('languageName')}
                       </label>
                       <input
                         type="text"
                         value={store.morphologyConfig.languageName || ''}
-                        onChange={(e) => handleMorphologyChange({ languageName: e.target.value })}
-                        className="tw:w-full tw:border tw:border-slate-200 tw:rounded-lg tw:px-2.5 tw:py-1.5 tw:text-xs"
+                        onChange={(e) =>
+                          handleMorphologyChange({ languageName: e.target.value })
+                        }
+                        className="tw:w-full tw:border tw:border-border tw:rounded-lg tw:px-2.5 tw:py-1.5 tw:text-xs tw:bg-background tw:text-foreground tw:focus:outline-none tw:focus:ring-1 tw:focus:ring-primary"
                       />
                     </div>
 
                     <div className="tw:space-y-2">
-                      <label className="tw:flex tw:items-center tw:gap-2 tw:text-xs tw:font-semibold tw:text-slate-500 tw:cursor-pointer">
+                      <label className="tw:flex tw:items-center tw:gap-2 tw:text-xs tw:font-semibold tw:text-muted-foreground tw:cursor-pointer">
                         <input
                           type="checkbox"
                           checked={store.morphologyConfig.enableFuzzyMatch}
                           onChange={(e) =>
                             handleMorphologyChange({ enableFuzzyMatch: e.target.checked })
                           }
+                          className="tw:cursor-pointer"
                         />
-                        Búsqueda Difusa (Levenshtein)
+                        {tx('fuzzyMatch')}
                       </label>
 
                       {store.morphologyConfig.enableFuzzyMatch && (
                         <div className="tw:flex tw:items-center tw:gap-3">
-                          <span className="tw:text-xs tw:text-slate-400">Distancia máx (1-4):</span>
+                          <span className="tw:text-xs tw:text-muted-foreground">
+                            {tx('maxDistance')}
+                          </span>
                           <input
                             type="range"
                             min="1"
@@ -1230,9 +1290,9 @@ globalThis.webViewComponent = function KeyTermsWebView({
                                 maxEditDistance: parseInt(e.target.value, 10),
                               })
                             }
-                            className="tw:w-20"
+                            className="tw:w-20 tw:cursor-pointer"
                           />
-                          <span className="tw:text-xs tw:font-bold">
+                          <span className="tw:text-xs tw:font-bold tw:text-foreground tw:min-w-4">
                             {store.morphologyConfig.maxEditDistance || 2}
                           </span>
                         </div>
@@ -1240,240 +1300,178 @@ globalThis.webViewComponent = function KeyTermsWebView({
                     </div>
                   </div>
 
-                  {/* Affix rules builders */}
-                  <div className="tw:grid tw:grid-cols-1 lg:tw:grid-cols-3 tw:gap-6 tw:pt-2">
-                    {/* Prefixes list */}
-                    <div className="tw:space-y-2">
-                      <span className="tw:font-bold tw:text-xs tw:text-slate-700">
-                        Prefijos comunes a ignorar
-                      </span>
+                  <div className="tw:grid tw:grid-cols-1 md:tw:grid-cols-2 lg:tw:grid-cols-3 tw:gap-4 tw:pt-2">
+                    {(
+                      [
+                        {
+                          key: 'prefixes',
+                          title: tx('prefixes'),
+                          placeholder: tx('prefixPlaceholder'),
+                          list: store.morphologyConfig.prefixes,
+                          add: addPrefixRule,
+                          type: 'prefix' as const,
+                          value: newPrefix,
+                          setValue: setNewPrefix,
+                          labelValue: newPrefixLabel,
+                          setLabelValue: setNewPrefixLabel,
+                        },
+                        {
+                          key: 'suffixes',
+                          title: tx('suffixes'),
+                          placeholder: tx('suffixPlaceholder'),
+                          list: store.morphologyConfig.suffixes,
+                          add: addSuffixRule,
+                          type: 'suffix' as const,
+                          value: newSuffix,
+                          setValue: setNewSuffix,
+                          labelValue: newSuffixLabel,
+                          setLabelValue: setNewSuffixLabel,
+                        },
+                        {
+                          key: 'infixes',
+                          title: tx('infixes'),
+                          placeholder: tx('infixPlaceholder'),
+                          list: store.morphologyConfig.infixes,
+                          add: addInfixRule,
+                          type: 'infix' as const,
+                          value: newInfix,
+                          setValue: setNewInfix,
+                          labelValue: newInfixLabel,
+                          setLabelValue: setNewInfixLabel,
+                        },
+                      ] as const
+                    ).map((column) => (
+                      <div key={column.key} className="tw:space-y-2 tw:min-w-0">
+                        <span className="tw:font-bold tw:text-xs tw:text-foreground">
+                          {column.title}
+                        </span>
 
-                      {/* Input form */}
-                      <div className="tw:flex tw:gap-1">
-                        <input
-                          type="text"
-                          placeholder="ni-"
-                          value={newPrefix}
-                          onChange={(e) => setNewPrefix(e.target.value)}
-                          className="tw:border tw:border-slate-200 tw:rounded-lg tw:px-2 tw:py-1 tw:text-xs tw:w-16"
-                        />
-                        <input
-                          type="text"
-                          placeholder="Etiqueta..."
-                          value={newPrefixLabel}
-                          onChange={(e) => setNewPrefixLabel(e.target.value)}
-                          className="tw:flex-1 tw:border tw:border-slate-200 tw:rounded-lg tw:px-2 tw:py-1 tw:text-xs"
-                        />
-                        <button
-                          onClick={addPrefixRule}
-                          className="tw:px-3 tw:py-1 tw:bg-indigo-600 tw:text-white tw:rounded-lg tw:text-xs tw:hover:bg-indigo-700"
-                        >
-                          +
-                        </button>
-                      </div>
+                        <div className="tw:flex tw:gap-1">
+                          <input
+                            type="text"
+                            placeholder={column.placeholder}
+                            value={column.value}
+                            onChange={(e) => column.setValue(e.target.value)}
+                            aria-label={column.title}
+                            className="tw:w-16 tw:flex-shrink-0 tw:border tw:border-border tw:rounded-lg tw:px-2 tw:py-1 tw:text-xs tw:bg-background tw:text-foreground tw:focus:outline-none tw:focus:ring-1 tw:focus:ring-primary"
+                          />
+                          <input
+                            type="text"
+                            placeholder={tx('labelPlaceholder')}
+                            value={column.labelValue}
+                            onChange={(e) => column.setLabelValue(e.target.value)}
+                            aria-label={`${column.title} label`}
+                            className="tw:flex-1 tw:min-w-0 tw:border tw:border-border tw:rounded-lg tw:px-2 tw:py-1 tw:text-xs tw:bg-background tw:text-foreground tw:focus:outline-none tw:focus:ring-1 tw:focus:ring-primary"
+                          />
+                          <button
+                            type="button"
+                            onClick={column.add}
+                            aria-label={`Add ${column.type}`}
+                            className="tw:inline-flex tw:items-center tw:justify-center tw:px-2.5 tw:py-1 tw:bg-primary tw:text-primary-foreground tw:rounded-lg tw:text-xs hover:tw:opacity-90 tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring"
+                          >
+                            <Plus size={12} />
+                          </button>
+                        </div>
 
-                      {/* Prefixes List */}
-                      <div className="tw:space-y-1 tw:max-h-36 tw:overflow-y-auto">
-                        {store.morphologyConfig.prefixes &&
-                          store.morphologyConfig.prefixes.map((rule) => (
-                            <div
-                              key={rule.id}
-                              className="tw:flex tw:items-center tw:justify-between tw:p-1.5 tw:bg-slate-50 tw:rounded tw:text-xs"
-                            >
-                              <label className="tw:flex tw:items-center tw:gap-2 tw:cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={rule.enabled}
-                                  onChange={() => toggleRule(rule.id, 'prefix')}
-                                />
-                                <span className="tw:font-bold">{rule.affix}</span>
-                                <span className="tw:text-slate-400">({rule.label})</span>
-                              </label>
-                              <button
-                                onClick={() => deleteRule(rule.id, 'prefix')}
-                                className="tw:text-slate-400 hover:tw:text-red-500 font-bold"
+                        <div className="tw:space-y-1 tw:max-h-36 tw:overflow-y-auto">
+                          {column.list &&
+                            column.list.map((rule) => (
+                              <div
+                                key={rule.id}
+                                className="tw:flex tw:items-center tw:justify-between tw:p-1.5 tw:bg-secondary tw:rounded tw:text-xs tw:gap-2"
                               >
-                                ✕
-                              </button>
-                            </div>
-                          ))}
+                                <label className="tw:flex tw:items-center tw:gap-2 tw:cursor-pointer tw:min-w-0 tw:flex-1">
+                                  <input
+                                    type="checkbox"
+                                    checked={rule.enabled}
+                                    onChange={() => toggleRule(rule.id, column.type)}
+                                  />
+                                  <span className="tw:font-bold tw:text-foreground tw:truncate">
+                                    {rule.affix}
+                                  </span>
+                                  <span className="tw:text-muted-foreground tw:truncate">
+                                    ({rule.label})
+                                  </span>
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={() => deleteRule(rule.id, column.type)}
+                                  aria-label={`Delete ${column.type} rule`}
+                                  className="tw:text-muted-foreground hover:tw:text-destructive tw:flex-shrink-0 tw:focus-visible:outline-none tw:focus-visible:ring-1 tw:focus-visible:ring-ring tw:rounded"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            ))}
+                        </div>
                       </div>
-                    </div>
-
-                    {/* Suffixes list */}
-                    <div className="tw:space-y-2">
-                      <span className="tw:font-bold tw:text-xs tw:text-slate-700">
-                        Sufijos comunes a ignorar
-                      </span>
-
-                      {/* Input form */}
-                      <div className="tw:flex tw:gap-1">
-                        <input
-                          type="text"
-                          placeholder="-ini"
-                          value={newSuffix}
-                          onChange={(e) => setNewSuffix(e.target.value)}
-                          className="tw:border tw:border-slate-200 tw:rounded-lg tw:px-2 tw:py-1 tw:text-xs tw:w-16"
-                        />
-                        <input
-                          type="text"
-                          placeholder="Etiqueta..."
-                          value={newSuffixLabel}
-                          onChange={(e) => setNewSuffixLabel(e.target.value)}
-                          className="tw:flex-1 tw:border tw:border-slate-200 tw:rounded-lg tw:px-2 tw:py-1 tw:text-xs"
-                        />
-                        <button
-                          onClick={addSuffixRule}
-                          className="tw:px-3 tw:py-1 tw:bg-indigo-600 tw:text-white tw:rounded-lg tw:text-xs tw:hover:bg-indigo-700"
-                        >
-                          +
-                        </button>
-                      </div>
-
-                      {/* Suffixes List */}
-                      <div className="tw:space-y-1 tw:max-h-36 tw:overflow-y-auto">
-                        {store.morphologyConfig.suffixes &&
-                          store.morphologyConfig.suffixes.map((rule) => (
-                            <div
-                              key={rule.id}
-                              className="tw:flex tw:items-center tw:justify-between tw:p-1.5 tw:bg-slate-50 tw:rounded tw:text-xs"
-                            >
-                              <label className="tw:flex tw:items-center tw:gap-2 tw:cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={rule.enabled}
-                                  onChange={() => toggleRule(rule.id, 'suffix')}
-                                />
-                                <span className="tw:font-bold">{rule.affix}</span>
-                                <span className="tw:text-slate-400">({rule.label})</span>
-                              </label>
-                              <button
-                                onClick={() => deleteRule(rule.id, 'suffix')}
-                                className="tw:text-slate-400 hover:tw:text-red-500 font-bold"
-                              >
-                                ✕
-                              </button>
-                            </div>
-                          ))}
-                      </div>
-                    </div>
-
-                    {/* Infixes list */}
-                    <div className="tw:space-y-2">
-                      <span className="tw:font-bold tw:text-xs tw:text-slate-700">
-                        Infijos comunes a ignorar
-                      </span>
-
-                      {/* Input form */}
-                      <div className="tw:flex tw:gap-1">
-                        <input
-                          type="text"
-                          placeholder="-in-"
-                          value={newInfix}
-                          onChange={(e) => setNewInfix(e.target.value)}
-                          className="tw:border tw:border-slate-200 tw:rounded-lg tw:px-2 tw:py-1 tw:text-xs tw:w-16"
-                        />
-                        <input
-                          type="text"
-                          placeholder="Etiqueta..."
-                          value={newInfixLabel}
-                          onChange={(e) => setNewInfixLabel(e.target.value)}
-                          className="tw:flex-1 tw:border tw:border-slate-200 tw:rounded-lg tw:px-2 tw:py-1 tw:text-xs"
-                        />
-                        <button
-                          onClick={addInfixRule}
-                          className="tw:px-3 tw:py-1 tw:bg-indigo-600 tw:text-white tw:rounded-lg tw:text-xs tw:hover:bg-indigo-700"
-                        >
-                          +
-                        </button>
-                      </div>
-
-                      {/* Infixes List */}
-                      <div className="tw:space-y-1 tw:max-h-36 tw:overflow-y-auto">
-                        {store.morphologyConfig.infixes &&
-                          store.morphologyConfig.infixes.map((rule) => (
-                            <div
-                              key={rule.id}
-                              className="tw:flex tw:items-center tw:justify-between tw:p-1.5 tw:bg-slate-50 tw:rounded tw:text-xs"
-                            >
-                              <label className="tw:flex tw:items-center tw:gap-2 tw:cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={rule.enabled}
-                                  onChange={() => toggleRule(rule.id, 'infix')}
-                                />
-                                <span className="tw:font-bold">{rule.affix}</span>
-                                <span className="tw:text-slate-400">({rule.label})</span>
-                              </label>
-                              <button
-                                onClick={() => deleteRule(rule.id, 'infix')}
-                                className="tw:text-slate-400 hover:tw:text-red-500 font-bold"
-                              >
-                                ✕
-                              </button>
-                            </div>
-                          ))}
-                      </div>
-                    </div>
+                    ))}
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Collaborative notes panel (Feature 5) */}
-            <div className="tw:bg-white tw:rounded-xl tw:border tw:border-slate-200 tw:shadow-sm overflow-hidden">
+            {/* Collaborative notes panel */}
+            <div className="tw:bg-card tw:rounded-xl tw:border tw:border-border tw:shadow-sm tw:overflow-hidden">
               <button
+                type="button"
                 onClick={() => setCollabPanelOpen((o) => !o)}
-                className="tw:w-full tw:px-4 tw:py-3 tw:bg-slate-50 tw:flex tw:items-center tw:justify-between tw:cursor-pointer tw:border-b tw:border-slate-100"
+                aria-expanded={collabPanelOpen}
+                className="tw:w-full tw:px-4 tw:py-3 tw:bg-secondary tw:flex tw:items-center tw:justify-between tw:cursor-pointer tw:border-b tw:border-border hover:tw:bg-accent tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring"
               >
-                <span className="tw:font-bold tw:text-xs tw:text-slate-500 uppercase tw:tracking-wider">
-                  Notas de Discusión del Equipo
+                <span className="tw:font-bold tw:text-xs tw:text-muted-foreground tw:uppercase tw:tracking-wider">
+                  {tx('collabNotesTitle')}
                 </span>
-                <span>{collabPanelOpen ? '▲' : '▼'}</span>
+                {collabPanelOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
               </button>
 
               {collabPanelOpen && (
                 <div className="tw:p-4 tw:space-y-4">
-                  {/* Notes Feed */}
                   <div className="tw:space-y-2.5 tw:max-h-60 tw:overflow-y-auto">
                     {selectedTerm.notes &&
                       selectedTerm.notes.map((note) => (
                         <div
                           key={note.id}
-                          className="tw:p-2.5 tw:bg-slate-50 tw:rounded-lg tw:border tw:border-slate-100 tw:space-y-1"
+                          className="tw:p-2.5 tw:bg-secondary tw:rounded-lg tw:border tw:border-border tw:space-y-1"
                         >
-                          <div className="tw:flex tw:items-center tw:justify-between tw:text-[10px] tw:text-slate-400">
-                            <span className="tw:font-bold">{note.author}</span>
-                            <span>{new Date(note.timestamp).toLocaleString('es')}</span>
+                          <div className="tw:flex tw:items-center tw:justify-between tw:gap-2 tw:text-[10px] tw:text-muted-foreground">
+                            <span className="tw:font-bold tw:text-foreground tw:truncate">
+                              {note.author}
+                            </span>
+                            <span className="tw:flex-shrink-0">
+                              {new Date(note.timestamp).toLocaleString(
+                                lang === 'en' ? 'en' : 'es',
+                              )}
+                            </span>
                           </div>
-                          <p className="tw:text-xs tw:text-slate-600 tw:whitespace-pre-wrap">
+                          <p className="tw:text-xs tw:text-foreground tw:whitespace-pre-wrap tw:break-words">
                             {note.text}
                           </p>
                         </div>
                       ))}
-
                     {(!selectedTerm.notes || selectedTerm.notes.length === 0) && (
-                      <div className="tw:text-xs tw:text-slate-400 tw:text-center tw:py-4">
-                        No hay comentarios sobre la traducción de este término.
+                      <div className="tw:text-xs tw:text-muted-foreground tw:text-center tw:py-4 tw:italic">
+                        {tx('noNotes')}
                       </div>
                     )}
                   </div>
 
-                  {/* Add Note form */}
                   <div className="tw:space-y-2">
                     <textarea
-                      placeholder="Escribe una nota para el equipo..."
+                      placeholder={tx('notesPlaceholder')}
                       value={newNoteText}
                       onChange={(e) => setNewNoteText(e.target.value)}
                       rows={2}
-                      className="tw:w-full tw:border tw:border-slate-200 tw:rounded-lg tw:px-2.5 tw:py-1.5 tw:text-xs tw:focus:outline-none tw:focus:border-indigo-400"
+                      className="tw:w-full tw:border tw:border-border tw:rounded-lg tw:px-2.5 tw:py-1.5 tw:text-xs tw:bg-background tw:text-foreground tw:placeholder:tw:text-muted-foreground tw:focus:outline-none tw:focus:ring-1 tw:focus:ring-primary tw:resize-y"
                     />
                     <div className="tw:flex tw:justify-end">
                       <button
+                        type="button"
                         onClick={addNote}
-                        className="tw:px-3 tw:py-1.5 tw:bg-indigo-600 tw:text-white tw:rounded-lg tw:text-xs tw:font-medium tw:hover:bg-indigo-700 tw:cursor-pointer"
+                        className="tw:inline-flex tw:items-center tw:gap-1 tw:px-3 tw:py-1.5 tw:bg-primary tw:text-primary-foreground tw:rounded-lg tw:text-xs tw:font-medium hover:tw:opacity-90 tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring"
                       >
-                        Enviar nota
+                        <CheckCircle2 size={12} />
+                        {tx('sendNote')}
                       </button>
                     </div>
                   </div>
@@ -1482,8 +1480,11 @@ globalThis.webViewComponent = function KeyTermsWebView({
             </div>
           </div>
         ) : (
-          <div className="tw:flex-1 tw:flex tw:items-center tw:justify-center tw:text-slate-400 tw:text-sm">
-            Selecciona un término de la lista lateral para empezar a verificar.
+          <div className="tw:flex-1 tw:flex tw:flex-col tw:items-center tw:justify-center tw:text-muted-foreground tw:text-sm tw:gap-3 tw:p-8 tw:text-center">
+            <div className="tw:p-4 tw:bg-card tw:rounded-full tw:border tw:border-border">
+              <BookOpen size={32} />
+            </div>
+            <p className="tw:max-w-xs">{tx('selectTermPrompt')}</p>
           </div>
         )}
       </div>

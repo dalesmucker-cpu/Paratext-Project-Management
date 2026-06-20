@@ -157,6 +157,11 @@ function sendToNotesHelper(action: string, args: any[], timeoutMs = 15000): Prom
 }
 
 let helperStartAttempts = 0;
+let helperStartupTimer: NodeJS.Timeout | undefined;
+let activeCollabParams: {
+  action: 'startCollabHost' | 'connectCollabClient';
+  args: any[];
+} | undefined = undefined;
 
 function startNotesHelper(createProcess: ElevatedPrivileges['createProcess']): void {
   if (!createProcess) return;
@@ -170,6 +175,12 @@ function startNotesHelper(createProcess: ElevatedPrivileges['createProcess']): v
       silent: true,
     });
     notesHelperProcess = currentProcess;
+
+    if (helperStartupTimer) clearTimeout(helperStartupTimer);
+    helperStartupTimer = setTimeout(() => {
+      helperStartAttempts = 0;
+      helperStartupTimer = undefined;
+    }, 10000);
 
     notesHelperProcess.on('message', (message: any) => {
       if (message.event === 'collab') {
@@ -208,6 +219,10 @@ function startNotesHelper(createProcess: ElevatedPrivileges['createProcess']): v
 
     notesHelperProcess.on('close', (code) => {
       logger.info(`Notes helper exited with code ${code}`);
+      if (helperStartupTimer) {
+        clearTimeout(helperStartupTimer);
+        helperStartupTimer = undefined;
+      }
       const isCurrent = notesHelperProcess === currentProcess;
       if (isCurrent) {
         notesHelperProcess = undefined;
@@ -224,6 +239,13 @@ function startNotesHelper(createProcess: ElevatedPrivileges['createProcess']): v
         logger.info(`Restarting Notes helper (attempt ${helperStartAttempts}/5)...`);
         setTimeout(() => {
           startNotesHelper(createProcess);
+          // Restore active collaboration if any
+          if (activeCollabParams) {
+            logger.info(`Restoring active collaboration session: ${activeCollabParams.action}`);
+            sendToNotesHelper(activeCollabParams.action, activeCollabParams.args).catch((restoreErr) => {
+              logger.warn(`Failed to restore active collaboration session: ${restoreErr}`);
+            });
+          }
         }, 2000);
       }
     });
@@ -1776,6 +1798,17 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         ]);
         if (result && result.status === 'ok') {
           localCollabRole = 'host';
+          activeCollabParams = {
+            action: 'startCollabHost',
+            args: [
+              portOrRoomId,
+              username,
+              projectId,
+              projectDir,
+              collabType || 'local',
+              serverUrl || '',
+            ],
+          };
         }
         return result;
       } catch (e: any) {
@@ -1813,6 +1846,18 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         ]);
         if (result && result.status === 'ok') {
           localCollabRole = 'client';
+          activeCollabParams = {
+            action: 'connectCollabClient',
+            args: [
+              ipOrRoomId,
+              portOrNull,
+              username,
+              projectId,
+              projectDir,
+              collabType || 'local',
+              serverUrl || '',
+            ],
+          };
         }
         return result;
       } catch (e: any) {
@@ -1826,6 +1871,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     'paratextProjectManager.stopCollab',
     async (): Promise<string> => {
       try {
+        activeCollabParams = undefined;
         const result = await sendToNotesHelper('stopCollab', []);
         localCollabRole = 'none';
         return result;

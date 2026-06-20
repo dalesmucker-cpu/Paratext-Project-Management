@@ -29,7 +29,13 @@
       "%setting_gcalLastSync_title%": "Google Calendar Last Sync",
       "%setting_gcalLastSync_description%": "Timestamp of the last successful deadline sync",
       "%setting_gcalUserEmail_title%": "Google Calendar User Email",
-      "%setting_gcalUserEmail_description%": "Email of the connected Google account"
+      "%setting_gcalUserEmail_description%": "Email of the connected Google account",
+      "%keyTerms_verifier_title%": "Key Terms Verifier",
+      "%keyTerms_verifier_changeProject%": "Change project",
+      "%keyTerms_verifier_loading%": "Loading key terms from Paratext...",
+      "%keyTerms_verifier_selectProject%": "Select project",
+      "%keyTerms_verifier_noProject%": "No project selected.",
+      "%keyTerms_verifier_analytics_title%": "Key Terms Analytics Dashboard"
     },
     "es": {
       "%mainMenu_projectManagerSubmenu%": "Gestor de Proyecto",
@@ -59,7 +65,13 @@
       "%setting_gcalLastSync_title%": "Última Sincronización con Google Calendar",
       "%setting_gcalLastSync_description%": "Fecha y hora de la última sincronización exitosa de fechas límite",
       "%setting_gcalUserEmail_title%": "Correo de Google Calendar",
-      "%setting_gcalUserEmail_description%": "Correo de la cuenta de Google conectada"
+      "%setting_gcalUserEmail_description%": "Correo de la cuenta de Google conectada",
+      "%keyTerms_verifier_title%": "Verificador de Términos Clave",
+      "%keyTerms_verifier_changeProject%": "Cambiar Proyecto",
+      "%keyTerms_verifier_loading%": "Cargando términos clave de Paratext...",
+      "%keyTerms_verifier_selectProject%": "Seleccionar Proyecto",
+      "%keyTerms_verifier_noProject%": "Ningún proyecto seleccionado.",
+      "%keyTerms_verifier_analytics_title%": "Tablero de Analíticas de Términos Clave"
     }
   }
 }

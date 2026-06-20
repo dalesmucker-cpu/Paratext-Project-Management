@@ -1423,7 +1423,10 @@ async function handleAction(action, args) {
       const [portOrRoomId, username, projectId, projectDir, collabTypeArg, serverUrlArg] = args;
       if (projectDir) projectDirs.set(projectId, projectDir);
 
-      cleanupCollab();
+      // If we're in an auto-reconnect, the state is already clean and we
+      // don't want a duplicate status_update going to main.ts.
+      const inAutoReconnect = isReconnecting || (reconnectParams && collabRole === 'none');
+      cleanupCollab(inAutoReconnect);
 
       collabRole = 'host';
       collabType = collabTypeArg || 'local';
@@ -1453,6 +1456,14 @@ async function handleAction(action, args) {
                 const msg = JSON.parse(event.data);
 
                 if (msg.type === 'handshake_ack') {
+                  rememberConnection('host', {
+                    portOrRoomId,
+                    username,
+                    projectId,
+                    projectDir,
+                    type: collabType,
+                    serverUrl: collabServerUrl,
+                  });
                   resolve({ status: 'ok', role: 'host' });
                   process.send({
                     event: 'collab',
@@ -1470,7 +1481,7 @@ async function handleAction(action, args) {
                     },
                   });
                 } else if (msg.type === 'error') {
-                  cleanupCollab();
+                  cleanupCollab(inAutoReconnect);
                   reject(new Error(msg.payload.message));
                 } else if (msg.type === 'user_joined') {
                   const guestName = msg.payload.username;
@@ -1530,22 +1541,29 @@ async function handleAction(action, args) {
             };
 
             ws.onerror = (err) => {
-              cleanupCollab();
+              cleanupCollab(inAutoReconnect);
               reject(err);
             };
 
             ws.onclose = () => {
-              cleanupCollab();
-              process.send({
-                event: 'collab',
-                data: {
-                  type: 'status_update',
-                  payload: { role: 'none', error: 'Se cerró la sesión online.' },
-                },
-              });
+              const wasReconnecting = isReconnecting;
+              const willReconnect = !!reconnectParams && !wasReconnecting;
+              cleanupCollab(willReconnect);
+              if (willReconnect) {
+                console.log(`[collab] HOST connection lost — scheduling auto-reconnect`);
+                scheduleReconnect();
+              } else {
+                process.send({
+                  event: 'collab',
+                  data: {
+                    type: 'status_update',
+                    payload: { role: 'none', error: 'Se cerró la sesión online.' },
+                  },
+                });
+              }
             };
           } catch (e) {
-            cleanupCollab();
+            cleanupCollab(inAutoReconnect);
             reject(e);
           }
         });
@@ -1736,15 +1754,23 @@ async function handleAction(action, args) {
             });
 
             collabServer.on('error', (err) => {
-              cleanupCollab();
+              cleanupCollab(inAutoReconnect);
               reject(err);
             });
 
             collabServer.listen(collabPort, '0.0.0.0', () => {
+              rememberConnection('host', {
+                portOrRoomId: collabPort,
+                username,
+                projectId,
+                projectDir,
+                type: collabType,
+                serverUrl: '',
+              });
               resolve({ status: 'ok', role: 'host', ips: getLocalIps() });
             });
           } catch (e) {
-            cleanupCollab();
+            cleanupCollab(inAutoReconnect);
             reject(e);
           }
         });
@@ -1789,9 +1815,18 @@ async function handleAction(action, args) {
                 const msg = JSON.parse(event.data);
 
                 if (msg.type === 'handshake_ack') {
+                  rememberConnection('client', {
+                    ipOrRoomId,
+                    port: portOrNull,
+                    username,
+                    projectId,
+                    projectDir,
+                    type: collabType,
+                    serverUrl: collabServerUrl,
+                  });
                   resolve({ status: 'ok', role: 'client' });
                 } else if (msg.type === 'error') {
-                  cleanupCollab();
+                  cleanupCollab(inAutoReconnect);
                   reject(new Error(msg.payload.message));
                 } else if (msg.type === 'init_sync') {
                   saveTasksLocal(projectId, msg.payload.tasksJson);
@@ -1845,22 +1880,29 @@ async function handleAction(action, args) {
             };
 
             ws.onerror = (err) => {
-              cleanupCollab();
+              cleanupCollab(inAutoReconnect);
               reject(err);
             };
 
             ws.onclose = () => {
-              cleanupCollab();
-              process.send({
-                event: 'collab',
-                data: {
-                  type: 'status_update',
-                  payload: { role: 'none', error: 'Se perdió la conexión con el servidor online.' },
-                },
-              });
+              const wasReconnecting = isReconnecting;
+              const willReconnect = !!reconnectParams && !wasReconnecting;
+              cleanupCollab(willReconnect);
+              if (willReconnect) {
+                console.log(`[collab] CLIENT connection lost — scheduling auto-reconnect`);
+                scheduleReconnect();
+              } else {
+                process.send({
+                  event: 'collab',
+                  data: {
+                    type: 'status_update',
+                    payload: { role: 'none', error: 'Se perdió la conexión con el servidor online.' },
+                  },
+                });
+              }
             };
           } catch (e) {
-            cleanupCollab();
+            cleanupCollab(inAutoReconnect);
             reject(e);
           }
         });
@@ -1884,13 +1926,13 @@ async function handleAction(action, args) {
               );
               socket.write(JSON.stringify({ type: 'handshake', payload: { username } }) + '\n');
               // Remember params for auto-reconnect BEFORE resolving.
-              rememberClientConnection({
+              rememberConnection('client', {
                 ipOrRoomId,
                 port: portOrNull,
                 username,
                 projectId,
                 projectDir,
-                type: 'local',
+                type: collabType,
                 serverUrl: '',
               });
 
@@ -1914,7 +1956,7 @@ async function handleAction(action, args) {
               // handler run the cleanup and the auto-reconnect schedule. We
               // only reject the initial connection promise.
               if (!connected) {
-                cleanupCollab();
+                cleanupCollab(inAutoReconnect);
                 reject(err);
               } else {
                 try {
@@ -2146,8 +2188,8 @@ function getLocalIps() {
 // Save the parameters of a successful client connection so we can re-use
 // them when the connection drops. Called from connectCollabClient after the
 // socket is established and the handshake has been sent.
-function rememberClientConnection(params) {
-  reconnectParams = { ...params };
+function rememberConnection(role, params) {
+  reconnectParams = { role, ...params };
   reconnectAttempts = 0;
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);
@@ -2169,18 +2211,14 @@ function clearReconnectParams() {
 function scheduleReconnect() {
   if (!reconnectParams) return;
   if (isReconnecting) return;
-  if (reconnectParams.type === 'online') {
-    // Only auto-reconnect for local LAN; online relay reconnection needs
-    // explicit user action because the handshake semantics differ.
-    return;
-  }
   // Exponential backoff: 2s, 4s, 8s, 16s, 30s (cap)
   const delays = [2000, 4000, 8000, 16000, 30000];
   const delay = delays[Math.min(reconnectAttempts, delays.length - 1)];
   reconnectAttempts++;
   isReconnecting = true;
+  const targetId = reconnectParams.role === 'host' ? reconnectParams.portOrRoomId : (reconnectParams.ipOrRoomId + ':' + reconnectParams.port);
   console.log(
-    `[collab] Auto-reconnect attempt #${reconnectAttempts} in ${delay}ms to ${reconnectParams.ipOrRoomId}:${reconnectParams.port}`,
+    `[collab] Auto-reconnect attempt #${reconnectAttempts} in ${delay}ms to ${targetId}`,
   );
   try {
     process.send({
@@ -2201,24 +2239,36 @@ function scheduleReconnect() {
 async function attemptReconnect() {
   if (!reconnectParams) return;
   const params = reconnectParams;
+  const targetId = params.role === 'host' ? params.portOrRoomId : (params.ipOrRoomId + ':' + params.port);
   console.log(
-    `[collab] Auto-reconnect: connecting to ${params.ipOrRoomId}:${params.port} (attempt #${reconnectAttempts})`,
+    `[collab] Auto-reconnect: connecting as ${params.role} to ${targetId} (attempt #${reconnectAttempts})`,
   );
   try {
-    const result = await handleAction('connectCollabClient', [
-      params.ipOrRoomId,
-      params.port,
-      params.username,
-      params.projectId,
-      params.projectDir,
-      params.type || 'local',
-      params.serverUrl || '',
-    ]);
+    let result;
+    if (params.role === 'host') {
+      result = await handleAction('startCollabHost', [
+        params.portOrRoomId,
+        params.username,
+        params.projectId,
+        params.projectDir,
+        params.type || 'local',
+        params.serverUrl || '',
+      ]);
+    } else {
+      result = await handleAction('connectCollabClient', [
+        params.ipOrRoomId,
+        params.port,
+        params.username,
+        params.projectId,
+        params.projectDir,
+        params.type || 'local',
+        params.serverUrl || '',
+      ]);
+    }
     if (result && result.status === 'ok') {
       console.log(`[collab] Auto-reconnect succeeded`);
       reconnectAttempts = 0;
       isReconnecting = false;
-      // process.send 'ok' to main.ts is already done by handleAction.
     } else {
       console.warn(`[collab] Auto-reconnect returned non-ok: ${JSON.stringify(result)}`);
       scheduleReconnect();
