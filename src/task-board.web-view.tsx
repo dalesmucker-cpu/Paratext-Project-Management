@@ -2,7 +2,9 @@ import { WebViewProps } from '@papi/core';
 import papi from '@papi/frontend';
 import { useDialogCallback } from '@papi/frontend/react';
 import { useState, useEffect, useCallback, useMemo, useRef, type ChangeEvent } from 'react';
-import { papiRetry } from './utils/papi-retry';
+import { papiRetry, isPapiDisconnectedError } from './utils/papi-retry';
+import { usePapiDisconnect } from './utils/use-papi-disconnect';
+import { ReconnectBanner } from './components/reconnect-banner';
 import type {
   ProjectTask,
   TranslationStage,
@@ -1033,17 +1035,6 @@ function NewTaskModal({
   );
 }
 
-/** Safely convert any caught value (including papi plain-object errors) to a readable string. */
-function errMsg(e: unknown): string {
-  if (e instanceof Error) return e.message;
-  if (typeof e === 'object' && e !== null) {
-    const obj = e as Record<string, unknown>;
-    if (typeof obj.message === 'string') return obj.message;
-    return JSON.stringify(obj);
-  }
-  return String(e);
-}
-
 // ---- Main Task Board Component ----
 
 globalThis.webViewComponent = function TaskBoardWebView({
@@ -1060,6 +1051,7 @@ globalThis.webViewComponent = function TaskBoardWebView({
   const [saving, setSaving] = useState(false);
   const [syncPending, setSyncPending] = useState(false);
   const [error, setError] = useState('');
+  const { disconnected, clearDisconnected, handleCatch } = usePapiDisconnect();
 
   // Auto-dismiss error after 15 seconds
   useEffect(() => {
@@ -1118,11 +1110,16 @@ globalThis.webViewComponent = function TaskBoardWebView({
     const isCurrentRequest = () => requestId === loadTasksRequestRef.current;
     setLoading(true);
     setError('');
+    clearDisconnected();
     try {
-      const [result, membersResult] = await papiRetry(() => Promise.all([
-        papi.commands.sendCommand('paratextProjectManager.getTasks', projectId),
-        papi.commands.sendCommand('paratextProjectManager.getTeamMembers'),
-      ]), { isCancelled: () => !isCurrentRequest() });
+      const [result, membersResult] = await papiRetry(
+        () =>
+          Promise.all([
+            papi.commands.sendCommand('paratextProjectManager.getTasks', projectId),
+            papi.commands.sendCommand('paratextProjectManager.getTeamMembers'),
+          ]),
+        { isCancelled: () => !isCurrentRequest() },
+      );
       if (!isCurrentRequest()) return;
       const store = JSON.parse(result) as TaskStore;
       const knownDeleted = store.deletedTaskIds ?? [];
@@ -1132,11 +1129,11 @@ globalThis.webViewComponent = function TaskBoardWebView({
       setActivityLog(store.activityLog ?? []);
       if (membersResult) setTeamMembers(JSON.parse(membersResult as string) as string[]);
     } catch (retryErr) {
-      if (isCurrentRequest()) setError(`Error al cargar tareas: ${errMsg(retryErr)}`);
+      if (isCurrentRequest()) setError(handleCatch(retryErr, 'Error al cargar tareas: '));
     } finally {
       if (isCurrentRequest()) setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, clearDisconnected, handleCatch]);
 
   useEffect(() => {
     loadTasks();
@@ -1156,7 +1153,9 @@ globalThis.webViewComponent = function TaskBoardWebView({
     if (!projectId || savingRef.current || refreshInProgressRef.current) return;
     refreshInProgressRef.current = true;
     try {
-      const result = await papiRetry(() => papi.commands.sendCommand('paratextProjectManager.getTasks', projectId));
+      const result = await papiRetry(() =>
+        papi.commands.sendCommand('paratextProjectManager.getTasks', projectId),
+      );
       const store = JSON.parse(result as string) as TaskStore;
       lastRefreshRef.current = Date.now();
       const incomingDeleted = new Set(store.deletedTaskIds ?? []);
@@ -1184,20 +1183,22 @@ globalThis.webViewComponent = function TaskBoardWebView({
       if (store.activityLog) setActivityLog(store.activityLog);
       // Check whether any pending syncs have been resolved by the background loop
       try {
-        const pendingRaw = await papiRetry(() => papi.commands.sendCommand(
-          'paratextProjectManager.tasksDriveGetPendingSync',
-        ));
+        const pendingRaw = await papiRetry(() =>
+          papi.commands.sendCommand('paratextProjectManager.tasksDriveGetPendingSync'),
+        );
         const pending = JSON.parse(pendingRaw as string) as string[];
         if (!pending.includes(projectId)) setSyncPending(false);
       } catch (_) {
         /* ignore */
       }
-    } catch (_) {
-      /* silent */
+    } catch (e) {
+      // Surface disconnects so the reconnect banner + auto-reload engage;
+      // other background-refresh errors stay silent.
+      if (isPapiDisconnectedError(e)) setError(handleCatch(e));
     } finally {
       refreshInProgressRef.current = false;
     }
-  }, [projectId]);
+  }, [projectId, handleCatch]);
 
   // Periodic refresh every 60 s
   useEffect(() => {
@@ -1206,15 +1207,17 @@ globalThis.webViewComponent = function TaskBoardWebView({
     return () => clearInterval(interval);
   }, [projectId, silentRefresh]);
 
-  // Refresh on visibility change but no more than once every 30 seconds
+  // Refresh on visibility change but no more than once every 30 seconds.
+  // (Auto-reload when disconnected is handled by usePapiDisconnect.)
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return;
+      if (disconnected) return;
       if (Date.now() - lastRefreshRef.current > 30_000) silentRefresh();
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [silentRefresh]);
+  }, [silentRefresh, disconnected]);
 
   /**
    * Opens the edit modal — but first fetches the latest version of the task from Drive so the modal
@@ -1291,12 +1294,12 @@ globalThis.webViewComponent = function TaskBoardWebView({
         if (saveResult === 'queued') setSyncPending(true);
         else if (saveResult === 'ok') setSyncPending(false);
       } catch (e) {
-        setError(`Error al guardar: ${errMsg(e)}`);
+        setError(handleCatch(e, 'Error al guardar: '));
       } finally {
         setSaving(false);
       }
     },
-    [projectId, stageConfig, activityLog, deletedTaskIds],
+    [projectId, stageConfig, activityLog, deletedTaskIds, handleCatch],
   );
 
   const addTask = useCallback(
@@ -1435,12 +1438,12 @@ globalThis.webViewComponent = function TaskBoardWebView({
         else if (saveResult === 'ok') setSyncPending(false);
         setStageConfig(newConfig);
       } catch (e) {
-        setError(`Error al guardar etapas: ${errMsg(e)}`);
+        setError(handleCatch(e, 'Error al guardar etapas: '));
       } finally {
         setSaving(false);
       }
     },
-    [tasks, activityLog, projectId, deletedTaskIds],
+    [tasks, activityLog, projectId, deletedTaskIds, handleCatch],
   );
 
   const orderedStages = useMemo(() => getOrderedStages(stageConfig), [stageConfig]);
@@ -1657,15 +1660,12 @@ globalThis.webViewComponent = function TaskBoardWebView({
       )}
 
       {error && (
-        <div className="tw:bg-red-50 tw:border-b tw:border-red-200 tw:px-3 tw:py-1.5 tw:text-red-700 tw:text-xs tw:font-medium tw:flex tw:justify-between tw:items-center">
-          <span>{error}</span>
-          <button
-            onClick={loadTasks}
-            className="tw:text-red-700 tw:underline tw:hover:text-red-900 tw:ml-2 tw:cursor-pointer"
-          >
-            (reintentar)
-          </button>
-        </div>
+        <ReconnectBanner
+          error={error}
+          disconnected={disconnected}
+          onRetry={loadTasks}
+          variant="bar"
+        />
       )}
 
       {/* Board */}

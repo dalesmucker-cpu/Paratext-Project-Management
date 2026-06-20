@@ -18,7 +18,8 @@ import {
   FileText,
   Languages,
 } from 'lucide-react';
-import { papiRetry } from './utils/papi-retry';
+import { papiRetry, isPapiDisconnectedError } from './utils/papi-retry';
+import { usePapiDisconnect } from './utils/use-papi-disconnect';
 import type { KeyTermsStore, KeyTerm, VerseMatchStatus } from './types/key-terms.types';
 import { BIBLE_BOOKS, type BibleBook } from './types/shared.constants';
 import { useLocalizedStrings } from './utils/i18n';
@@ -34,6 +35,7 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
   const [store, setStore] = useState<KeyTermsStore | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const { disconnected, clearDisconnected, handleCatch } = usePapiDisconnect();
 
   useEffect(() => {
     if (!error) return undefined;
@@ -72,6 +74,7 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
     const isCurrentRequest = () => requestId === loadDataRequestRef.current;
     setLoading(true);
     setError('');
+    clearDisconnected();
     try {
       const dataStr = await papiRetry(
         () => papi.commands.sendCommand('paratextProjectManager.getKeyTermsData', projectId),
@@ -81,11 +84,17 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
       const parsed = JSON.parse(dataStr) as KeyTermsStore;
       setStore(parsed);
     } catch (e: any) {
-      if (isCurrentRequest()) setError(tx('errorLoading', e.message || String(e)));
+      if (isCurrentRequest()) {
+        if (isPapiDisconnectedError(e)) {
+          setError(handleCatch(e));
+        } else {
+          setError(tx('errorLoading', e.message || String(e)));
+        }
+      }
     } finally {
       if (isCurrentRequest()) setLoading(false);
     }
-  }, [projectId, tx]);
+  }, [projectId, tx, clearDisconnected, handleCatch]);
 
   useEffect(() => {
     loadData();
@@ -114,11 +123,15 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
         setScanMatches(parsed.matches);
       }
     } catch (e: any) {
-      console.error('Failed to scan book renderings:', e);
+      if (isPapiDisconnectedError(e)) {
+        setError(handleCatch(e));
+      } else {
+        console.error('Failed to scan book renderings:', e);
+      }
     } finally {
       if (isCurrentRequest()) setScanning(false);
     }
-  }, [projectId, selectedBook]);
+  }, [projectId, selectedBook, handleCatch]);
 
   useEffect(() => {
     if (store && projectId) {
@@ -254,7 +267,8 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
     }
 
     const foundCount = foundTerms.size;
-    const percent = totalExpectedTerms > 0 ? Math.round((foundCount / totalExpectedTerms) * 100) : 0;
+    const percent =
+      totalExpectedTerms > 0 ? Math.round((foundCount / totalExpectedTerms) * 100) : 0;
 
     return { expectedCount: totalExpectedTerms, foundCount, percent };
   }, [store, selectedBook, scanMatches]);
@@ -263,7 +277,10 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
     if (!store) return [];
 
     const prefix = `${selectedBook} `;
-    const termOccurrences: Record<string, { term: KeyTerm; missingCount: number; occurrences: string[] }> = {};
+    const termOccurrences: Record<
+      string,
+      { term: KeyTerm; missingCount: number; occurrences: string[] }
+    > = {};
 
     for (const term of store.terms) {
       const refs = term.references.filter((ref) => ref.startsWith(prefix));
@@ -312,7 +329,9 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
         lemma: term.lemma,
         transliteration: term.transliteration,
         ref,
-        expectedRenderings: term.renderings.filter((r) => r.status === 'approved').map((r) => r.text),
+        expectedRenderings: term.renderings
+          .filter((r) => r.status === 'approved')
+          .map((r) => r.text),
         found: anyFound,
         matchedText,
       };
@@ -350,11 +369,7 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
       try {
         await papi.commands.sendCommand('paratextProjectManager.openKeyTerms', projectId);
         await new Promise((r) => setTimeout(r, 450));
-        await papi.commands.sendCommand(
-          'paratextProjectManager.selectKeyTerm',
-          projectId,
-          termId,
-        );
+        await papi.commands.sendCommand('paratextProjectManager.selectKeyTerm', projectId, termId);
       } catch (e) {
         console.error('Failed to open key terms editor:', e);
       }
@@ -514,9 +529,7 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
         </div>
         <div className="tw:space-y-2">
           <p className="tw:text-lg tw:font-bold">{tx('noProject')}</p>
-          <p className="tw:text-xs tw:text-muted-foreground tw:max-w-xs">
-            {tx('noProjectDesc')}
-          </p>
+          <p className="tw:text-xs tw:text-muted-foreground tw:max-w-xs">{tx('noProjectDesc')}</p>
         </div>
         <button
           type="button"
@@ -635,13 +648,24 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
             <AlertTriangle size={14} />
             <span>{error}</span>
           </div>
-          <button
-            type="button"
-            onClick={loadData}
-            className="tw:text-destructive tw:underline hover:tw:opacity-80 tw:ml-2 tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring tw:rounded"
-          >
-            {tx('retry')}
-          </button>
+          {disconnected ? (
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="tw:bg-destructive tw:hover:opacity-90 tw:text-white tw:px-3 tw:py-1 tw:rounded tw:font-semibold tw:cursor-pointer tw:transition-opacity"
+              title="Recargar la vista para reestablecer la conexión con Paratext"
+            >
+              Reconectar
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={loadData}
+              className="tw:text-destructive tw:underline hover:tw:opacity-80 tw:ml-2 tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring tw:rounded"
+            >
+              {tx('retry')}
+            </button>
+          )}
         </div>
       )}
 
@@ -824,7 +848,11 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
                   </span>
                 </div>
                 <span className="tw:text-xs tw:text-muted-foreground tw:font-medium">
-                  {tx('termsFoundOf', selectedChapterMatches.filter((m) => m.found).length, selectedChapterMatches.length)}
+                  {tx(
+                    'termsFoundOf',
+                    selectedChapterMatches.filter((m) => m.found).length,
+                    selectedChapterMatches.length,
+                  )}
                 </span>
               </div>
 
@@ -896,7 +924,10 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
                     ))}
                     {selectedChapterMatches.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="tw:text-center tw:py-8 tw:text-muted-foreground tw:italic">
+                        <td
+                          colSpan={5}
+                          className="tw:text-center tw:py-8 tw:text-muted-foreground tw:italic"
+                        >
                           {tx('noTermsInChapter', selectedChapter)}
                         </td>
                       </tr>

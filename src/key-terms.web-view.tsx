@@ -21,7 +21,8 @@ import {
   ChevronRight,
   CheckCircle2,
 } from 'lucide-react';
-import { papiRetry } from './utils/papi-retry';
+import { papiRetry, isPapiDisconnectedError } from './utils/papi-retry';
+import { usePapiDisconnect } from './utils/use-papi-disconnect';
 import { useLocalizedStrings } from './utils/i18n';
 import type {
   KeyTermsStore,
@@ -45,6 +46,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
   const [store, setStore] = useState<KeyTermsStore | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const { disconnected, clearDisconnected, handleCatch } = usePapiDisconnect();
 
   useEffect(() => {
     if (!error) return undefined;
@@ -170,6 +172,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
     const isCurrentRequest = () => requestId === loadDataRequestRef.current;
     setLoading(true);
     setError('');
+    clearDisconnected();
     try {
       const dataStr = await papiRetry(
         () => papi.commands.sendCommand('paratextProjectManager.getKeyTermsData', projectId),
@@ -186,11 +189,17 @@ globalThis.webViewComponent = function KeyTermsWebView({
       if (!isCurrentRequest()) return;
       if (user) setCurrentUser(user);
     } catch (e: any) {
-      if (isCurrentRequest()) setError(tx('errorLoading', e.message || String(e)));
+      if (isCurrentRequest()) {
+        if (isPapiDisconnectedError(e)) {
+          setError(handleCatch(e));
+        } else {
+          setError(tx('errorLoading', e.message || String(e)));
+        }
+      }
     } finally {
       if (isCurrentRequest()) setLoading(false);
     }
-  }, [projectId, tx]);
+  }, [projectId, tx, clearDisconnected, handleCatch]);
 
   useEffect(() => {
     loadData();
@@ -208,12 +217,16 @@ globalThis.webViewComponent = function KeyTermsWebView({
           JSON.stringify(updated, null, 2),
         );
       } catch (e: any) {
-        setError(tx('errorSaving', e.message || String(e)));
+        if (isPapiDisconnectedError(e)) {
+          setError(handleCatch(e));
+        } else {
+          setError(tx('errorSaving', e.message || String(e)));
+        }
       } finally {
         setSaving(false);
       }
     },
-    [projectId, tx],
+    [projectId, tx, handleCatch],
   );
 
   const scanChapterRequestRef = useRef(0);
@@ -349,15 +362,39 @@ globalThis.webViewComponent = function KeyTermsWebView({
   );
 
   const addPrefixRule = useCallback(
-    () => addAffixRule('prefix', newPrefix, newPrefixLabel, 'Prefijo', () => setNewPrefix(''), () => setNewPrefixLabel('')),
+    () =>
+      addAffixRule(
+        'prefix',
+        newPrefix,
+        newPrefixLabel,
+        'Prefijo',
+        () => setNewPrefix(''),
+        () => setNewPrefixLabel(''),
+      ),
     [addAffixRule, newPrefix, newPrefixLabel],
   );
   const addSuffixRule = useCallback(
-    () => addAffixRule('suffix', newSuffix, newSuffixLabel, 'Sufijo', () => setNewSuffix(''), () => setNewSuffixLabel('')),
+    () =>
+      addAffixRule(
+        'suffix',
+        newSuffix,
+        newSuffixLabel,
+        'Sufijo',
+        () => setNewSuffix(''),
+        () => setNewSuffixLabel(''),
+      ),
     [addAffixRule, newSuffix, newSuffixLabel],
   );
   const addInfixRule = useCallback(
-    () => addAffixRule('infix', newInfix, newInfixLabel, 'Infijo', () => setNewInfix(''), () => setNewInfixLabel('')),
+    () =>
+      addAffixRule(
+        'infix',
+        newInfix,
+        newInfixLabel,
+        'Infijo',
+        () => setNewInfix(''),
+        () => setNewInfixLabel(''),
+      ),
     [addAffixRule, newInfix, newInfixLabel],
   );
 
@@ -646,9 +683,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
           <div className="tw:w-2 tw:h-2 tw:bg-primary tw:rounded-full tw:animate-pulse" />
           <div className="tw:w-2 tw:h-2 tw:bg-primary tw:rounded-full tw:animate-pulse tw:[animation-delay:0.2s]" />
         </div>
-        <span className="tw:text-sm tw:text-muted-foreground tw:font-medium">
-          {tx('loading')}
-        </span>
+        <span className="tw:text-sm tw:text-muted-foreground tw:font-medium">{tx('loading')}</span>
       </div>
     );
   }
@@ -944,19 +979,33 @@ globalThis.webViewComponent = function KeyTermsWebView({
               <AlertTriangle size={14} className="tw:flex-shrink-0" />
               <span className="tw:truncate">{error}</span>
             </span>
-            <button
-              type="button"
-              onClick={loadData}
-              className="tw:text-destructive tw:underline hover:tw:opacity-80 tw:cursor-pointer tw:flex-shrink-0 tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring tw:rounded"
-            >
-              ({tx('retry')})
-            </button>
+            {disconnected ? (
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="tw:bg-destructive tw:hover:opacity-90 tw:text-white tw:px-3 tw:py-1 tw:rounded tw:font-semibold tw:cursor-pointer tw:transition-opacity tw:flex-shrink-0"
+                title="Recargar la vista para reestablecer la conexión con Paratext"
+              >
+                Reconectar
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={loadData}
+                className="tw:text-destructive tw:underline hover:tw:opacity-80 tw:cursor-pointer tw:flex-shrink-0 tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring tw:rounded"
+              >
+                ({tx('retry')})
+              </button>
+            )}
           </div>
         )}
 
         {/* Workspace area */}
         {selectedTerm ? (
-          <div ref={rightPanelRef} className="tw:flex-1 tw:overflow-y-auto tw:p-3 sm:tw:p-4 tw:space-y-4 tw:min-w-0">
+          <div
+            ref={rightPanelRef}
+            className="tw:flex-1 tw:overflow-y-auto tw:p-3 sm:tw:p-4 tw:space-y-4 tw:min-w-0"
+          >
             {/* Term Summary Card */}
             <div className="tw:bg-card tw:p-4 tw:rounded-xl tw:border tw:border-border tw:shadow-sm tw:space-y-3">
               <div className="tw:flex tw:items-start tw:justify-between tw:gap-3 tw:min-w-0">
@@ -1255,9 +1304,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
                       <input
                         type="text"
                         value={store.morphologyConfig.languageName || ''}
-                        onChange={(e) =>
-                          handleMorphologyChange({ languageName: e.target.value })
-                        }
+                        onChange={(e) => handleMorphologyChange({ languageName: e.target.value })}
                         className="tw:w-full tw:border tw:border-border tw:rounded-lg tw:px-2.5 tw:py-1.5 tw:text-xs tw:bg-background tw:text-foreground tw:focus:outline-none tw:focus:ring-1 tw:focus:ring-primary"
                       />
                     </div>
@@ -1439,9 +1486,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
                               {note.author}
                             </span>
                             <span className="tw:flex-shrink-0">
-                              {new Date(note.timestamp).toLocaleString(
-                                lang === 'en' ? 'en' : 'es',
-                              )}
+                              {new Date(note.timestamp).toLocaleString(lang === 'en' ? 'en' : 'es')}
                             </span>
                           </div>
                           <p className="tw:text-xs tw:text-foreground tw:whitespace-pre-wrap tw:break-words">

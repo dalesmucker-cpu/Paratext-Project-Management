@@ -198,7 +198,10 @@ declare module 'papi-shared-types' {
     /** Gets Google Calendar connection status */
     'paratextProjectManager.gcalGetStatus': () => Promise<string>;
     /** Connects Google Calendar using Client ID and Secret */
-    'paratextProjectManager.gcalConnect': (clientId: string, clientSecret: string) => Promise<string>;
+    'paratextProjectManager.gcalConnect': (
+      clientId: string,
+      clientSecret: string,
+    ) => Promise<string>;
     /** Reconnects Google Calendar using existing config credentials */
     'paratextProjectManager.gcalReconnect': () => Promise<string>;
     /** Polls Google Calendar OAuth flow status */
@@ -218,7 +221,10 @@ declare module 'papi-shared-types' {
       timeMax: string,
     ) => Promise<string>;
     /** Deletes an event from Google Calendar */
-    'paratextProjectManager.gcalDeleteEvent': (calendarId: string, eventId: string) => Promise<string>;
+    'paratextProjectManager.gcalDeleteEvent': (
+      calendarId: string,
+      eventId: string,
+    ) => Promise<string>;
     /** Syncs a single time log entry to Google Calendar */
     'paratextProjectManager.gcalSyncTimeEntry': (
       timeEntryJson: string,
@@ -228,9 +234,15 @@ declare module 'papi-shared-types' {
     /** Flushes pending time entries to Google Calendar */
     'paratextProjectManager.gcalFlushPendingTime': () => Promise<string>;
     /** Saves content to Downloads and tries to open it */
-    'paratextProjectManager.saveToDownloads': (filename: string, content: string) => Promise<string>;
+    'paratextProjectManager.saveToDownloads': (
+      filename: string,
+      content: string,
+    ) => Promise<string>;
     /** Starts the Drive OAuth flow in the background */
-    'paratextProjectManager.tasksDriveStartAuth': (clientId: string, clientSecret: string) => Promise<string>;
+    'paratextProjectManager.tasksDriveStartAuth': (
+      clientId: string,
+      clientSecret: string,
+    ) => Promise<string>;
     /** Polls the Drive OAuth flow status */
     'paratextProjectManager.tasksDrivePollAuth': () => Promise<string>;
     /** Gets Drive sync status */

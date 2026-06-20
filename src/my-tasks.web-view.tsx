@@ -2,7 +2,9 @@ import { WebViewProps } from '@papi/core';
 import papi from '@papi/frontend';
 import { useDialogCallback } from '@papi/frontend/react';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { papiRetry } from './utils/papi-retry';
+import { papiRetry, isPapiDisconnectedError } from './utils/papi-retry';
+import { usePapiDisconnect } from './utils/use-papi-disconnect';
+import { ReconnectBanner } from './components/reconnect-banner';
 import type { ProjectTask, TaskStatus, StageConfig, TaskStore } from './types/task.types';
 import {
   STATUS_LABELS,
@@ -235,6 +237,7 @@ globalThis.webViewComponent = function MyTasksWebView({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const { disconnected, clearDisconnected, handleCatch } = usePapiDisconnect();
 
   // Auto-dismiss error after 15 seconds
   useEffect(() => {
@@ -301,12 +304,17 @@ globalThis.webViewComponent = function MyTasksWebView({
     const isCurrentRequest = () => requestId === loadDataRequestRef.current;
     setLoading(true);
     setError('');
+    clearDisconnected();
     try {
-      const [tasksResult, userResult, membersResult] = await papiRetry(() => Promise.all([
-        papi.commands.sendCommand('paratextProjectManager.getTasks', projectId),
-        papi.commands.sendCommand('paratextProjectManager.getCurrentUser'),
-        papi.commands.sendCommand('paratextProjectManager.getTeamMembers'),
-      ]), { isCancelled: () => !isCurrentRequest() });
+      const [tasksResult, userResult, membersResult] = await papiRetry(
+        () =>
+          Promise.all([
+            papi.commands.sendCommand('paratextProjectManager.getTasks', projectId),
+            papi.commands.sendCommand('paratextProjectManager.getCurrentUser'),
+            papi.commands.sendCommand('paratextProjectManager.getTeamMembers'),
+          ]),
+        { isCancelled: () => !isCurrentRequest() },
+      );
       if (!isCurrentRequest()) return;
       const store = JSON.parse(tasksResult) as TaskStore;
       setTasks(store.tasks ?? []);
@@ -315,11 +323,11 @@ globalThis.webViewComponent = function MyTasksWebView({
       if (userResult) persistCurrentUser(userResult);
       if (membersResult) setTeamMembers(JSON.parse(membersResult as string) as string[]);
     } catch (retryErr) {
-      if (isCurrentRequest()) setError(`Error al cargar: ${retryErr}`);
+      if (isCurrentRequest()) setError(handleCatch(retryErr, 'Error al cargar: '));
     } finally {
       if (isCurrentRequest()) setLoading(false);
     }
-  }, [projectId, persistCurrentUser]);
+  }, [projectId, persistCurrentUser, clearDisconnected, handleCatch]);
 
   useEffect(() => {
     loadData();
@@ -338,7 +346,9 @@ globalThis.webViewComponent = function MyTasksWebView({
     if (!projectId || savingRef.current || refreshInProgressRef.current) return;
     refreshInProgressRef.current = true;
     try {
-      const result = await papiRetry(() => papi.commands.sendCommand('paratextProjectManager.getTasks', projectId));
+      const result = await papiRetry(() =>
+        papi.commands.sendCommand('paratextProjectManager.getTasks', projectId),
+      );
       const store = JSON.parse(result as string) as TaskStore;
       lastRefreshRef.current = Date.now();
       const incomingDeleted = new Set(store.deletedTaskIds ?? []);
@@ -361,12 +371,14 @@ globalThis.webViewComponent = function MyTasksWebView({
       });
       if (store.stageConfig && Object.keys(store.stageConfig).length > 0)
         setStageConfig(store.stageConfig);
-    } catch (_) {
-      /* silent */
+    } catch (e) {
+      // Surface disconnects so the reconnect banner + auto-reload engage;
+      // other background-refresh errors stay silent.
+      if (isPapiDisconnectedError(e)) setError(handleCatch(e));
     } finally {
       refreshInProgressRef.current = false;
     }
-  }, [projectId]);
+  }, [projectId, handleCatch]);
 
   // Periodic refresh every 60 s
   useEffect(() => {
@@ -375,15 +387,17 @@ globalThis.webViewComponent = function MyTasksWebView({
     return () => clearInterval(interval);
   }, [projectId, silentRefresh]);
 
-  // Refresh on visibility change but no more than once every 30 seconds
+  // Refresh on visibility change but no more than once every 30 seconds.
+  // (Auto-reload when disconnected is handled by usePapiDisconnect.)
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return;
+      if (disconnected) return;
       if (Date.now() - lastRefreshRef.current > 30_000) silentRefresh();
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [silentRefresh]);
+  }, [silentRefresh, disconnected]);
 
   const persistTasks = useCallback(
     async (updated: ProjectTask[], previousTasks?: ProjectTask[]) => {
@@ -405,12 +419,12 @@ globalThis.webViewComponent = function MyTasksWebView({
       } catch (e) {
         // Revert optimistic update on failure so the UI stays consistent with actual saved state
         if (previousTasks !== undefined) setTasks(previousTasks);
-        setError(`Error al guardar: ${e}`);
+        setError(handleCatch(e, 'Error al guardar: '));
       } finally {
         setSaving(false);
       }
     },
-    [projectId, stageConfig, deletedTaskIds],
+    [projectId, stageConfig, deletedTaskIds, handleCatch],
   );
 
   const updateStatus = useCallback(
@@ -808,15 +822,12 @@ globalThis.webViewComponent = function MyTasksWebView({
       </div>
 
       {error && (
-        <div className="tw:bg-red-50 tw:border-b tw:border-red-200 tw:px-3 tw:py-1.5 tw:text-red-700 tw:text-xs tw:font-medium tw:flex tw:justify-between tw:items-center">
-          <span>{error}</span>
-          <button
-            onClick={loadData}
-            className="tw:text-red-700 tw:underline tw:hover:text-red-900 tw:ml-2 tw:cursor-pointer"
-          >
-            (reintentar)
-          </button>
-        </div>
+        <ReconnectBanner
+          error={error}
+          disconnected={disconnected}
+          onRetry={loadData}
+          variant="bar"
+        />
       )}
 
       {/* Notification banner */}

@@ -727,7 +727,9 @@ async function handleAction(action, args) {
             const xml = await fs.promises.readFile(settingsPath, 'utf8');
             const guidMatch = /<Guid>([^<]+)<\/Guid>/i.exec(xml);
             const nameMatch = /<Name>([^<]+)<\/Name>/i.exec(xml);
-            const fileNamePostPartMatch = /<FileNamePostPart>([^<]+)<\/FileNamePostPart>/i.exec(xml);
+            const fileNamePostPartMatch = /<FileNamePostPart>([^<]+)<\/FileNamePostPart>/i.exec(
+              xml,
+            );
             results.push({
               dir: path.join(targetPath, dir),
               guid: guidMatch ? guidMatch[1].trim() : '',
@@ -758,12 +760,72 @@ async function handleAction(action, args) {
         const languageCode = params.languageCode || 'es';
 
         const BIBLE_BOOKS = [
-          'GEN', 'EXO', 'LEV', 'NUM', 'DEU', 'JOS', 'JDG', 'RUT', '1SA', '2SA', '1KI', '2KI',
-          '1CH', '2CH', 'EZR', 'NEH', 'EST', 'JOB', 'PSA', 'PRO', 'ECC', 'SNG', 'ISA', 'JER',
-          'LAM', 'EZK', 'DAN', 'HOS', 'JOL', 'AMO', 'OBA', 'JON', 'MIC', 'NAM', 'HAB', 'ZEP',
-          'HAG', 'ZEC', 'MAL', 'MAT', 'MRK', 'LUK', 'JHN', 'ACT', 'ROM', '1CO', '2CO', 'GAL',
-          'EPH', 'PHP', 'COL', '1TH', '2TH', '1TI', '2TI', 'TIT', 'PHM', 'HEB', 'JAS', '1PE',
-          '2PE', '1JN', '2JN', '3JN', 'JUD', 'REV'
+          'GEN',
+          'EXO',
+          'LEV',
+          'NUM',
+          'DEU',
+          'JOS',
+          'JDG',
+          'RUT',
+          '1SA',
+          '2SA',
+          '1KI',
+          '2KI',
+          '1CH',
+          '2CH',
+          'EZR',
+          'NEH',
+          'EST',
+          'JOB',
+          'PSA',
+          'PRO',
+          'ECC',
+          'SNG',
+          'ISA',
+          'JER',
+          'LAM',
+          'EZK',
+          'DAN',
+          'HOS',
+          'JOL',
+          'AMO',
+          'OBA',
+          'JON',
+          'MIC',
+          'NAM',
+          'HAB',
+          'ZEP',
+          'HAG',
+          'ZEC',
+          'MAL',
+          'MAT',
+          'MRK',
+          'LUK',
+          'JHN',
+          'ACT',
+          'ROM',
+          '1CO',
+          '2CO',
+          'GAL',
+          'EPH',
+          'PHP',
+          'COL',
+          '1TH',
+          '2TH',
+          '1TI',
+          '2TI',
+          'TIT',
+          'PHM',
+          'HEB',
+          'JAS',
+          '1PE',
+          '2PE',
+          '1JN',
+          '2JN',
+          '3JN',
+          'JUD',
+          'REV',
         ];
 
         const convertVerseRef = (verseRef14) => {
@@ -810,7 +872,8 @@ async function handleAction(action, args) {
 
         const parseLocalizationsXml = (xmlContent) => {
           const locMap = new Map();
-          const locRegex = /<Localization\s+Id="([^"]+)"\s+Gloss="([^"]*)"[^>]*>([\s\S]*?)<\/Localization>/g;
+          const locRegex =
+            /<Localization\s+Id="([^"]+)"\s+Gloss="([^"]*)"[^>]*>([\s\S]*?)<\/Localization>/g;
           let match;
           while ((match = locRegex.exec(xmlContent)) !== null) {
             const id = match[1];
@@ -847,10 +910,14 @@ async function handleAction(action, args) {
         const fallbackProjectXml = path.join(projectDir, 'ProjectBiblicalTerms.xml');
         try {
           const settingsPath = path.join(projectDir, 'Settings.xml');
-          const settingsExists = await fs.promises.access(settingsPath, fs.constants.F_OK).then(() => true).catch(() => false);
+          const settingsExists = await fs.promises
+            .access(settingsPath, fs.constants.F_OK)
+            .then(() => true)
+            .catch(() => false);
           if (settingsExists) {
             const settingsXml = await fs.promises.readFile(settingsPath, 'utf8');
-            const settingMatch = /<BiblicalTermsListSetting>([^<]+)<\/BiblicalTermsListSetting>/i.exec(settingsXml);
+            const settingMatch =
+              /<BiblicalTermsListSetting>([^<]+)<\/BiblicalTermsListSetting>/i.exec(settingsXml);
             if (settingMatch) {
               const settingVal = settingMatch[1].trim();
               const parts = settingVal.split(':');
@@ -859,13 +926,19 @@ async function handleAction(action, args) {
                 const filename = parts[2];
                 if (type === 'project') {
                   const projectXmlPath = path.join(projectDir, filename);
-                  const projectXmlExists = await fs.promises.access(projectXmlPath, fs.constants.F_OK).then(() => true).catch(() => false);
+                  const projectXmlExists = await fs.promises
+                    .access(projectXmlPath, fs.constants.F_OK)
+                    .then(() => true)
+                    .catch(() => false);
                   if (projectXmlExists) {
                     mainXmlPath = projectXmlPath;
                   }
                 } else {
                   const globalXmlPath = path.join(pt9ListsDir, filename);
-                  const globalXmlExists = await fs.promises.access(globalXmlPath, fs.constants.F_OK).then(() => true).catch(() => false);
+                  const globalXmlExists = await fs.promises
+                    .access(globalXmlPath, fs.constants.F_OK)
+                    .then(() => true)
+                    .catch(() => false);
                   if (globalXmlExists) {
                     mainXmlPath = globalXmlPath;
                   }
@@ -875,32 +948,52 @@ async function handleAction(action, args) {
           }
         } catch (_) {}
 
-        const mainExists = await fs.promises.access(mainXmlPath, fs.constants.F_OK).then(() => true).catch(() => false);
-        const fallbackExists = await fs.promises.access(fallbackProjectXml, fs.constants.F_OK).then(() => true).catch(() => false);
+        const mainExists = await fs.promises
+          .access(mainXmlPath, fs.constants.F_OK)
+          .then(() => true)
+          .catch(() => false);
+        const fallbackExists = await fs.promises
+          .access(fallbackProjectXml, fs.constants.F_OK)
+          .then(() => true)
+          .catch(() => false);
         if (!mainExists || mainXmlPath === path.join(pt9ListsDir, 'BiblicalTerms.xml')) {
           if (fallbackExists) {
             mainXmlPath = fallbackProjectXml;
           }
         }
 
-        const locXmlPath = path.join(pt9ListsDir, languageCode === 'es' ? 'BiblicalTermsEs.xml' : 'BiblicalTermsEn.xml');
+        const locXmlPath = path.join(
+          pt9ListsDir,
+          languageCode === 'es' ? 'BiblicalTermsEs.xml' : 'BiblicalTermsEn.xml',
+        );
         const renderingsXmlPath = path.join(projectDir, 'TermRenderings.xml');
 
         let termsMap = new Map();
         let locMap = new Map();
         let renderingsMap = new Map();
 
-        const mainExistsFinal = await fs.promises.access(mainXmlPath, fs.constants.F_OK).then(() => true).catch(() => false);
+        const mainExistsFinal = await fs.promises
+          .access(mainXmlPath, fs.constants.F_OK)
+          .then(() => true)
+          .catch(() => false);
         if (mainExistsFinal) {
           termsMap = parseBiblicalTermsXml(await fs.promises.readFile(mainXmlPath, 'utf8'));
         }
-        const locExists = await fs.promises.access(locXmlPath, fs.constants.F_OK).then(() => true).catch(() => false);
+        const locExists = await fs.promises
+          .access(locXmlPath, fs.constants.F_OK)
+          .then(() => true)
+          .catch(() => false);
         if (locExists) {
           locMap = parseLocalizationsXml(await fs.promises.readFile(locXmlPath, 'utf8'));
         }
-        const renderingsExists = await fs.promises.access(renderingsXmlPath, fs.constants.F_OK).then(() => true).catch(() => false);
+        const renderingsExists = await fs.promises
+          .access(renderingsXmlPath, fs.constants.F_OK)
+          .then(() => true)
+          .catch(() => false);
         if (renderingsExists) {
-          renderingsMap = parseTermRenderingsXml(await fs.promises.readFile(renderingsXmlPath, 'utf8'));
+          renderingsMap = parseTermRenderingsXml(
+            await fs.promises.readFile(renderingsXmlPath, 'utf8'),
+          );
         }
 
         const terms = [];
@@ -925,7 +1018,12 @@ async function handleAction(action, args) {
             strongs: termData.strongs,
             transliteration: termData.transliteration,
             gloss,
-            domains: termData.domain ? termData.domain.split(';').map((d) => d.trim()).filter(Boolean) : [],
+            domains: termData.domain
+              ? termData.domain
+                  .split(';')
+                  .map((d) => d.trim())
+                  .filter(Boolean)
+              : [],
             references: cleanRefs,
             renderings,
             notes: [],
@@ -1286,7 +1384,11 @@ async function handleAction(action, args) {
             /* ignore header read error */
           }
 
-          if (code === 'DEU' && (bookName.toLowerCase().trim() === 'ma dakiwan balna' || (projectId && projectId.toUpperCase() === 'VMM'))) {
+          if (
+            code === 'DEU' &&
+            (bookName.toLowerCase().trim() === 'ma dakiwan balna' ||
+              (projectId && projectId.toUpperCase() === 'VMM'))
+          ) {
             bookName = 'Deuteronomio';
           }
 
@@ -1896,7 +1998,10 @@ async function handleAction(action, args) {
                   event: 'collab',
                   data: {
                     type: 'status_update',
-                    payload: { role: 'none', error: 'Se perdió la conexión con el servidor online.' },
+                    payload: {
+                      role: 'none',
+                      error: 'Se perdió la conexión con el servidor online.',
+                    },
                   },
                 });
               }
@@ -2216,10 +2321,11 @@ function scheduleReconnect() {
   const delay = delays[Math.min(reconnectAttempts, delays.length - 1)];
   reconnectAttempts++;
   isReconnecting = true;
-  const targetId = reconnectParams.role === 'host' ? reconnectParams.portOrRoomId : (reconnectParams.ipOrRoomId + ':' + reconnectParams.port);
-  console.log(
-    `[collab] Auto-reconnect attempt #${reconnectAttempts} in ${delay}ms to ${targetId}`,
-  );
+  const targetId =
+    reconnectParams.role === 'host'
+      ? reconnectParams.portOrRoomId
+      : reconnectParams.ipOrRoomId + ':' + reconnectParams.port;
+  console.log(`[collab] Auto-reconnect attempt #${reconnectAttempts} in ${delay}ms to ${targetId}`);
   try {
     process.send({
       event: 'collab',
@@ -2239,7 +2345,8 @@ function scheduleReconnect() {
 async function attemptReconnect() {
   if (!reconnectParams) return;
   const params = reconnectParams;
-  const targetId = params.role === 'host' ? params.portOrRoomId : (params.ipOrRoomId + ':' + params.port);
+  const targetId =
+    params.role === 'host' ? params.portOrRoomId : params.ipOrRoomId + ':' + params.port;
   console.log(
     `[collab] Auto-reconnect: connecting as ${params.role} to ${targetId} (attempt #${reconnectAttempts})`,
   );

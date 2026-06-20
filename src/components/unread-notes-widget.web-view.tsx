@@ -2,9 +2,11 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import papi from '@papi/frontend';
 import type { ParatextNoteThread, NotesDisplaySettings } from '../types/note.types';
 import { DEFAULT_NOTES_SETTINGS } from '../types/note.types';
-import { papiRetry, isPapiDisconnectedError } from '../utils/papi-retry';
+import { papiRetry } from '../utils/papi-retry';
+import { usePapiDisconnect } from '../utils/use-papi-disconnect';
 
 import { AudioPlayer, AttachmentViewer } from './note-media-components';
+import { ReconnectBanner } from './reconnect-banner';
 
 function CommentText({
   text,
@@ -96,17 +98,6 @@ interface UnreadNotesWidgetProps {
   onRefreshTrigger?: () => void;
 }
 
-/** Safely convert any caught value (including papi plain-object errors) to a readable string. */
-function errMsg(e: unknown): string {
-  if (e instanceof Error) return e.message;
-  if (typeof e === 'object' && e !== null) {
-    const obj = e as Record<string, unknown>;
-    if (typeof obj.message === 'string') return obj.message;
-    return JSON.stringify(obj);
-  }
-  return String(e);
-}
-
 export default function UnreadNotesWidget({
   projectId,
   currentUser,
@@ -117,7 +108,7 @@ export default function UnreadNotesWidget({
   const [error, setError] = useState('');
   // True when the PAPI JSON-RPC connection to the host has dropped (typically
   // after the program has been idle). See notes-viewer.web-view.tsx for details.
-  const [disconnected, setDisconnected] = useState(false);
+  const { disconnected, clearDisconnected, handleCatch } = usePapiDisconnect();
 
   // Auto-dismiss error after 15 seconds
   useEffect(() => {
@@ -144,7 +135,12 @@ export default function UnreadNotesWidget({
     commentDate: string;
     commentAuthor: string;
   } | null>(null);
-  const [commentContextMenu, setCommentContextMenu] = useState<{ x: number; y: number; user: string; threadId: string } | null>(null);
+  const [commentContextMenu, setCommentContextMenu] = useState<{
+    x: number;
+    y: number;
+    user: string;
+    threadId: string;
+  } | null>(null);
 
   useEffect(() => {
     const handleGlobalClick = () => setCommentContextMenu(null);
@@ -449,14 +445,10 @@ export default function UnreadNotesWidget({
     if (!projectId || !currentUser) return;
     setLoading(true);
     setError('');
-    setDisconnected(false);
+    clearDisconnected();
     try {
       const res = await papiRetry(() =>
-        papi.commands.sendCommand(
-          'paratextProjectManager.getProjectNotes',
-          projectId,
-          currentUser,
-        ),
+        papi.commands.sendCommand('paratextProjectManager.getProjectNotes', projectId, currentUser),
       );
       const parsed = JSON.parse(res) as {
         threads: ParatextNoteThread[];
@@ -469,18 +461,11 @@ export default function UnreadNotesWidget({
       }
       setThreads(parsed.threads || []);
     } catch (e) {
-      if (isPapiDisconnectedError(e)) {
-        setDisconnected(true);
-        setError(
-          'Se perdió la conexión con Paratext (probablemente por inactividad). Haz clic en "Reconectar" para reanudar.',
-        );
-      } else {
-        setError(`Error al cargar notas: ${errMsg(e)}`);
-      }
+      setError(handleCatch(e, 'Error al cargar notas: '));
     } finally {
       setLoading(false);
     }
-  }, [projectId, currentUser]);
+  }, [projectId, currentUser, clearDisconnected, handleCatch]);
 
   useEffect(() => {
     loadSettings();
@@ -515,18 +500,11 @@ export default function UnreadNotesWidget({
 
   // Refresh on visibility change but no more than once every 30 seconds
   const lastRefreshRef = useRef(0);
-  // Mirror of `disconnected` for use inside stable event listeners.
-  const disconnectedRef = useRef(false);
-  disconnectedRef.current = disconnected;
+  // Auto-reload when disconnected is handled by usePapiDisconnect.
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return;
-      // If the PAPI connection dropped while idle, reload the webview to
-      // re-establish the JSON-RPC connection from scratch.
-      if (disconnectedRef.current) {
-        window.location.reload();
-        return;
-      }
+      if (disconnected) return;
       if (Date.now() - lastRefreshRef.current > 30_000) {
         lastRefreshRef.current = Date.now();
         loadNotes();
@@ -534,7 +512,7 @@ export default function UnreadNotesWidget({
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [loadNotes]);
+  }, [loadNotes, disconnected]);
 
   // Helper: check if a name matches currentUser
   const isMe = (name: string) => {
@@ -664,7 +642,7 @@ export default function UnreadNotesWidget({
         alert(`Error al guardar edición: ${res}`);
       }
     } catch (e) {
-      alert(`Error al guardar edición: ${e}`);
+      alert(handleCatch(e, 'Error al guardar edición: '));
     } finally {
       setSavingEdit(false);
     }
@@ -806,25 +784,12 @@ export default function UnreadNotesWidget({
       )}
 
       {error && (
-        <div className="tw:p-3 tw:text-red-600 tw:bg-red-50 tw:text-xs tw:border-b tw:flex tw:justify-between tw:items-center tw:gap-2">
-          <span>{error}</span>
-          {disconnected ? (
-            <button
-              onClick={() => window.location.reload()}
-              className="tw:bg-red-600 tw:hover:bg-red-700 tw:text-white tw:px-3 tw:py-1 tw:rounded tw:font-semibold tw:cursor-pointer tw:transition-colors tw:shrink-0"
-              title="Recargar la vista para reestablecer la conexión con Paratext"
-            >
-              Reconectar
-            </button>
-          ) : (
-            <button
-              onClick={loadNotes}
-              className="tw:text-red-600 tw:underline tw:hover:text-red-800 tw:ml-2 tw:cursor-pointer"
-            >
-              (reintentar)
-            </button>
-          )}
-        </div>
+        <ReconnectBanner
+          error={error}
+          disconnected={disconnected}
+          onRetry={loadNotes}
+          variant="widget"
+        />
       )}
 
       {/* Note List */}
@@ -1122,11 +1087,15 @@ export default function UnreadNotesWidget({
                 const currentVal = prev[commentContextMenu.threadId] || '';
                 return {
                   ...prev,
-                  [commentContextMenu.threadId]: currentVal.startsWith(replyPrefix) ? currentVal : replyPrefix + currentVal,
+                  [commentContextMenu.threadId]: currentVal.startsWith(replyPrefix)
+                    ? currentVal
+                    : replyPrefix + currentVal,
                 };
               });
               setCommentContextMenu(null);
-              const inputEl = document.getElementById(`unread-reply-input-${commentContextMenu.threadId}`);
+              const inputEl = document.getElementById(
+                `unread-reply-input-${commentContextMenu.threadId}`,
+              );
               if (inputEl) inputEl.focus();
             }}
             className="tw:w-full tw:text-left tw:px-3 tw:py-2 tw:hover:bg-slate-100 tw:text-slate-700 tw:font-semibold tw:flex tw:items-center tw:gap-1.5 tw:cursor-pointer tw:border-none tw:bg-white"

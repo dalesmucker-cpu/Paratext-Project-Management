@@ -3,11 +3,13 @@ import papi from '@papi/frontend';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { ParatextNoteThread, NotesDisplaySettings } from './types/note.types';
 import { DEFAULT_NOTES_SETTINGS } from './types/note.types';
-import { papiRetry, isPapiDisconnectedError } from './utils/papi-retry';
+import { papiRetry } from './utils/papi-retry';
+import { usePapiDisconnect } from './utils/use-papi-disconnect';
 
 import { BIBLE_BOOKS } from './types/shared.constants';
 
 import { AudioPlayer, AttachmentViewer } from './components/note-media-components';
+import { ReconnectBanner } from './components/reconnect-banner';
 
 function renderTextWithLinks(text: string, baseKey: string): React.ReactNode[] | string {
   const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
@@ -142,17 +144,6 @@ function CommentText({
   );
 }
 
-/** Safely convert any caught value (including papi plain-object errors) to a readable string. */
-function errMsg(e: unknown): string {
-  if (e instanceof Error) return e.message;
-  if (typeof e === 'object' && e !== null) {
-    const obj = e as Record<string, unknown>;
-    if (typeof obj.message === 'string') return obj.message;
-    return JSON.stringify(obj);
-  }
-  return String(e);
-}
-
 globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebViewProps) {
   const [threads, setThreads] = useState<ParatextNoteThread[]>([]);
   const [loading, setLoading] = useState(false);
@@ -160,7 +151,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
   // True when the PAPI JSON-RPC connection to the host has dropped (typically
   // after the program has been idle). When true, retrying commands is futile,
   // so the UI offers a "Reconectar" button that reloads the webview.
-  const [disconnected, setDisconnected] = useState(false);
+  const { disconnected, clearDisconnected, handleCatch } = usePapiDisconnect();
   const [currentUser, setCurrentUser] = useState('');
 
   // Auto-dismiss error after 15 seconds
@@ -199,14 +190,17 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
   const [replying, setReplying] = useState(false);
   const [editingComment, setEditingComment] = useState<{ date: string; text: string } | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
-  const [commentContextMenu, setCommentContextMenu] = useState<{ x: number; y: number; user: string } | null>(null);
+  const [commentContextMenu, setCommentContextMenu] = useState<{
+    x: number;
+    y: number;
+    user: string;
+  } | null>(null);
 
   useEffect(() => {
     const handleGlobalClick = () => setCommentContextMenu(null);
     window.addEventListener('click', handleGlobalClick);
     return () => window.removeEventListener('click', handleGlobalClick);
   }, []);
-
 
   // Voice recording states
   const [isRecording, setIsRecording] = useState(false);
@@ -317,10 +311,12 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
   // Fetch user information and list of members
   const loadUserAndMembers = useCallback(async () => {
     try {
-      const [userResult, membersResult] = await papiRetry(() => Promise.all([
-        papi.commands.sendCommand('paratextProjectManager.getCurrentUser'),
-        papi.commands.sendCommand('paratextProjectManager.getTeamMembers'),
-      ]));
+      const [userResult, membersResult] = await papiRetry(() =>
+        Promise.all([
+          papi.commands.sendCommand('paratextProjectManager.getCurrentUser'),
+          papi.commands.sendCommand('paratextProjectManager.getTeamMembers'),
+        ]),
+      );
       if (userResult) {
         setCurrentUser(userResult);
         loadSettings(userResult);
@@ -343,7 +339,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
       const isCurrentRequest = () => requestId === loadNotesRequestRef.current;
       setLoading(true);
       setError('');
-      setDisconnected(false);
+      clearDisconnected();
       try {
         const res = await papiRetry(
           () =>
@@ -381,20 +377,13 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
         }
       } catch (retryErr) {
         if (isCurrentRequest()) {
-          if (isPapiDisconnectedError(retryErr)) {
-            setDisconnected(true);
-            setError(
-              'Se perdió la conexión con Paratext (probablemente por inactividad). Haz clic en "Reconectar" para reanudar.',
-            );
-          } else {
-            setError(`Error al cargar notas: ${errMsg(retryErr)}`);
-          }
+          setError(handleCatch(retryErr, 'Error al cargar notas: '));
         }
       } finally {
         if (isCurrentRequest()) setLoading(false);
       }
     },
-    [projectId, currentUser, selectedThreadId],
+    [projectId, currentUser, selectedThreadId, clearDisconnected, handleCatch],
   );
 
   useEffect(() => {
@@ -430,23 +419,13 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
     };
   }, [projectId, loadNotes]);
 
-  // Refresh on visibility change but no more than once every 30 seconds
+  // Refresh on visibility change but no more than once every 30 seconds.
+  // (Auto-reload when disconnected is handled by usePapiDisconnect.)
   const lastRefreshRef = useRef(0);
-  // Mirror of `disconnected` for use inside stable event listeners without
-  // re-subscribing on every state change.
-  const disconnectedRef = useRef(false);
-  disconnectedRef.current = disconnected;
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return;
-      // If the PAPI connection dropped while idle, reload the webview to
-      // re-establish the JSON-RPC connection from scratch. This is the
-      // reliable recovery path; retrying commands on a dead connection
-      // cannot succeed.
-      if (disconnectedRef.current) {
-        window.location.reload();
-        return;
-      }
+      if (disconnected) return;
       if (Date.now() - lastRefreshRef.current > 30_000) {
         lastRefreshRef.current = Date.now();
         loadNotes();
@@ -454,7 +433,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [loadNotes]);
+  }, [loadNotes, disconnected]);
 
   // Save Settings
   const saveSettings = async (updates: Partial<NotesDisplaySettings>) => {
@@ -644,8 +623,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
             const currentThread = threads.find((t) => t.threadId === selectedThreadId);
             if (!currentThread) return;
             const audioLink =
-              saveRes.driveUrl ||
-              `http://localhost:49876/play?project=${pid}&file=${filename}`;
+              saveRes.driveUrl || `http://localhost:49876/play?project=${pid}&file=${filename}`;
             const replyData = {
               threadId: currentThread.threadId,
               verseRef: currentThread.verseRef,
@@ -786,7 +764,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
         alert(`Error al enviar respuesta: ${res}`);
       }
     } catch (e) {
-      alert(`Error al enviar respuesta: ${e}`);
+      alert(handleCatch(e, 'Error al enviar respuesta: '));
     } finally {
       setReplying(false);
     }
@@ -1027,27 +1005,12 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
       </div>
 
       {error && (
-        <div className="tw:bg-red-50 tw:border-b tw:border-red-200 tw:px-4 tw:py-2 tw:text-red-700 tw:text-xs tw:font-medium tw:flex tw:justify-between tw:items-center tw:gap-2">
-          <span>{error}</span>
-          <div className="tw:flex tw:items-center tw:gap-3 tw:shrink-0">
-            {disconnected ? (
-              <button
-                onClick={() => window.location.reload()}
-                className="tw:bg-red-600 tw:hover:bg-red-700 tw:text-white tw:px-3 tw:py-1 tw:rounded tw:font-semibold tw:cursor-pointer tw:transition-colors"
-                title="Recargar la vista para reestablecer la conexión con Paratext"
-              >
-                Reconectar
-              </button>
-            ) : (
-              <button
-                onClick={() => loadNotes(selectedThreadId)}
-                className="tw:text-red-700 tw:underline tw:hover:text-red-900 tw:ml-2 tw:cursor-pointer"
-              >
-                (reintentar)
-              </button>
-            )}
-          </div>
-        </div>
+        <ReconnectBanner
+          error={error}
+          disconnected={disconnected}
+          onRetry={() => loadNotes(selectedThreadId)}
+          variant="bar"
+        />
       )}
 
       {/* Settings Dropdown Panel */}
@@ -1334,7 +1297,6 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                   </blockquote>
                 </div>
               )}
-
 
               {/* Comments Timeline */}
               <div

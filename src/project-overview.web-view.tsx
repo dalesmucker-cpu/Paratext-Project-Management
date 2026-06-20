@@ -2,7 +2,9 @@ import { WebViewProps } from '@papi/core';
 import papi from '@papi/frontend';
 import { useDialogCallback } from '@papi/frontend/react';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { papiRetry } from './utils/papi-retry';
+import { papiRetry, isPapiDisconnectedError } from './utils/papi-retry';
+import { usePapiDisconnect } from './utils/use-papi-disconnect';
+import { ReconnectBanner } from './components/reconnect-banner';
 import type {
   ProjectTask,
   TaskStatus,
@@ -269,13 +271,13 @@ function CalendarTabContent({
                       <span
                         key={t.id}
                         className={`tw:inline-block tw:w-1.5 tw:h-1.5 tw:rounded-full tw:flex-shrink-0 ${
-                        t.status === 'complete'
-                          ? 'tw:bg-green-500'
-                          : t.status === 'flagged'
-                            ? 'tw:bg-red-500'
-                            : t.status === 'in-progress'
-                              ? 'tw:bg-yellow-500'
-                              : 'tw:bg-gray-400'
+                          t.status === 'complete'
+                            ? 'tw:bg-green-500'
+                            : t.status === 'flagged'
+                              ? 'tw:bg-red-500'
+                              : t.status === 'in-progress'
+                                ? 'tw:bg-yellow-500'
+                                : 'tw:bg-gray-400'
                         }`}
                         title={`${t.book} ${t.chapter} — ${getStageLabel(t.stage, stageConfig)} (${t.status})`}
                       />
@@ -661,6 +663,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
   const [showTeamSection, setShowTeamSection] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const { disconnected, clearDisconnected, handleCatch } = usePapiDisconnect();
 
   // Auto-dismiss error after 15 seconds
   useEffect(() => {
@@ -691,7 +694,11 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
   const [collabConnecting, setCollabConnecting] = useState(false);
   const [showCollabSection, setShowCollabSection] = useState(false);
   const [chatInput, setChatInput] = useState('');
-  const [chatContextMenu, setChatContextMenu] = useState<{ x: number; y: number; user: string } | null>(null);
+  const [chatContextMenu, setChatContextMenu] = useState<{
+    x: number;
+    y: number;
+    user: string;
+  } | null>(null);
 
   useEffect(() => {
     const handleGlobalClick = () => setChatContextMenu(null);
@@ -834,12 +841,17 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
     const isCurrentRequest = () => requestId === loadTasksRequestRef.current;
     setLoading(true);
     setError('');
+    clearDisconnected();
     try {
-      const [result, membersResult, userResult] = await papiRetry(() => Promise.all([
-        papi.commands.sendCommand('paratextProjectManager.getTasks', projectId),
-        papi.commands.sendCommand('paratextProjectManager.getTeamMembers'),
-        papi.commands.sendCommand('paratextProjectManager.getCurrentUser'),
-      ]), { isCancelled: () => !isCurrentRequest() });
+      const [result, membersResult, userResult] = await papiRetry(
+        () =>
+          Promise.all([
+            papi.commands.sendCommand('paratextProjectManager.getTasks', projectId),
+            papi.commands.sendCommand('paratextProjectManager.getTeamMembers'),
+            papi.commands.sendCommand('paratextProjectManager.getCurrentUser'),
+          ]),
+        { isCancelled: () => !isCurrentRequest() },
+      );
       if (!isCurrentRequest()) return;
       const store = JSON.parse(result) as TaskStore;
       setTasks(store.tasks ?? []);
@@ -849,11 +861,11 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       if (userResult && typeof userResult === 'string' && userResult.length > 0)
         setCurrentUser(userResult);
     } catch (e2) {
-      if (isCurrentRequest()) setError(`Error al cargar: ${errMsg(e2)}`);
+      if (isCurrentRequest()) setError(handleCatch(e2, 'Error al cargar: '));
     } finally {
       if (isCurrentRequest()) setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, clearDisconnected, handleCatch]);
 
   useEffect(() => {
     loadTasks();
@@ -870,7 +882,9 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
     if (!projectId || refreshInProgressRef.current) return;
     refreshInProgressRef.current = true;
     try {
-      const result = await papiRetry(() => papi.commands.sendCommand('paratextProjectManager.getTasks', projectId));
+      const result = await papiRetry(() =>
+        papi.commands.sendCommand('paratextProjectManager.getTasks', projectId),
+      );
       const store = JSON.parse(result as string) as TaskStore;
       lastRefreshRef.current = Date.now();
       const incomingDeleted = new Set(store.deletedTaskIds ?? []);
@@ -893,12 +907,14 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       });
       if (store.stageConfig && Object.keys(store.stageConfig).length > 0)
         setStageConfig(store.stageConfig);
-    } catch (_) {
-      /* silent */
+    } catch (e) {
+      // Surface disconnects so the reconnect banner + auto-reload engage;
+      // other background-refresh errors stay silent.
+      if (isPapiDisconnectedError(e)) setError(handleCatch(e));
     } finally {
       refreshInProgressRef.current = false;
     }
-  }, [projectId]);
+  }, [projectId, handleCatch]);
 
   // Periodic refresh every 60 s
   useEffect(() => {
@@ -907,17 +923,17 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
     return () => clearInterval(interval);
   }, [projectId, silentRefresh]);
 
-  // Refresh on visibility change but no more than once every 30 seconds
+  // Refresh on visibility change but no more than once every 30 seconds.
+  // (Auto-reload when disconnected is handled by usePapiDisconnect.)
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return;
+      if (disconnected) return;
       if (Date.now() - lastRefreshRef.current > 30_000) silentRefresh();
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [silentRefresh]);
-
-
+  }, [silentRefresh, disconnected]);
 
   // --- Google Calendar callbacks ---
 
@@ -2222,15 +2238,12 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       </div>
 
       {error && (
-        <div className="tw:bg-red-50 tw:border-b tw:border-red-200 tw:px-3 tw:py-1 tw:text-red-700 tw:text-xs tw:font-medium tw:flex tw:justify-between tw:items-center">
-          <span>{error}</span>
-          <button
-            onClick={loadTasks}
-            className="tw:text-red-700 tw:underline tw:hover:text-red-900 tw:ml-2 tw:cursor-pointer"
-          >
-            (reintentar)
-          </button>
-        </div>
+        <ReconnectBanner
+          error={error}
+          disconnected={disconnected}
+          onRetry={loadTasks}
+          variant="bar"
+        />
       )}
 
       {/* Tab bar */}
@@ -2688,8 +2701,6 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                           </div>
                         )}
 
-
-
                         {/* Group Chat */}
                         <div className="tw:border tw:rounded tw:bg-white">
                           <div className="tw:bg-slate-50 tw:border-b tw:px-2 tw:py-1.5 tw:font-semibold tw:text-slate-700">
@@ -2765,7 +2776,9 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                             <button
                               onClick={() => {
                                 const replyPrefix = `@${chatContextMenu.user} `;
-                                setChatInput((prev) => (prev.startsWith(replyPrefix) ? prev : replyPrefix + prev));
+                                setChatInput((prev) =>
+                                  prev.startsWith(replyPrefix) ? prev : replyPrefix + prev,
+                                );
                                 setChatContextMenu(null);
                                 const inputEl = document.getElementById('coordination-chat-input');
                                 if (inputEl) inputEl.focus();

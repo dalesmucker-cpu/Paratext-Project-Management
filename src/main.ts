@@ -27,11 +27,7 @@ import keyTermsAnalyticsWebView from './key-terms-analytics.web-view?inline';
 import keyTermsAnalyticsStyles from './key-terms-analytics.web-view.scss?inline';
 
 import type { PendingTimeSyncEntry } from './types/task.types';
-import type {
-  KeyTermsStore,
-  VerseMatchStatus,
-  MatchResult,
-} from './types/key-terms.types';
+import type { KeyTermsStore, VerseMatchStatus, MatchResult } from './types/key-terms.types';
 import { loadLegacyKeyTermsAsync } from './utils/key-terms-parser';
 import { matchRendering } from './utils/key-terms-matcher';
 
@@ -158,10 +154,12 @@ function sendToNotesHelper(action: string, args: any[], timeoutMs = 15000): Prom
 
 let helperStartAttempts = 0;
 let helperStartupTimer: NodeJS.Timeout | undefined;
-let activeCollabParams: {
-  action: 'startCollabHost' | 'connectCollabClient';
-  args: any[];
-} | undefined = undefined;
+let activeCollabParams:
+  | {
+      action: 'startCollabHost' | 'connectCollabClient';
+      args: any[];
+    }
+  | undefined = undefined;
 
 function startNotesHelper(createProcess: ElevatedPrivileges['createProcess']): void {
   if (!createProcess) return;
@@ -242,9 +240,11 @@ function startNotesHelper(createProcess: ElevatedPrivileges['createProcess']): v
           // Restore active collaboration if any
           if (activeCollabParams) {
             logger.info(`Restoring active collaboration session: ${activeCollabParams.action}`);
-            sendToNotesHelper(activeCollabParams.action, activeCollabParams.args).catch((restoreErr) => {
-              logger.warn(`Failed to restore active collaboration session: ${restoreErr}`);
-            });
+            sendToNotesHelper(activeCollabParams.action, activeCollabParams.args).catch(
+              (restoreErr) => {
+                logger.warn(`Failed to restore active collaboration session: ${restoreErr}`);
+              },
+            );
           }
         }, 2000);
       }
@@ -426,7 +426,9 @@ async function runFileHelper(
       }
       return String(res !== undefined && res !== null ? res : '');
     } catch (err) {
-      logger.warn(`runFileHelper IPC failed for action ${action}: ${err}. Falling back to runScript.`);
+      logger.warn(
+        `runFileHelper IPC failed for action ${action}: ${err}. Falling back to runScript.`,
+      );
     }
   }
   return runScript('assets/file-helper.js', [action, targetPath], stdinData, timeoutMs);
@@ -818,9 +820,7 @@ const taskBoardProvider: IWebViewProvider = {
       throw new Error(`Wrong webview type: ${savedWebView.webViewType}`);
     // savedWebView.projectId is set on re-open (persisted); pending id is set on first open
     const projectId =
-      savedWebView.projectId ??
-      openWebViewOptions?.projectId ??
-      takePendingProjectId(savedWebView);
+      savedWebView.projectId ?? openWebViewOptions?.projectId ?? takePendingProjectId(savedWebView);
     return {
       ...savedWebView,
       projectId,
@@ -839,9 +839,7 @@ const myTasksProvider: IWebViewProvider = {
     if (savedWebView.webViewType !== MY_TASKS_TYPE)
       throw new Error(`Wrong webview type: ${savedWebView.webViewType}`);
     const projectId =
-      savedWebView.projectId ??
-      openWebViewOptions?.projectId ??
-      takePendingProjectId(savedWebView);
+      savedWebView.projectId ?? openWebViewOptions?.projectId ?? takePendingProjectId(savedWebView);
     return {
       ...savedWebView,
       projectId,
@@ -860,9 +858,7 @@ const projectOverviewProvider: IWebViewProvider = {
     if (savedWebView.webViewType !== PROJECT_OVERVIEW_TYPE)
       throw new Error(`Wrong webview type: ${savedWebView.webViewType}`);
     const projectId =
-      savedWebView.projectId ??
-      openWebViewOptions?.projectId ??
-      takePendingProjectId(savedWebView);
+      savedWebView.projectId ?? openWebViewOptions?.projectId ?? takePendingProjectId(savedWebView);
     return {
       ...savedWebView,
       projectId,
@@ -881,9 +877,7 @@ const notesViewerProvider: IWebViewProvider = {
     if (savedWebView.webViewType !== NOTES_VIEWER_TYPE)
       throw new Error(`Wrong webview type: ${savedWebView.webViewType}`);
     const projectId =
-      savedWebView.projectId ??
-      openWebViewOptions?.projectId ??
-      takePendingProjectId(savedWebView);
+      savedWebView.projectId ?? openWebViewOptions?.projectId ?? takePendingProjectId(savedWebView);
     return {
       ...savedWebView,
       projectId,
@@ -902,9 +896,7 @@ const scriptureViewerProvider: IWebViewProvider = {
     if (savedWebView.webViewType !== SCRIPTURE_VIEWER_TYPE)
       throw new Error(`Wrong webview type: ${savedWebView.webViewType}`);
     const projectId =
-      savedWebView.projectId ??
-      openWebViewOptions?.projectId ??
-      takePendingProjectId(savedWebView);
+      savedWebView.projectId ?? openWebViewOptions?.projectId ?? takePendingProjectId(savedWebView);
     return {
       ...savedWebView,
       projectId,
@@ -923,9 +915,7 @@ const keyTermsProvider: IWebViewProvider = {
     if (savedWebView.webViewType !== KEY_TERMS_TYPE)
       throw new Error(`Wrong webview type: ${savedWebView.webViewType}`);
     const projectId =
-      savedWebView.projectId ??
-      openWebViewOptions?.projectId ??
-      takePendingProjectId(savedWebView);
+      savedWebView.projectId ?? openWebViewOptions?.projectId ?? takePendingProjectId(savedWebView);
     return {
       ...savedWebView,
       projectId,
@@ -944,9 +934,7 @@ const keyTermsAnalyticsProvider: IWebViewProvider = {
     if (savedWebView.webViewType !== KEY_TERMS_ANALYTICS_TYPE)
       throw new Error(`Wrong webview type: ${savedWebView.webViewType}`);
     const projectId =
-      savedWebView.projectId ??
-      openWebViewOptions?.projectId ??
-      takePendingProjectId(savedWebView);
+      savedWebView.projectId ?? openWebViewOptions?.projectId ?? takePendingProjectId(savedWebView);
     return {
       ...savedWebView,
       projectId,
@@ -1525,7 +1513,10 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
                       }
                     } else {
                       const existing = verseMap.get(child.number);
-                      verseMap.set(child.number, existing ? existing + ' ' + child.text : child.text);
+                      verseMap.set(
+                        child.number,
+                        existing ? existing + ' ' + child.text : child.text,
+                      );
                     }
                   } else {
                     const existing = verseMap.get(child.number);
@@ -1644,7 +1635,9 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
           }
         };
 
-        const workers = Array(concurrency).fill(null).map(() => worker());
+        const workers = Array(concurrency)
+          .fill(null)
+          .map(() => worker());
         await Promise.all(workers);
 
         return JSON.stringify({

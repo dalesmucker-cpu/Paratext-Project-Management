@@ -5,11 +5,10 @@ export interface PapiRetryOptions {
 }
 
 /**
- * Error thrown when the PAPI JSON-RPC connection between the webview and the
- * host is unavailable (e.g. after the program has been idle and the underlying
- * WebSocket has been closed). Retrying the command on a dead connection never
- * succeeds, so callers should treat this as a signal to reconnect (reload the
- * webview) rather than blindly retrying.
+ * Error thrown when the PAPI JSON-RPC connection between the webview and the host is unavailable
+ * (e.g. after the program has been idle and the underlying WebSocket has been closed). Retrying the
+ * command on a dead connection never succeeds, so callers should treat this as a signal to
+ * reconnect (reload the webview) rather than blindly retrying.
  */
 export class PapiDisconnectedError extends Error {
   readonly isDisconnected = true;
@@ -23,11 +22,10 @@ export class PapiDisconnectedError extends Error {
 }
 
 /**
- * Returns true if the given error indicates the PAPI JSON-RPC connection is
- * down. PAPI surfaces this as e.g.
- *   "JSON-RPC Request error (0): Tried to send payload while not connected"
- * The error may be an Error, a plain object with a `message` field, or a
- * string, so we normalize before matching.
+ * Returns true if the given error indicates the PAPI JSON-RPC connection is down. PAPI surfaces
+ * this as e.g. "JSON-RPC Request error (0): Tried to send payload while not connected" The error
+ * may be an Error, a plain object with a `message` field, or a string, so we normalize before
+ * matching.
  */
 export function isPapiDisconnectedError(e: unknown): boolean {
   if (e instanceof PapiDisconnectedError) return true;
@@ -59,18 +57,15 @@ function errorToText(e: unknown): string {
 }
 
 /**
- * Retries an async function (typically a PAPI command call) with exponential backoff.
- * Delays: 2s -> 4s -> 8s (assuming default baseDelayMs of 2000)
+ * Retries an async function (typically a PAPI command call) with exponential backoff. Delays: 2s ->
+ * 4s -> 8s (assuming default baseDelayMs of 2000)
  *
- * If the failure looks like the PAPI connection has dropped (see
- * {@link isPapiDisconnectedError}), retrying on a dead connection is futile,
- * so we do at most one short retry (in case it was a transient blip) and then
- * throw a {@link PapiDisconnectedError} so the caller can offer a reconnect.
+ * If the failure looks like the PAPI connection has dropped (see {@link isPapiDisconnectedError}),
+ * retrying on a dead connection is futile, so we do at most one short retry (in case it was a
+ * transient blip) and then throw a {@link PapiDisconnectedError} so the caller can offer a
+ * reconnect.
  */
-export async function papiRetry<T>(
-  fn: () => Promise<T>,
-  options?: PapiRetryOptions,
-): Promise<T> {
+export async function papiRetry<T>(fn: () => Promise<T>, options?: PapiRetryOptions): Promise<T> {
   const { maxRetries = 3, baseDelayMs = 2000, isCancelled } = options ?? {};
   let lastError: unknown;
 

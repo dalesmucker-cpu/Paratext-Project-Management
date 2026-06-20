@@ -4,9 +4,11 @@ import { useDialogCallback } from '@papi/frontend/react';
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import type { ParatextNoteThread } from './types/note.types';
 import { ScrollGroupSelector } from 'platform-bible-react';
-import { papiRetry } from './utils/papi-retry';
+import { papiRetry, isPapiDisconnectedError } from './utils/papi-retry';
+import { usePapiDisconnect } from './utils/use-papi-disconnect';
 
 import { AudioPlayer, AttachmentViewer } from './components/note-media-components';
+import { ReconnectBanner } from './components/reconnect-banner';
 
 function renderTextWithLinks(text: string, baseKey: string): React.ReactNode[] | string {
   const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
@@ -541,6 +543,10 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   const [chapterBlocks, setChapterBlocks] = useState<ChapterBlock[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // True when the PAPI JSON-RPC connection to the host has dropped (typically
+  // after the program has been idle). When true, the UI offers a "Reconectar"
+  // button that reloads the webview.
+  const { disconnected, clearDisconnected, handleCatch } = usePapiDisconnect();
   // Auto-dismiss error after 15 seconds
   useEffect(() => {
     if (!error) return;
@@ -607,7 +613,8 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       const link = document.createElement('link');
       link.id = 'google-fonts-link';
       link.rel = 'stylesheet';
-      link.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Outfit:wght@400;600;700&display=swap';
+      link.href =
+        'https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Outfit:wght@400;600;700&display=swap';
       document.head.appendChild(link);
     }
   }, []);
@@ -662,8 +669,6 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       </span>
     );
   };
-
-
 
   const injectCursorsIntoElements = (
     nodes: React.ReactNode,
@@ -768,9 +773,15 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       const parsedNotes = JSON.parse(notesRes) as { threads: ParatextNoteThread[] };
       setAllNotes(parsedNotes.threads || []);
     } catch (err) {
-      console.error('Failed to load notes', err);
+      // Notes load silently in the background, but if the PAPI connection
+      // dropped we must surface it so the reconnect banner appears.
+      if (isPapiDisconnectedError(err)) {
+        setError(handleCatch(err));
+      } else {
+        console.error('Failed to load notes', err);
+      }
     }
-  }, [projectId, currentUser]);
+  }, [projectId, currentUser, handleCatch]);
 
   const loadKeyTermsMatchesRequestRef = useRef(0);
 
@@ -800,10 +811,14 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
           setChapterKeyTermsMatches(matchesMap);
         }
       } catch (e) {
-        console.error('Failed to load key terms matches:', e);
+        if (isPapiDisconnectedError(e)) {
+          setError(handleCatch(e));
+        } else {
+          console.error('Failed to load key terms matches:', e);
+        }
       }
     },
-    [projectId, keyTermsOverlayEnabled],
+    [projectId, keyTermsOverlayEnabled, handleCatch],
   );
 
   const highlightKeyTermsInNode = useCallback(
@@ -879,7 +894,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                       match.termId,
                     );
                   } catch (err) {
-                     console.error('Failed to open/select key term on word click:', err);
+                    console.error('Failed to open/select key term on word click:', err);
                   }
                 }}
               >
@@ -941,6 +956,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       const requestId = ++loadChapterRequestRef.current;
       const isCurrentRequest = () => requestId === loadChapterRequestRef.current;
       setLoading(true);
+      clearDisconnected();
       try {
         const textRes = await papiRetry(
           () =>
@@ -976,12 +992,12 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
         });
       } catch (retryErr) {
         console.error(retryErr);
-        if (isCurrentRequest()) setError('Error al cargar texto o notas.');
+        if (isCurrentRequest()) setError(handleCatch(retryErr, 'Error al cargar texto o notas. '));
       } finally {
         if (isCurrentRequest()) setLoading(false);
       }
     },
-    [projectId, loadNotes, loadKeyTermsMatches],
+    [projectId, loadNotes, loadKeyTermsMatches, clearDisconnected, handleCatch],
   );
 
   const lastBroadcastTimeRef = useRef<number>(0);
@@ -1086,8 +1102,6 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     },
     [currentUser, projectId, selectedBook, selectedChapter],
   );
-
-
 
   // Verse editing states
   const [isEditingVerse, setIsEditingVerse] = useState(false);
@@ -1535,8 +1549,6 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     return '';
   };
 
-
-
   const handleContentEditableSave = async (newText: string, verseNum: number) => {
     if (!projectId) return;
     const originalText = getVerseText(verseNum);
@@ -1670,7 +1682,9 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
               title="Click para ver la nota"
             >
               <span className="tw:border-b tw:border-dashed tw:border-slate-400">{part}</span>
-              <span className="tw:text-xs tw:ml-0.5" role="img" aria-label="nota">{symbol}</span>
+              <span className="tw:text-xs tw:ml-0.5" role="img" aria-label="nota">
+                {symbol}
+              </span>
             </span>
           );
         }
@@ -1768,13 +1782,16 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     if (!projectId) return;
     setLoading(true);
     setError('');
+    clearDisconnected();
     try {
-      const [uRes, tmRes, bRes, collabRes] = await papiRetry(() => Promise.all([
-        papi.commands.sendCommand('paratextProjectManager.getCurrentUser'),
-        papi.commands.sendCommand('paratextProjectManager.getTeamMembers'),
-        papi.commands.sendCommand('paratextProjectManager.getProjectBooks', projectId),
-        papi.commands.sendCommand('paratextProjectManager.getCollabStatus'),
-      ]));
+      const [uRes, tmRes, bRes, collabRes] = await papiRetry(() =>
+        Promise.all([
+          papi.commands.sendCommand('paratextProjectManager.getCurrentUser'),
+          papi.commands.sendCommand('paratextProjectManager.getTeamMembers'),
+          papi.commands.sendCommand('paratextProjectManager.getProjectBooks', projectId),
+          papi.commands.sendCommand('paratextProjectManager.getCollabStatus'),
+        ]),
+      );
       if (uRes) {
         setCurrentUser(uRes);
       } else if (collabRes && collabRes.username) {
@@ -1786,10 +1803,9 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       setBooks(bookList);
 
       if (bookList.length > 0) {
-        const lastNav = await papiRetry(() => papi.commands.sendCommand(
-          'paratextProjectManager.getLastNavigatedVerse',
-          projectId,
-        ));
+        const lastNav = await papiRetry(() =>
+          papi.commands.sendCommand('paratextProjectManager.getLastNavigatedVerse', projectId),
+        );
         if (lastNav) {
           setSelectedBook(lastNav.bookCode);
           setSelectedChapter(lastNav.chapter);
@@ -1822,7 +1838,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       }
     } catch (err) {
       console.error(err);
-      setError('Error al cargar libros de Escritura.');
+      setError(handleCatch(err, 'Error al cargar libros de Escritura. '));
     } finally {
       setLoading(false);
     }
@@ -1833,11 +1849,13 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     initData();
   }, [initData]);
 
-  // Refresh on visibility change but no more than once every 30 seconds
+  // Refresh on visibility change but no more than once every 30 seconds.
+  // (Auto-reload when disconnected is handled by usePapiDisconnect.)
   const lastRefreshRef = useRef(0);
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return;
+      if (disconnected) return;
       if (Date.now() - lastRefreshRef.current > 30_000) {
         lastRefreshRef.current = Date.now();
         if (selectedBook) {
@@ -1848,7 +1866,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [selectedBook, selectedChapter, loadChapter, loadNotes]);
+  }, [selectedBook, selectedChapter, loadChapter, loadNotes, disconnected]);
 
   // Cleaned up original non-callback loadChapter/loadNotes definitions since they were moved to top.
 
@@ -2284,8 +2302,6 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     }
   };
 
-
-
   // Create new note thread
   const handleCreateNote = async () => {
     if (!projectId) return;
@@ -2400,640 +2416,671 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       <div className="tw:flex-1 tw:flex tw:flex-row tw:overflow-hidden">
         {/* Left Pane: Scripture Text */}
         <div className="tw:flex-1 tw:flex tw:flex-col tw:bg-white tw:min-w-0 tw:h-full tw:overflow-hidden">
-        {/* Toolbar */}
-        <div className="tw:px-4 tw:py-2 tw:bg-white tw:border-b tw:border-gray-200 tw:flex tw:flex-wrap tw:items-center tw:justify-between tw:gap-2 tw:shrink-0 tw:shadow-sm">
-          <div className="tw:flex tw:items-center tw:gap-2">
-            <button
-              onClick={toggleControls}
-              className="tw:p-1.5 tw:rounded-md tw:text-slate-600 tw:hover:bg-slate-100 tw:hover:text-slate-800 tw:transition-colors tw:cursor-pointer tw:flex tw:items-center tw:justify-center"
-              title={controlsVisible ? 'Ocultar controles' : 'Mostrar controles'}
-            >
-              <svg
-                className="tw:w-5 tw:h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M4 6h16M4 12h16M4 18h16"
-                ></path>
-              </svg>
-            </button>
-            <span className="tw:font-bold tw:text-slate-800 tw:text-base">Lector</span>
-            <button
-              onClick={() => selectProject()}
-              className="tw:px-2 tw:py-1 tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:border-slate-350 tw:rounded tw:text-xs tw:font-semibold tw:text-slate-700 tw:cursor-pointer"
-              title="Cambiar de proyecto o recurso"
-            >
-              Recurso
-            </button>
-            <select
-              value={selectedBook}
-              onChange={(e) => {
-                navigateToReference(e.target.value, 1, 1);
-              }}
-              className="tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:text-xs tw:font-semibold tw:text-slate-700 focus:tw:outline-none focus:tw:border-indigo-500"
-            >
-              {books.map((b) => (
-                <option key={b.code} value={b.code}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
-
-            {/* Chapter Selection */}
-            <div className="tw:flex tw:items-center tw:gap-1">
+          {/* Toolbar */}
+          <div className="tw:px-4 tw:py-2 tw:bg-white tw:border-b tw:border-gray-200 tw:flex tw:flex-wrap tw:items-center tw:justify-between tw:gap-2 tw:shrink-0 tw:shadow-sm">
+            <div className="tw:flex tw:items-center tw:gap-2">
               <button
-                disabled={selectedChapter <= 1}
-                onClick={() => navigateToReference(selectedBook, selectedChapter - 1, 1)}
-                className="tw:px-2 tw:py-1 tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:rounded tw:text-xs tw:disabled:opacity-40 tw:cursor-pointer"
+                onClick={toggleControls}
+                className="tw:p-1.5 tw:rounded-md tw:text-slate-600 tw:hover:bg-slate-100 tw:hover:text-slate-800 tw:transition-colors tw:cursor-pointer tw:flex tw:items-center tw:justify-center"
+                title={controlsVisible ? 'Ocultar controles' : 'Mostrar controles'}
               >
-                ◀
+                <svg
+                  className="tw:w-5 tw:h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M4 6h16M4 12h16M4 18h16"
+                  ></path>
+                </svg>
+              </button>
+              <span className="tw:font-bold tw:text-slate-800 tw:text-base">Lector</span>
+              <button
+                onClick={() => selectProject()}
+                className="tw:px-2 tw:py-1 tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:border-slate-350 tw:rounded tw:text-xs tw:font-semibold tw:text-slate-700 tw:cursor-pointer"
+                title="Cambiar de proyecto o recurso"
+              >
+                Recurso
               </button>
               <select
-                value={selectedChapter}
-                onChange={(e) => navigateToReference(selectedBook, Number(e.target.value), 1)}
+                value={selectedBook}
+                onChange={(e) => {
+                  navigateToReference(e.target.value, 1, 1);
+                }}
                 className="tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:text-xs tw:font-semibold tw:text-slate-700 focus:tw:outline-none focus:tw:border-indigo-500"
               >
-                {Array.from({ length: totalChapters }, (_, idx) => idx + 1).map((ch) => (
-                  <option key={ch} value={ch}>
-                    Cap {ch}
+                {books.map((b) => (
+                  <option key={b.code} value={b.code}>
+                    {b.name}
                   </option>
                 ))}
               </select>
-              <button
-                disabled={selectedChapter >= totalChapters}
-                onClick={() => navigateToReference(selectedBook, selectedChapter + 1, 1)}
-                className="tw:px-2 tw:py-1 tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:rounded tw:text-xs tw:disabled:opacity-40 tw:cursor-pointer"
-              >
-                ▶
-              </button>
-            </div>
-          </div>
 
-          <div className="tw:flex tw:items-center tw:gap-2">
-            {/* User picker */}
-            {controlsVisible &&
-              (currentUser ? (
-                <span
-                  className="tw:text-xs tw:font-semibold tw:text-slate-700 tw:bg-slate-100 tw:border tw:px-2 tw:py-1 tw:rounded tw:cursor-pointer hover:tw:bg-slate-200 tw:transition-colors tw:flex tw:items-center tw:gap-1"
-                  onClick={() => setCurrentUser('')}
-                  title="Haga clic para cambiar de usuario"
-                >
-                  Usuario: {currentUser}
-                </span>
-              ) : (
-                <div className="tw:flex tw:items-center tw:gap-1 tw:bg-amber-50 tw:border tw:border-amber-200 tw:px-2 tw:py-1 tw:rounded">
-                  <span className="tw:text-amber-800 tw:font-medium tw:text-[10px]">
-                    ¿Quién eres?
-                  </span>
-                  <select
-                    className="tw:border tw:rounded tw:px-1.5 tw:py-0.5 tw:bg-white tw:text-[10px] focus:tw:outline-none"
-                    value={currentUser}
-                    onChange={async (e) => {
-                      const val = e.target.value;
-                      if (val) {
-                        setCurrentUser(val);
-                        try {
-                          await papi.commands.sendCommand(
-                            'paratextProjectManager.setCurrentUser',
-                            val,
-                          );
-                        } catch (_) {}
-                      }
-                    }}
-                  >
-                    <option value="">Seleccionar...</option>
-                    {teamMembers.map((m) => (
-                      <option key={m} value={m}>
-                        {m}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ))}
-
-            {/* Scroll Group Selector */}
-            {controlsVisible && typeof useWebViewScrollGroupScrRef === 'function' && setScrollGroupId && (
-              <div className="tw:inline-flex tw:items-center tw:scale-90">
-                <ScrollGroupSelector
-                  availableScrollGroupIds={[undefined, ...Array(5).keys()]}
-                  onChangeScrollGroupId={setScrollGroupId}
-                  scrollGroupId={scrollGroupId}
-                />
-              </div>
-            )}
-
-            {/* Font size adjustment */}
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => setFontSize((f) => Math.max(12, f - 2))}
-              className="tw:px-2.5 tw:py-1 tw:bg-slate-50 tw:hover:bg-slate-100 tw:border tw:rounded tw:text-xs tw:cursor-pointer"
-              title="Disminuir tamaño de letra"
-            >
-              A-
-            </button>
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => setFontSize((f) => Math.min(30, f + 2))}
-              className="tw:px-2.5 tw:py-1 tw:bg-slate-50 tw:hover:bg-slate-100 tw:border tw:rounded tw:text-xs tw:cursor-pointer"
-              title="Aumentar tamaño de letra"
-            >
-              A+
-            </button>
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => {
-                const nextVal = !keyTermsOverlayEnabled;
-                setKeyTermsOverlayEnabled(nextVal);
-                localStorage.setItem('key_terms_overlay_enabled', nextVal ? 'true' : 'false');
-              }}
-              className={`tw:px-2.5 tw:py-1 tw:border tw:rounded tw:text-xs tw:cursor-pointer tw:flex tw:items-center tw:gap-1 tw:transition-all ${
-                keyTermsOverlayEnabled
-                  ? 'tw:bg-indigo-600 tw:hover:bg-indigo-700 tw:border-indigo-600 tw:text-white'
-                  : 'tw:bg-slate-50 tw:hover:bg-slate-100 tw:border-slate-300 tw:text-slate-700'
-              }`}
-              title="Alternar resaltado de Términos Clave"
-            >
-              🔑 Términos Clave
-            </button>
-            <div className="tw:relative">
-              <button
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => setShowSettings(!showSettings)}
-                className={`tw:px-2.5 tw:py-1 tw:border tw:rounded tw:text-xs tw:cursor-pointer tw:flex tw:items-center tw:gap-1 tw:transition-all ${
-                  showSettings
-                    ? 'tw:bg-slate-700 tw:border-slate-700 tw:text-white'
-                    : 'tw:bg-slate-50 tw:hover:bg-slate-100 tw:border-slate-300 tw:text-slate-700'
-                }`}
-                title="Configuración del Lector"
-              >
-                ⚙️ Configuración
-              </button>
-
-              {showSettings && (
-                <div 
-                  className="tw:absolute tw:right-0 tw:top-full tw:mt-1.5 tw:w-64 tw:border tw:border-slate-200 tw:rounded-xl tw:shadow-xl tw:p-4 tw:space-y-3.5 tw:text-xs"
-                  style={{ backgroundColor: '#ffffff', color: '#1e293b', zIndex: 10000 }}
-                >
-                  <div className="tw:font-bold tw:border-b tw:pb-1.5" style={{ borderColor: '#e2e8f0', color: '#1e293b' }}>Configuración de Lectura</div>
-                  <div className="tw:flex tw:items-center tw:justify-between tw:gap-2">
-                    <span className="tw:font-medium" style={{ color: '#475569' }}>Versículo en línea propia</span>
-                    <input
-                      type="checkbox"
-                      checked={versesOnOwnLine}
-                      onChange={(e) => {
-                        const val = e.target.checked;
-                        setVersesOnOwnLine(val);
-                        localStorage.setItem('scripture_viewer_verses_own_line', String(val));
-                      }}
-                      className="tw:cursor-pointer"
-                    />
-                  </div>
-
-                  <div className="tw:flex tw:flex-col tw:gap-1">
-                    <span className="tw:font-medium" style={{ color: '#475569' }}>Fuente del Texto</span>
-                    <select
-                      value={fontFamily}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setFontFamily(val);
-                        localStorage.setItem('scripture_viewer_font_family', val);
-                      }}
-                      className="tw:border tw:rounded-lg tw:px-2 tw:py-1.5 focus:tw:outline-none"
-                      style={{ backgroundColor: '#f8fafc', color: '#334155', borderColor: '#cbd5e1' }}
-                    >
-                      <option value="sans-serif">Predeterminado (Sans)</option>
-                      <option value="serif">Georgia (Serif)</option>
-                      <option value="monospace">Consolas (Monospace)</option>
-                      <option value="outfit">Outfit (Premium)</option>
-                      <option value="inter">Inter (Moderno)</option>
-                    </select>
-                  </div>
-
-                  <div className="tw:flex tw:flex-col tw:gap-1">
-                    <span className="tw:font-medium" style={{ color: '#475569' }}>Visualización de Notas</span>
-                    <select
-                      value={notesDisplayStyle}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setNotesDisplayStyle(val);
-                        localStorage.setItem('scripture_viewer_notes_display_style', val);
-                      }}
-                      className="tw:border tw:rounded-lg tw:px-2 tw:py-1.5 focus:tw:outline-none"
-                      style={{ backgroundColor: '#f8fafc', color: '#334155', borderColor: '#cbd5e1' }}
-                    >
-                      <option value="highlight">Resaltado Amarillo</option>
-                      <option value="flag">Bandera (🚩)</option>
-                      <option value="pin">Pin (📌)</option>
-                      <option value="dialog">Globo de Diálogo (💬)</option>
-                      <option value="tag">Etiqueta (🏷️)</option>
-                    </select>
-                  </div>
-                </div>
-              )}
-            </div>
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => {
-                const nextVal = !showDraftingSidebar;
-                setShowDraftingSidebar(nextVal);
-                localStorage.setItem('scripture_viewer_drafting_sidebar', String(nextVal));
-              }}
-              className={`tw:px-2.5 tw:py-1 tw:border tw:rounded tw:text-xs tw:cursor-pointer tw:flex tw:items-center tw:gap-1 tw:transition-all ${
-                showDraftingSidebar
-                  ? 'tw:bg-violet-600 tw:hover:bg-violet-700 tw:border-violet-600 tw:text-white'
-                  : 'tw:bg-slate-50 tw:hover:bg-slate-100 tw:border-slate-300 tw:text-slate-700'
-              }`}
-              title="Alternar panel lateral de redactado"
-            >
-              ✍️ Redactar (Términos)
-            </button>
-            {isEditingVerse && (
-              <button
-                type="button"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  triggerVerseUndo();
-                }}
-                disabled={!verseEditorCanUndo}
-                title="Deshacer (Ctrl+Z)"
-                className="tw:px-2.5 tw:py-1 tw:bg-amber-50 tw:hover:bg-amber-100 tw:border tw:border-amber-300 tw:text-amber-800 tw:rounded tw:text-xs tw:font-semibold tw:cursor-pointer disabled:tw:opacity-40 disabled:tw:cursor-not-allowed tw:flex tw:items-center tw:gap-1 tw:transition-all"
-              >
-                Deshacer
-              </button>
-            )}
-            <button
-              onClick={() => loadChapter(selectedBook, selectedChapter)}
-              className="tw:px-3 tw:py-1 tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:border-slate-200 tw:text-slate-700 tw:rounded tw:text-xs tw:font-semibold tw:cursor-pointer"
-            >
-              {loading ? 'Cargando...' : 'Actualizar'}
-            </button>
-          </div>
-        </div>
-
-        {/* Scrollable text sheet */}
-        <div className="tw:flex-1 tw:overflow-y-auto tw:p-8 tw:leading-relaxed tw:text-slate-800">
-          <div
-            className="tw:max-w-2xl tw:mx-auto tw:space-y-6"
-            style={{
-              fontSize: `${fontSize}px`,
-              fontFamily: fontFamily === 'sans-serif' ? 'system-ui, -apple-system, sans-serif' :
-                          fontFamily === 'serif' ? 'Georgia, Cambria, "Times New Roman", serif' :
-                          fontFamily === 'monospace' ? 'Consolas, "Courier New", monospace' :
-                          fontFamily === 'outfit' ? '"Outfit", system-ui, sans-serif' :
-                          fontFamily === 'inter' ? '"Inter", system-ui, sans-serif' :
-                          'system-ui, -apple-system, sans-serif'
-            }}
-          >
-            {error && (
-              <div className="tw:p-4 tw:text-red-750 tw:bg-red-50 tw:border tw:border-red-200 tw:rounded-lg tw:text-sm tw:flex tw:justify-between tw:items-center">
-                <span>{error}</span>
+              {/* Chapter Selection */}
+              <div className="tw:flex tw:items-center tw:gap-1">
                 <button
-                  onClick={() => loadChapter(selectedBook, selectedChapter)}
-                  className="tw:text-red-700 tw:underline tw:hover:text-red-900 tw:ml-2 tw:cursor-pointer"
+                  disabled={selectedChapter <= 1}
+                  onClick={() => navigateToReference(selectedBook, selectedChapter - 1, 1)}
+                  className="tw:px-2 tw:py-1 tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:rounded tw:text-xs tw:disabled:opacity-40 tw:cursor-pointer"
                 >
-                  (reintentar)
+                  ◀
+                </button>
+                <select
+                  value={selectedChapter}
+                  onChange={(e) => navigateToReference(selectedBook, Number(e.target.value), 1)}
+                  className="tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:text-xs tw:font-semibold tw:text-slate-700 focus:tw:outline-none focus:tw:border-indigo-500"
+                >
+                  {Array.from({ length: totalChapters }, (_, idx) => idx + 1).map((ch) => (
+                    <option key={ch} value={ch}>
+                      Cap {ch}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  disabled={selectedChapter >= totalChapters}
+                  onClick={() => navigateToReference(selectedBook, selectedChapter + 1, 1)}
+                  className="tw:px-2 tw:py-1 tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:rounded tw:text-xs tw:disabled:opacity-40 tw:cursor-pointer"
+                >
+                  ▶
                 </button>
               </div>
-            )}
+            </div>
 
-            {loading && chapterBlocks.length === 0 ? (
-              <div className="tw:p-12 tw:text-center tw:text-gray-400 tw:italic tw:text-sm">
-                Cargando el texto de la Escritura...
-              </div>
-            ) : (
-              chapterBlocks.map((block, bIdx) => {
-                if (block.type === 'heading') {
-                  return (
-                    <h3
-                      key={bIdx}
-                      className="tw:text-lg tw:font-bold tw:text-slate-900 tw:mt-6 tw:mb-3 tw:text-justify"
-                    >
-                      {block.text}
-                    </h3>
-                  );
-                }
-
-                const isPoetry = block.type === 'poetry';
-                const indentClass = isPoetry ? `tw:pl-${(block.indent || 1) * 4}` : '';
-
-                return (
-                  <p
-                    key={bIdx}
-                    className={`tw:mb-4 ${isPoetry ? 'tw:mb-2' : ''} ${indentClass} tw:text-justify`}
+            <div className="tw:flex tw:items-center tw:gap-2">
+              {/* User picker */}
+              {controlsVisible &&
+                (currentUser ? (
+                  <span
+                    className="tw:text-xs tw:font-semibold tw:text-slate-700 tw:bg-slate-100 tw:border tw:px-2 tw:py-1 tw:rounded tw:cursor-pointer hover:tw:bg-slate-200 tw:transition-colors tw:flex tw:items-center tw:gap-1"
+                    onClick={() => setCurrentUser('')}
+                    title="Haga clic para cambiar de usuario"
                   >
-                    {block.children.map((child, cIdx) => {
-                      if (child.type === 'text') {
-                        return <span key={cIdx}>{renderFootnotes(child.text)}</span>;
-                      }
+                    Usuario: {currentUser}
+                  </span>
+                ) : (
+                  <div className="tw:flex tw:items-center tw:gap-1 tw:bg-amber-50 tw:border tw:border-amber-200 tw:px-2 tw:py-1 tw:rounded">
+                    <span className="tw:text-amber-800 tw:font-medium tw:text-[10px]">
+                      ¿Quién eres?
+                    </span>
+                    <select
+                      className="tw:border tw:rounded tw:px-1.5 tw:py-0.5 tw:bg-white tw:text-[10px] focus:tw:outline-none"
+                      value={currentUser}
+                      onChange={async (e) => {
+                        const val = e.target.value;
+                        if (val) {
+                          setCurrentUser(val);
+                          try {
+                            await papi.commands.sendCommand(
+                              'paratextProjectManager.setCurrentUser',
+                              val,
+                            );
+                          } catch (_) {}
+                        }
+                      }}
+                    >
+                      <option value="">Seleccionar...</option>
+                      {teamMembers.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
 
-                      const isSelected = selectedVerseNum === child.number;
-                      const isEditing = isEditingVerse && isSelected;
-                      const editorsWithCursors = Object.entries(collabCursors)
-                        .filter(([user, cursor]) => {
-                          return (
+              {/* Scroll Group Selector */}
+              {controlsVisible &&
+                typeof useWebViewScrollGroupScrRef === 'function' &&
+                setScrollGroupId && (
+                  <div className="tw:inline-flex tw:items-center tw:scale-90">
+                    <ScrollGroupSelector
+                      availableScrollGroupIds={[undefined, ...Array(5).keys()]}
+                      onChangeScrollGroupId={setScrollGroupId}
+                      scrollGroupId={scrollGroupId}
+                    />
+                  </div>
+                )}
+
+              {/* Font size adjustment */}
+              <button
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setFontSize((f) => Math.max(12, f - 2))}
+                className="tw:px-2.5 tw:py-1 tw:bg-slate-50 tw:hover:bg-slate-100 tw:border tw:rounded tw:text-xs tw:cursor-pointer"
+                title="Disminuir tamaño de letra"
+              >
+                A-
+              </button>
+              <button
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setFontSize((f) => Math.min(30, f + 2))}
+                className="tw:px-2.5 tw:py-1 tw:bg-slate-50 tw:hover:bg-slate-100 tw:border tw:rounded tw:text-xs tw:cursor-pointer"
+                title="Aumentar tamaño de letra"
+              >
+                A+
+              </button>
+              <button
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  const nextVal = !keyTermsOverlayEnabled;
+                  setKeyTermsOverlayEnabled(nextVal);
+                  localStorage.setItem('key_terms_overlay_enabled', nextVal ? 'true' : 'false');
+                }}
+                className={`tw:px-2.5 tw:py-1 tw:border tw:rounded tw:text-xs tw:cursor-pointer tw:flex tw:items-center tw:gap-1 tw:transition-all ${
+                  keyTermsOverlayEnabled
+                    ? 'tw:bg-indigo-600 tw:hover:bg-indigo-700 tw:border-indigo-600 tw:text-white'
+                    : 'tw:bg-slate-50 tw:hover:bg-slate-100 tw:border-slate-300 tw:text-slate-700'
+                }`}
+                title="Alternar resaltado de Términos Clave"
+              >
+                🔑 Términos Clave
+              </button>
+              <div className="tw:relative">
+                <button
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => setShowSettings(!showSettings)}
+                  className={`tw:px-2.5 tw:py-1 tw:border tw:rounded tw:text-xs tw:cursor-pointer tw:flex tw:items-center tw:gap-1 tw:transition-all ${
+                    showSettings
+                      ? 'tw:bg-slate-700 tw:border-slate-700 tw:text-white'
+                      : 'tw:bg-slate-50 tw:hover:bg-slate-100 tw:border-slate-300 tw:text-slate-700'
+                  }`}
+                  title="Configuración del Lector"
+                >
+                  ⚙️ Configuración
+                </button>
+
+                {showSettings && (
+                  <div
+                    className="tw:absolute tw:right-0 tw:top-full tw:mt-1.5 tw:w-64 tw:border tw:border-slate-200 tw:rounded-xl tw:shadow-xl tw:p-4 tw:space-y-3.5 tw:text-xs"
+                    style={{ backgroundColor: '#ffffff', color: '#1e293b', zIndex: 10000 }}
+                  >
+                    <div
+                      className="tw:font-bold tw:border-b tw:pb-1.5"
+                      style={{ borderColor: '#e2e8f0', color: '#1e293b' }}
+                    >
+                      Configuración de Lectura
+                    </div>
+                    <div className="tw:flex tw:items-center tw:justify-between tw:gap-2">
+                      <span className="tw:font-medium" style={{ color: '#475569' }}>
+                        Versículo en línea propia
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={versesOnOwnLine}
+                        onChange={(e) => {
+                          const val = e.target.checked;
+                          setVersesOnOwnLine(val);
+                          localStorage.setItem('scripture_viewer_verses_own_line', String(val));
+                        }}
+                        className="tw:cursor-pointer"
+                      />
+                    </div>
+
+                    <div className="tw:flex tw:flex-col tw:gap-1">
+                      <span className="tw:font-medium" style={{ color: '#475569' }}>
+                        Fuente del Texto
+                      </span>
+                      <select
+                        value={fontFamily}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setFontFamily(val);
+                          localStorage.setItem('scripture_viewer_font_family', val);
+                        }}
+                        className="tw:border tw:rounded-lg tw:px-2 tw:py-1.5 focus:tw:outline-none"
+                        style={{
+                          backgroundColor: '#f8fafc',
+                          color: '#334155',
+                          borderColor: '#cbd5e1',
+                        }}
+                      >
+                        <option value="sans-serif">Predeterminado (Sans)</option>
+                        <option value="serif">Georgia (Serif)</option>
+                        <option value="monospace">Consolas (Monospace)</option>
+                        <option value="outfit">Outfit (Premium)</option>
+                        <option value="inter">Inter (Moderno)</option>
+                      </select>
+                    </div>
+
+                    <div className="tw:flex tw:flex-col tw:gap-1">
+                      <span className="tw:font-medium" style={{ color: '#475569' }}>
+                        Visualización de Notas
+                      </span>
+                      <select
+                        value={notesDisplayStyle}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setNotesDisplayStyle(val);
+                          localStorage.setItem('scripture_viewer_notes_display_style', val);
+                        }}
+                        className="tw:border tw:rounded-lg tw:px-2 tw:py-1.5 focus:tw:outline-none"
+                        style={{
+                          backgroundColor: '#f8fafc',
+                          color: '#334155',
+                          borderColor: '#cbd5e1',
+                        }}
+                      >
+                        <option value="highlight">Resaltado Amarillo</option>
+                        <option value="flag">Bandera (🚩)</option>
+                        <option value="pin">Pin (📌)</option>
+                        <option value="dialog">Globo de Diálogo (💬)</option>
+                        <option value="tag">Etiqueta (🏷️)</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <button
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  const nextVal = !showDraftingSidebar;
+                  setShowDraftingSidebar(nextVal);
+                  localStorage.setItem('scripture_viewer_drafting_sidebar', String(nextVal));
+                }}
+                className={`tw:px-2.5 tw:py-1 tw:border tw:rounded tw:text-xs tw:cursor-pointer tw:flex tw:items-center tw:gap-1 tw:transition-all ${
+                  showDraftingSidebar
+                    ? 'tw:bg-violet-600 tw:hover:bg-violet-700 tw:border-violet-600 tw:text-white'
+                    : 'tw:bg-slate-50 tw:hover:bg-slate-100 tw:border-slate-300 tw:text-slate-700'
+                }`}
+                title="Alternar panel lateral de redactado"
+              >
+                ✍️ Redactar (Términos)
+              </button>
+              {isEditingVerse && (
+                <button
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    triggerVerseUndo();
+                  }}
+                  disabled={!verseEditorCanUndo}
+                  title="Deshacer (Ctrl+Z)"
+                  className="tw:px-2.5 tw:py-1 tw:bg-amber-50 tw:hover:bg-amber-100 tw:border tw:border-amber-300 tw:text-amber-800 tw:rounded tw:text-xs tw:font-semibold tw:cursor-pointer disabled:tw:opacity-40 disabled:tw:cursor-not-allowed tw:flex tw:items-center tw:gap-1 tw:transition-all"
+                >
+                  Deshacer
+                </button>
+              )}
+              <button
+                onClick={() => loadChapter(selectedBook, selectedChapter)}
+                className="tw:px-3 tw:py-1 tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:border-slate-200 tw:text-slate-700 tw:rounded tw:text-xs tw:font-semibold tw:cursor-pointer"
+              >
+                {loading ? 'Cargando...' : 'Actualizar'}
+              </button>
+            </div>
+          </div>
+
+          {/* Scrollable text sheet */}
+          <div className="tw:flex-1 tw:overflow-y-auto tw:p-8 tw:leading-relaxed tw:text-slate-800">
+            <div
+              className="tw:max-w-2xl tw:mx-auto tw:space-y-6"
+              style={{
+                fontSize: `${fontSize}px`,
+                fontFamily:
+                  fontFamily === 'sans-serif'
+                    ? 'system-ui, -apple-system, sans-serif'
+                    : fontFamily === 'serif'
+                      ? 'Georgia, Cambria, "Times New Roman", serif'
+                      : fontFamily === 'monospace'
+                        ? 'Consolas, "Courier New", monospace'
+                        : fontFamily === 'outfit'
+                          ? '"Outfit", system-ui, sans-serif'
+                          : fontFamily === 'inter'
+                            ? '"Inter", system-ui, sans-serif'
+                            : 'system-ui, -apple-system, sans-serif',
+              }}
+            >
+              {error && (
+                <ReconnectBanner
+                  error={error}
+                  disconnected={disconnected}
+                  onRetry={() => loadChapter(selectedBook, selectedChapter)}
+                  variant="bar"
+                />
+              )}
+
+              {loading && chapterBlocks.length === 0 ? (
+                <div className="tw:p-12 tw:text-center tw:text-gray-400 tw:italic tw:text-sm">
+                  Cargando el texto de la Escritura...
+                </div>
+              ) : (
+                chapterBlocks.map((block, bIdx) => {
+                  if (block.type === 'heading') {
+                    return (
+                      <h3
+                        key={bIdx}
+                        className="tw:text-lg tw:font-bold tw:text-slate-900 tw:mt-6 tw:mb-3 tw:text-justify"
+                      >
+                        {block.text}
+                      </h3>
+                    );
+                  }
+
+                  const isPoetry = block.type === 'poetry';
+                  const indentClass = isPoetry ? `tw:pl-${(block.indent || 1) * 4}` : '';
+
+                  return (
+                    <p
+                      key={bIdx}
+                      className={`tw:mb-4 ${isPoetry ? 'tw:mb-2' : ''} ${indentClass} tw:text-justify`}
+                    >
+                      {block.children.map((child, cIdx) => {
+                        if (child.type === 'text') {
+                          return <span key={cIdx}>{renderFootnotes(child.text)}</span>;
+                        }
+
+                        const isSelected = selectedVerseNum === child.number;
+                        const isEditing = isEditingVerse && isSelected;
+                        const editorsWithCursors = Object.entries(collabCursors)
+                          .filter(([user, cursor]) => {
+                            return (
+                              user !== currentUser &&
+                              cursor.projectId === projectId &&
+                              cursor.book === selectedBook &&
+                              cursor.chapter === selectedChapter &&
+                              cursor.verse === child.number
+                            );
+                          })
+                          .map(([user, cursor]) => ({ user, offset: cursor.offset ?? 0 }));
+
+                        const otherEditingUsers = Object.entries(collabCursors).filter(
+                          ([user, cursor]) =>
                             user !== currentUser &&
                             cursor.projectId === projectId &&
                             cursor.book === selectedBook &&
                             cursor.chapter === selectedChapter &&
-                            cursor.verse === child.number
-                          );
-                        })
-                        .map(([user, cursor]) => ({ user, offset: cursor.offset ?? 0 }));
-
-                      const otherEditingUsers = Object.entries(collabCursors).filter(
-                        ([user, cursor]) =>
-                          user !== currentUser &&
-                          cursor.projectId === projectId &&
-                          cursor.book === selectedBook &&
-                          cursor.chapter === selectedChapter &&
-                          cursor.verse === child.number,
-                      );
-                      const otherEditor = otherEditingUsers[0];
-                      const otherEditorHighlight = otherEditor
-                        ? getCursorColors(otherEditor[0]).highlight
-                        : null;
-
-                      const isEmpty = !child.text || child.text.trim().length === 0;
-                      const selectionForThisVerse =
-                        verseHighlight && verseHighlight.verseNum === child.number
-                          ? verseHighlight
+                            cursor.verse === child.number,
+                        );
+                        const otherEditor = otherEditingUsers[0];
+                        const otherEditorHighlight = otherEditor
+                          ? getCursorColors(otherEditor[0]).highlight
                           : null;
-                      return (
-                        <span
-                          key={cIdx}
-                          id={`verse-${child.number}`}
-                          onClick={() => handleVerseClick(child.number, child.text)}
-                          onContextMenu={(e) => handleVerseContextMenu(e, child.number, child.text)}
-                          onMouseUp={() => {
-                            if (!isEditing) {
-                              captureVerseHighlight(child.number, child.text);
-                            }
-                          }}
-                          className={`tw:relative tw:rounded tw:transition-all tw:py-0.5 tw:cursor-text ${
-                            versesOnOwnLine ? 'tw:block tw:mb-2' : 'tw:inline'
-                          }`}
-                          style={{
-                            ...(otherEditorHighlight
-                              ? {
-                                  backgroundColor: otherEditorHighlight,
-                                  padding: '2px 4px',
-                                  borderRadius: '4px',
-                                }
-                              : {}),
-                            // Show the dashed placeholder only when not actively editing
-                            ...(isEmpty && !isEditing
-                              ? {
-                                  minWidth: '32px',
-                                  display: 'inline-block',
-                                  height: '1.2em',
-                                  verticalAlign: 'middle',
-                                  borderBottom: '1px dashed #94a3b8',
-                                  marginRight: '4px',
-                                }
-                              : {}),
-                          }}
-                        >
-                          {/* Verse number tag */}
-                          {keyTermsOverlayEnabled &&
-                            (() => {
-                              const verseMatches = Object.values(chapterKeyTermsMatches).filter(
-                                (m: any) =>
-                                  isVerseInRef(
-                                    selectedBook,
-                                    selectedChapter,
-                                    child.number,
-                                    m.reference,
-                                  ),
-                              );
-                              if (verseMatches.length === 0) return null;
-                              const totalExpected = verseMatches.length;
-                              const totalFound = verseMatches.filter(
-                                (m: any) => m.matchResult?.found,
-                              ).length;
-                              const verseRef = `${selectedBook} ${selectedChapter}:${child.number}`;
-                              return (
-                                <span
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setActiveVersePopup({
-                                      verseNum: child.number,
-                                      reference: verseRef,
-                                      expected: verseMatches,
-                                    });
-                                  }}
-                                  className="tw:inline-flex tw:items-center tw:justify-center tw:w-5 tw:h-5 tw:cursor-pointer tw:mr-0.5 tw:align-middle"
-                                  title={`Términos clave: ${totalFound}/${totalExpected} encontrados. Haga clic para ver detalles.`}
-                                  style={{ position: 'relative', top: '-1px' }}
-                                >
-                                  <span
-                                    className={`tw:w-2.5 tw:h-2.5 tw:rounded-full tw:transition-transform hover:tw:scale-125 ${
-                                      totalFound === totalExpected
-                                        ? 'tw:bg-emerald-500'
-                                        : totalFound > 0
-                                          ? 'tw:bg-amber-500'
-                                          : 'tw:bg-rose-500'
-                                    }`}
-                                  />
-                                </span>
-                              );
-                            })()}
-                          <sup
-                            className={`tw:select-none tw:font-bold tw:mr-1 tw:px-1 tw:rounded ${
-                              flashVerseNum === child.number
-                                ? 'verse-flash tw:text-white'
-                                : 'tw:text-slate-400'
-                            }`}
-                            style={{ fontSize: '0.65em', top: '-0.3em' }}
-                          >
-                            {child.numberStr || child.number}
-                          </sup>
 
-                          {/* Verse text content */}
-                          {isEditing ? (
-                            <EditableVerse
-                              initialText={child.text}
-                              initialOffset={initialOffset}
-                              onSave={async (newText) => {
-                                await handleContentEditableSave(newText, child.number);
-                              }}
-                              onCancel={() => {
-                                setIsEditingVerse(false);
-                                setSelectedVerseNum(null);
-                              }}
-                              onContextMenu={(e) =>
-                                handleVerseContextMenu(e, child.number, child.text)
+                        const isEmpty = !child.text || child.text.trim().length === 0;
+                        const selectionForThisVerse =
+                          verseHighlight && verseHighlight.verseNum === child.number
+                            ? verseHighlight
+                            : null;
+                        return (
+                          <span
+                            key={cIdx}
+                            id={`verse-${child.number}`}
+                            onClick={() => handleVerseClick(child.number, child.text)}
+                            onContextMenu={(e) =>
+                              handleVerseContextMenu(e, child.number, child.text)
+                            }
+                            onMouseUp={() => {
+                              if (!isEditing) {
+                                captureVerseHighlight(child.number, child.text);
                               }
-                              onCursorChange={(offset) => {
-                                handleCursorChange(child.number, offset);
-                              }}
-                              onUndoStateChange={(canUndoNow) => {
-                                setVerseEditorCanUndo(canUndoNow);
-                              }}
-                              onEditBroadcast={(text) => {
-                                handleVerseEditBroadcast(child.number, text);
-                              }}
-                            />
-                          ) : (
-                            <span>
-                              {highlightKeyTermsInNode(
-                                renderFootnotes(
-                                  injectCursorsIntoElements(
-                                    selectionForThisVerse
-                                      ? wrapRangeInMark(
-                                          highlightText(
+                            }}
+                            className={`tw:relative tw:rounded tw:transition-all tw:py-0.5 tw:cursor-text ${
+                              versesOnOwnLine ? 'tw:block tw:mb-2' : 'tw:inline'
+                            }`}
+                            style={{
+                              ...(otherEditorHighlight
+                                ? {
+                                    backgroundColor: otherEditorHighlight,
+                                    padding: '2px 4px',
+                                    borderRadius: '4px',
+                                  }
+                                : {}),
+                              // Show the dashed placeholder only when not actively editing
+                              ...(isEmpty && !isEditing
+                                ? {
+                                    minWidth: '32px',
+                                    display: 'inline-block',
+                                    height: '1.2em',
+                                    verticalAlign: 'middle',
+                                    borderBottom: '1px dashed #94a3b8',
+                                    marginRight: '4px',
+                                  }
+                                : {}),
+                            }}
+                          >
+                            {/* Verse number tag */}
+                            {keyTermsOverlayEnabled &&
+                              (() => {
+                                const verseMatches = Object.values(chapterKeyTermsMatches).filter(
+                                  (m: any) =>
+                                    isVerseInRef(
+                                      selectedBook,
+                                      selectedChapter,
+                                      child.number,
+                                      m.reference,
+                                    ),
+                                );
+                                if (verseMatches.length === 0) return null;
+                                const totalExpected = verseMatches.length;
+                                const totalFound = verseMatches.filter(
+                                  (m: any) => m.matchResult?.found,
+                                ).length;
+                                const verseRef = `${selectedBook} ${selectedChapter}:${child.number}`;
+                                return (
+                                  <span
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setActiveVersePopup({
+                                        verseNum: child.number,
+                                        reference: verseRef,
+                                        expected: verseMatches,
+                                      });
+                                    }}
+                                    className="tw:inline-flex tw:items-center tw:justify-center tw:w-5 tw:h-5 tw:cursor-pointer tw:mr-0.5 tw:align-middle"
+                                    title={`Términos clave: ${totalFound}/${totalExpected} encontrados. Haga clic para ver detalles.`}
+                                    style={{ position: 'relative', top: '-1px' }}
+                                  >
+                                    <span
+                                      className={`tw:w-2.5 tw:h-2.5 tw:rounded-full tw:transition-transform hover:tw:scale-125 ${
+                                        totalFound === totalExpected
+                                          ? 'tw:bg-emerald-500'
+                                          : totalFound > 0
+                                            ? 'tw:bg-amber-500'
+                                            : 'tw:bg-rose-500'
+                                      }`}
+                                    />
+                                  </span>
+                                );
+                              })()}
+                            <sup
+                              className={`tw:select-none tw:font-bold tw:mr-1 tw:px-1 tw:rounded ${
+                                flashVerseNum === child.number
+                                  ? 'verse-flash tw:text-white'
+                                  : 'tw:text-slate-400'
+                              }`}
+                              style={{ fontSize: '0.65em', top: '-0.3em' }}
+                            >
+                              {child.numberStr || child.number}
+                            </sup>
+
+                            {/* Verse text content */}
+                            {isEditing ? (
+                              <EditableVerse
+                                initialText={child.text}
+                                initialOffset={initialOffset}
+                                onSave={async (newText) => {
+                                  await handleContentEditableSave(newText, child.number);
+                                }}
+                                onCancel={() => {
+                                  setIsEditingVerse(false);
+                                  setSelectedVerseNum(null);
+                                }}
+                                onContextMenu={(e) =>
+                                  handleVerseContextMenu(e, child.number, child.text)
+                                }
+                                onCursorChange={(offset) => {
+                                  handleCursorChange(child.number, offset);
+                                }}
+                                onUndoStateChange={(canUndoNow) => {
+                                  setVerseEditorCanUndo(canUndoNow);
+                                }}
+                                onEditBroadcast={(text) => {
+                                  handleVerseEditBroadcast(child.number, text);
+                                }}
+                              />
+                            ) : (
+                              <span>
+                                {highlightKeyTermsInNode(
+                                  renderFootnotes(
+                                    injectCursorsIntoElements(
+                                      selectionForThisVerse
+                                        ? wrapRangeInMark(
+                                            highlightText(
+                                              child.text,
+                                              chapterNotesByVerse[child.number] ?? [],
+                                              child.number,
+                                            ),
+                                            selectionForThisVerse.start,
+                                            selectionForThisVerse.end,
+                                            `v${child.number}`,
+                                          )
+                                        : highlightText(
                                             child.text,
                                             chapterNotesByVerse[child.number] ?? [],
                                             child.number,
                                           ),
-                                          selectionForThisVerse.start,
-                                          selectionForThisVerse.end,
-                                          `v${child.number}`,
-                                        )
-                                      : highlightText(
-                                          child.text,
-                                          chapterNotesByVerse[child.number] ?? [],
-                                          child.number,
-                                        ),
-                                    editorsWithCursors,
+                                      editorsWithCursors,
+                                    ),
                                   ),
-                                ),
-                                child.number,
-                                selectedBook,
-                              )}
-                            </span>
-                          )}
-                        </span>
-                      );
-                    })}
-                  </p>
-                );
-              })
-            )}
+                                  child.number,
+                                  selectedBook,
+                                )}
+                              </span>
+                            )}
+                          </span>
+                        );
+                      })}
+                    </p>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Right Sidebar: Key Terms for Drafting (zero clicks) */}
-      {showDraftingSidebar && (
-        <div className="tw:w-80 tw:border-l tw:border-slate-200 tw:bg-slate-50 tw:flex tw:flex-col tw:h-full tw:overflow-hidden tw:shrink-0 tw:no-print">
-          {/* Sidebar Header */}
-          <div className="tw:px-4 tw:py-3 tw:bg-white tw:border-b tw:border-slate-200 tw:flex tw:items-center tw:justify-between tw:shrink-0">
-            <span className="tw:font-bold tw:text-slate-800 tw:text-xs uppercase tw:tracking-wider">
-              ✍️ Términos para Redactar
-            </span>
-            {selectedVerseNum && (
-              <span className="tw:px-2 tw:py-0.5 tw:bg-slate-100 tw:text-slate-600 tw:rounded-full tw:text-[10px] tw:font-semibold">
-                Versículo {selectedVerseNum}
+        {/* Right Sidebar: Key Terms for Drafting (zero clicks) */}
+        {showDraftingSidebar && (
+          <div className="tw:w-80 tw:border-l tw:border-slate-200 tw:bg-slate-50 tw:flex tw:flex-col tw:h-full tw:overflow-hidden tw:shrink-0 tw:no-print">
+            {/* Sidebar Header */}
+            <div className="tw:px-4 tw:py-3 tw:bg-white tw:border-b tw:border-slate-200 tw:flex tw:items-center tw:justify-between tw:shrink-0">
+              <span className="tw:font-bold tw:text-slate-800 tw:text-xs uppercase tw:tracking-wider">
+                ✍️ Términos para Redactar
               </span>
-            )}
-          </div>
+              {selectedVerseNum && (
+                <span className="tw:px-2 tw:py-0.5 tw:bg-slate-100 tw:text-slate-600 tw:rounded-full tw:text-[10px] tw:font-semibold">
+                  Versículo {selectedVerseNum}
+                </span>
+              )}
+            </div>
 
-          {/* Sidebar Content */}
-          <div className="tw:flex-grow tw:overflow-y-auto tw:p-4 tw:space-y-4">
-            {!selectedVerseNum ? (
-              <div className="tw:text-center tw:text-slate-400 tw:italic tw:py-12 tw:text-xs">
-                Haz clic en un versículo para ver los términos clave que debes usar.
-              </div>
-            ) : (
-              (() => {
-                const verseMatches = Object.values(chapterKeyTermsMatches).filter(
-                  (m: any) =>
-                    isVerseInRef(
-                      selectedBook,
-                      selectedChapter,
-                      selectedVerseNum,
-                      m.reference,
-                    ),
-                );
+            {/* Sidebar Content */}
+            <div className="tw:flex-grow tw:overflow-y-auto tw:p-4 tw:space-y-4">
+              {!selectedVerseNum ? (
+                <div className="tw:text-center tw:text-slate-400 tw:italic tw:py-12 tw:text-xs">
+                  Haz clic en un versículo para ver los términos clave que debes usar.
+                </div>
+              ) : (
+                (() => {
+                  const verseMatches = Object.values(chapterKeyTermsMatches).filter((m: any) =>
+                    isVerseInRef(selectedBook, selectedChapter, selectedVerseNum, m.reference),
+                  );
 
-                if (verseMatches.length === 0) {
+                  if (verseMatches.length === 0) {
+                    return (
+                      <div className="tw:text-center tw:text-slate-400 tw:italic tw:py-12 tw:text-xs">
+                        No hay términos clave registrados para {selectedBook} {selectedChapter}:
+                        {selectedVerseNum}.
+                      </div>
+                    );
+                  }
+
                   return (
-                    <div className="tw:text-center tw:text-slate-400 tw:italic tw:py-12 tw:text-xs">
-                      No hay términos clave registrados para {selectedBook} {selectedChapter}:{selectedVerseNum}.
+                    <div className="tw:space-y-3">
+                      <div className="tw:text-[10.5px] tw:font-bold tw:text-slate-500 uppercase tw:tracking-wider">
+                        Términos requeridos en {selectedBook} {selectedChapter}:{selectedVerseNum}:
+                      </div>
+                      <div className="tw:space-y-2.5">
+                        {verseMatches.map((m: any) => (
+                          <div
+                            key={m.termId}
+                            className="tw:bg-white tw:p-3 tw:rounded-xl tw:border tw:border-slate-200 tw:shadow-sm tw:space-y-2 tw:transition-all hover:tw:shadow-md"
+                          >
+                            <div className="tw:flex tw:items-start tw:justify-between tw:gap-2">
+                              <div>
+                                <button
+                                  onClick={() => {
+                                    papi.commands
+                                      .sendCommand(
+                                        'paratextProjectManager.openHebrewGreekDictionary',
+                                        m.strongs || m.lemma,
+                                      )
+                                      .catch((err) => console.error(err));
+                                  }}
+                                  className="tw:text-left tw:font-bold tw:text-xs tw:text-slate-700 hover:tw:text-indigo-600 hover:tw:underline tw:cursor-pointer tw:bg-transparent tw:border-none tw:p-0"
+                                  title={
+                                    m.strongs
+                                      ? `Diccionario Strong: ${m.strongs}`
+                                      : `Buscar definición: ${m.lemma}`
+                                  }
+                                >
+                                  {m.gloss}
+                                </button>
+                                <div className="tw:text-[10px] tw:text-slate-400 tw:font-serif tw:mt-0.5">
+                                  {m.lemma}
+                                </div>
+                              </div>
+                              {m.matchResult?.found ? (
+                                <span className="tw:text-[9px] tw:bg-emerald-50 tw:text-emerald-700 tw:px-2 tw:py-0.5 tw:border tw:border-emerald-250 tw:rounded-full tw:font-semibold tw:whitespace-nowrap">
+                                  ✓ Usado
+                                </span>
+                              ) : (
+                                <span className="tw:text-[9px] tw:bg-rose-50 tw:text-rose-700 tw:px-2 tw:py-0.5 tw:border tw:border-rose-250 tw:rounded-full tw:font-semibold tw:whitespace-nowrap">
+                                  ✗ Faltante
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Expected Renderings */}
+                            <div className="tw:text-[10px] tw:text-slate-500">
+                              <span className="tw:font-semibold">Traducciones sugeridas:</span>
+                              {m.expectedRenderings && m.expectedRenderings.length > 0 ? (
+                                <div className="tw:flex tw:flex-wrap tw:gap-1 tw:mt-1">
+                                  {m.expectedRenderings.map((r: string, rIdx: number) => (
+                                    <span
+                                      key={rIdx}
+                                      className="tw:text-[9px] tw:bg-indigo-50/50 tw:text-indigo-600 tw:px-1.5 tw:py-0.5 tw:rounded tw:border tw:border-indigo-100"
+                                    >
+                                      {r}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="tw:italic tw:text-slate-400 tw:ml-1">
+                                  Ninguna registrada
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   );
-                }
-
-                return (
-                  <div className="tw:space-y-3">
-                    <div className="tw:text-[10.5px] tw:font-bold tw:text-slate-500 uppercase tw:tracking-wider">
-                      Términos requeridos en {selectedBook} {selectedChapter}:{selectedVerseNum}:
-                    </div>
-                    <div className="tw:space-y-2.5">
-                      {verseMatches.map((m: any) => (
-                        <div
-                          key={m.termId}
-                          className="tw:bg-white tw:p-3 tw:rounded-xl tw:border tw:border-slate-200 tw:shadow-sm tw:space-y-2 tw:transition-all hover:tw:shadow-md"
-                        >
-                          <div className="tw:flex tw:items-start tw:justify-between tw:gap-2">
-                            <div>
-                              <button
-                                onClick={() => {
-                                  papi.commands.sendCommand(
-                                    'paratextProjectManager.openHebrewGreekDictionary',
-                                    m.strongs || m.lemma
-                                  ).catch((err) => console.error(err));
-                                }}
-                                className="tw:text-left tw:font-bold tw:text-xs tw:text-slate-700 hover:tw:text-indigo-600 hover:tw:underline tw:cursor-pointer tw:bg-transparent tw:border-none tw:p-0"
-                                title={m.strongs ? `Diccionario Strong: ${m.strongs}` : `Buscar definición: ${m.lemma}`}
-                              >
-                                {m.gloss}
-                              </button>
-                              <div className="tw:text-[10px] tw:text-slate-400 tw:font-serif tw:mt-0.5">{m.lemma}</div>
-                            </div>
-                            {m.matchResult?.found ? (
-                              <span className="tw:text-[9px] tw:bg-emerald-50 tw:text-emerald-700 tw:px-2 tw:py-0.5 tw:border tw:border-emerald-250 tw:rounded-full tw:font-semibold tw:whitespace-nowrap">
-                                ✓ Usado
-                              </span>
-                            ) : (
-                              <span className="tw:text-[9px] tw:bg-rose-50 tw:text-rose-700 tw:px-2 tw:py-0.5 tw:border tw:border-rose-250 tw:rounded-full tw:font-semibold tw:whitespace-nowrap">
-                                ✗ Faltante
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Expected Renderings */}
-                          <div className="tw:text-[10px] tw:text-slate-500">
-                            <span className="tw:font-semibold">Traducciones sugeridas:</span>
-                            {m.expectedRenderings && m.expectedRenderings.length > 0 ? (
-                              <div className="tw:flex tw:flex-wrap tw:gap-1 tw:mt-1">
-                                {m.expectedRenderings.map((r: string, rIdx: number) => (
-                                  <span
-                                    key={rIdx}
-                                    className="tw:text-[9px] tw:bg-indigo-50/50 tw:text-indigo-600 tw:px-1.5 tw:py-0.5 tw:rounded tw:border tw:border-indigo-100"
-                                  >
-                                    {r}
-                                  </span>
-                                ))}
-                              </div>
-                            ) : (
-                              <span className="tw:italic tw:text-slate-400 tw:ml-1">Ninguna registrada</span>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()
-            )}
+                })()
+              )}
+            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
 
-    {/* Context menu for selection */}
+      {/* Context menu for selection */}
       {contextMenu && (
         <div
           className="tw:fixed tw:z-[10000] tw:bg-white tw:border tw:border-slate-200 tw:shadow-lg tw:rounded-lg tw:py-1 tw:w-40 tw:text-xs"
