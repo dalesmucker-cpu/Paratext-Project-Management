@@ -1662,7 +1662,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
             <span
               key={index}
               onClick={clickHandler}
-              className={`tw:cursor-pointer tw:px-0.5 tw:rounded tw:transition tw:inline-flex tw:items-center tw:gap-0.5 ${
+              className={`tw:cursor-pointer tw:px-0.5 tw:rounded tw:transition tw:inline ${
                 isSelectedThread
                   ? 'tw:border tw:border-indigo-400 tw:bg-indigo-50 tw:text-indigo-800 tw:font-semibold'
                   : 'tw:hover:bg-slate-100 tw:text-slate-800'
@@ -1670,7 +1670,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
               title="Click para ver la nota"
             >
               <span className="tw:border-b tw:border-dashed tw:border-slate-400">{part}</span>
-              <span className="tw:text-xs" role="img" aria-label="nota">{symbol}</span>
+              <span className="tw:text-xs tw:ml-0.5" role="img" aria-label="nota">{symbol}</span>
             </span>
           );
         }
