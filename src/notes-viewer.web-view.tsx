@@ -3,7 +3,7 @@ import papi from '@papi/frontend';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { ParatextNoteThread, NotesDisplaySettings } from './types/note.types';
 import { DEFAULT_NOTES_SETTINGS } from './types/note.types';
-import { papiRetry } from './utils/papi-retry';
+import { papiRetry, isPapiDisconnectedError } from './utils/papi-retry';
 
 import { BIBLE_BOOKS } from './types/shared.constants';
 
@@ -157,6 +157,10 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
   const [threads, setThreads] = useState<ParatextNoteThread[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // True when the PAPI JSON-RPC connection to the host has dropped (typically
+  // after the program has been idle). When true, retrying commands is futile,
+  // so the UI offers a "Reconectar" button that reloads the webview.
+  const [disconnected, setDisconnected] = useState(false);
   const [currentUser, setCurrentUser] = useState('');
 
   // Auto-dismiss error after 15 seconds
@@ -356,6 +360,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
       const isCurrentRequest = () => requestId === loadNotesRequestRef.current;
       setLoading(true);
       setError('');
+      setDisconnected(false);
       try {
         const res = await papiRetry(
           () =>
@@ -392,7 +397,16 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
           setSelectedThreadId(loadedThreads[0].threadId);
         }
       } catch (retryErr) {
-        if (isCurrentRequest()) setError(`Error al cargar notas: ${errMsg(retryErr)}`);
+        if (isCurrentRequest()) {
+          if (isPapiDisconnectedError(retryErr)) {
+            setDisconnected(true);
+            setError(
+              'Se perdió la conexión con Paratext (probablemente por inactividad). Haz clic en "Reconectar" para reanudar.',
+            );
+          } else {
+            setError(`Error al cargar notas: ${errMsg(retryErr)}`);
+          }
+        }
       } finally {
         if (isCurrentRequest()) setLoading(false);
       }
@@ -435,9 +449,21 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
 
   // Refresh on visibility change but no more than once every 30 seconds
   const lastRefreshRef = useRef(0);
+  // Mirror of `disconnected` for use inside stable event listeners without
+  // re-subscribing on every state change.
+  const disconnectedRef = useRef(false);
+  disconnectedRef.current = disconnected;
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return;
+      // If the PAPI connection dropped while idle, reload the webview to
+      // re-establish the JSON-RPC connection from scratch. This is the
+      // reliable recovery path; retrying commands on a dead connection
+      // cannot succeed.
+      if (disconnectedRef.current) {
+        window.location.reload();
+        return;
+      }
       if (Date.now() - lastRefreshRef.current > 30_000) {
         lastRefreshRef.current = Date.now();
         loadNotes();
@@ -1022,14 +1048,26 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
       </div>
 
       {error && (
-        <div className="tw:bg-red-50 tw:border-b tw:border-red-200 tw:px-4 tw:py-2 tw:text-red-700 tw:text-xs tw:font-medium tw:flex tw:justify-between tw:items-center">
+        <div className="tw:bg-red-50 tw:border-b tw:border-red-200 tw:px-4 tw:py-2 tw:text-red-700 tw:text-xs tw:font-medium tw:flex tw:justify-between tw:items-center tw:gap-2">
           <span>{error}</span>
-          <button
-            onClick={() => loadNotes(selectedThreadId)}
-            className="tw:text-red-700 tw:underline tw:hover:text-red-900 tw:ml-2 tw:cursor-pointer"
-          >
-            (reintentar)
-          </button>
+          <div className="tw:flex tw:items-center tw:gap-3 tw:shrink-0">
+            {disconnected ? (
+              <button
+                onClick={() => window.location.reload()}
+                className="tw:bg-red-600 tw:hover:bg-red-700 tw:text-white tw:px-3 tw:py-1 tw:rounded tw:font-semibold tw:cursor-pointer tw:transition-colors"
+                title="Recargar la vista para reestablecer la conexión con Paratext"
+              >
+                Reconectar
+              </button>
+            ) : (
+              <button
+                onClick={() => loadNotes(selectedThreadId)}
+                className="tw:text-red-700 tw:underline tw:hover:text-red-900 tw:ml-2 tw:cursor-pointer"
+              >
+                (reintentar)
+              </button>
+            )}
+          </div>
         </div>
       )}
 

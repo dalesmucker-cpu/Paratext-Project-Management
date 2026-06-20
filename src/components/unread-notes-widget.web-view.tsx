@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import papi from '@papi/frontend';
 import type { ParatextNoteThread, NotesDisplaySettings } from '../types/note.types';
 import { DEFAULT_NOTES_SETTINGS } from '../types/note.types';
-import { papiRetry } from '../utils/papi-retry';
+import { papiRetry, isPapiDisconnectedError } from '../utils/papi-retry';
 
 import { AudioPlayer, AttachmentViewer } from './note-media-components';
 
@@ -96,6 +96,17 @@ interface UnreadNotesWidgetProps {
   onRefreshTrigger?: () => void;
 }
 
+/** Safely convert any caught value (including papi plain-object errors) to a readable string. */
+function errMsg(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (typeof e === 'object' && e !== null) {
+    const obj = e as Record<string, unknown>;
+    if (typeof obj.message === 'string') return obj.message;
+    return JSON.stringify(obj);
+  }
+  return String(e);
+}
+
 export default function UnreadNotesWidget({
   projectId,
   currentUser,
@@ -104,6 +115,9 @@ export default function UnreadNotesWidget({
   const [threads, setThreads] = useState<ParatextNoteThread[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // True when the PAPI JSON-RPC connection to the host has dropped (typically
+  // after the program has been idle). See notes-viewer.web-view.tsx for details.
+  const [disconnected, setDisconnected] = useState(false);
 
   // Auto-dismiss error after 15 seconds
   useEffect(() => {
@@ -435,6 +449,7 @@ export default function UnreadNotesWidget({
     if (!projectId || !currentUser) return;
     setLoading(true);
     setError('');
+    setDisconnected(false);
     try {
       const res = await papiRetry(() =>
         papi.commands.sendCommand(
@@ -454,7 +469,14 @@ export default function UnreadNotesWidget({
       }
       setThreads(parsed.threads || []);
     } catch (e) {
-      setError(`Error al cargar notas: ${e}`);
+      if (isPapiDisconnectedError(e)) {
+        setDisconnected(true);
+        setError(
+          'Se perdió la conexión con Paratext (probablemente por inactividad). Haz clic en "Reconectar" para reanudar.',
+        );
+      } else {
+        setError(`Error al cargar notas: ${errMsg(e)}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -493,9 +515,18 @@ export default function UnreadNotesWidget({
 
   // Refresh on visibility change but no more than once every 30 seconds
   const lastRefreshRef = useRef(0);
+  // Mirror of `disconnected` for use inside stable event listeners.
+  const disconnectedRef = useRef(false);
+  disconnectedRef.current = disconnected;
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return;
+      // If the PAPI connection dropped while idle, reload the webview to
+      // re-establish the JSON-RPC connection from scratch.
+      if (disconnectedRef.current) {
+        window.location.reload();
+        return;
+      }
       if (Date.now() - lastRefreshRef.current > 30_000) {
         lastRefreshRef.current = Date.now();
         loadNotes();
@@ -775,14 +806,24 @@ export default function UnreadNotesWidget({
       )}
 
       {error && (
-        <div className="tw:p-3 tw:text-red-600 tw:bg-red-50 tw:text-xs tw:border-b tw:flex tw:justify-between tw:items-center">
+        <div className="tw:p-3 tw:text-red-600 tw:bg-red-50 tw:text-xs tw:border-b tw:flex tw:justify-between tw:items-center tw:gap-2">
           <span>{error}</span>
-          <button
-            onClick={loadNotes}
-            className="tw:text-red-600 tw:underline tw:hover:text-red-800 tw:ml-2 tw:cursor-pointer"
-          >
-            (reintentar)
-          </button>
+          {disconnected ? (
+            <button
+              onClick={() => window.location.reload()}
+              className="tw:bg-red-600 tw:hover:bg-red-700 tw:text-white tw:px-3 tw:py-1 tw:rounded tw:font-semibold tw:cursor-pointer tw:transition-colors tw:shrink-0"
+              title="Recargar la vista para reestablecer la conexión con Paratext"
+            >
+              Reconectar
+            </button>
+          ) : (
+            <button
+              onClick={loadNotes}
+              className="tw:text-red-600 tw:underline tw:hover:text-red-800 tw:ml-2 tw:cursor-pointer"
+            >
+              (reintentar)
+            </button>
+          )}
         </div>
       )}
 
