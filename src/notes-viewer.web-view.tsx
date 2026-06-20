@@ -177,6 +177,10 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
   // Selected thread in detail pane
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
 
+  const selectedThread = useMemo(() => {
+    return threads.find((t) => t.threadId === selectedThreadId) || null;
+  }, [threads, selectedThreadId]);
+
   // Settings
   const [settings, setSettings] = useState<NotesDisplaySettings>({
     ...DEFAULT_NOTES_SETTINGS,
@@ -902,10 +906,6 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
       })
       .slice(0, settings.limitCount || 200);
   }, [threads, settings, filterBook, filterAuthor, searchText, currentUser]);
-
-  const selectedThread = useMemo(() => {
-    return threads.find((t) => t.threadId === selectedThreadId) || null;
-  }, [threads, selectedThreadId]);
 
   const handleNavigateToVerse = (thread: ParatextNoteThread) => {
     const pid = projectId;

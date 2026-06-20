@@ -2942,7 +2942,6 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
               </div>
             ) : (
               (() => {
-                const verseRef = `${selectedBook} ${selectedChapter}:${selectedVerseNum}`;
                 const verseMatches = Object.values(chapterKeyTermsMatches).filter(
                   (m: any) =>
                     isVerseInRef(

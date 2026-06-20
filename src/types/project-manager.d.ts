@@ -243,6 +243,8 @@ declare module 'papi-shared-types' {
     'paratextProjectManager.tasksDriveForceSyncProject': (projectId: string) => Promise<string>;
     /** Tests the Drive connection with a small payload */
     'paratextProjectManager.tasksDriveTest': () => Promise<string>;
+    /** Opens Hebrew/Greek dictionary on STEP Bible website for a strong number or term */
+    'paratextProjectManager.openHebrewGreekDictionary': (term: string) => Promise<string>;
   }
 }
 
