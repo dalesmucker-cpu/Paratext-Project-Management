@@ -2,8 +2,8 @@ import { WebViewProps } from '@papi/core';
 import papi from '@papi/frontend';
 import { useDialogCallback } from '@papi/frontend/react';
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import type { ParatextNoteThread } from './types/note.types';
 import { ScrollGroupSelector } from 'platform-bible-react';
+import type { ParatextNoteThread } from './types/note.types';
 import { papiRetry, isPapiDisconnectedError } from './utils/papi-retry';
 import { usePapiDisconnect } from './utils/use-papi-disconnect';
 
@@ -791,7 +791,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       const requestId = ++loadKeyTermsMatchesRequestRef.current;
       const isCurrentRequest = () => requestId === loadKeyTermsMatchesRequestRef.current;
       try {
-        const res = (await papiRetry(
+        const res = await papiRetry(
           () =>
             papi.commands.sendCommand(
               'paratextProjectManager.scanChapterRenderings',
@@ -800,7 +800,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
               chapterNum,
             ),
           { isCancelled: () => !isCurrentRequest() },
-        )) as string;
+        );
         if (!isCurrentRequest()) return;
         const parsed = JSON.parse(res) as { matches: any[] };
         if (parsed && parsed.matches) {
@@ -894,7 +894,8 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                       match.termId,
                     );
                   } catch (err) {
-                    console.error('Failed to open/select key term on word click:', err);
+                    if (isPapiDisconnectedError(err)) handleCatch(err);
+                    else console.error('Failed to open/select key term on word click:', err);
                   }
                 }}
               >
@@ -943,10 +944,11 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   useEffect(() => {
     if (keyTermsOverlayEnabled && selectedBook && selectedChapter && projectId) {
       loadKeyTermsMatches(selectedBook, selectedChapter).catch((err) => {
-        console.error('Failed to load key terms matches in useEffect:', err);
+        if (isPapiDisconnectedError(err)) handleCatch(err);
+        else console.error('Failed to load key terms matches in useEffect:', err);
       });
     }
-  }, [keyTermsOverlayEnabled, selectedBook, selectedChapter, projectId, loadKeyTermsMatches]);
+  }, [keyTermsOverlayEnabled, selectedBook, selectedChapter, projectId, loadKeyTermsMatches, handleCatch]);
 
   const loadChapterRequestRef = useRef(0);
 
@@ -991,7 +993,6 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
           console.error('Failed to load key terms matches in background:', err);
         });
       } catch (retryErr) {
-        console.error(retryErr);
         if (isCurrentRequest()) setError(handleCatch(retryErr, 'Error al cargar texto o notas. '));
       } finally {
         if (isCurrentRequest()) setLoading(false);
@@ -1046,7 +1047,8 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
             offset,
           )
           .catch((e) => {
-            console.error('Failed to broadcast cursor:', e);
+            if (isPapiDisconnectedError(e)) handleCatch(e);
+            else console.error('Failed to broadcast cursor:', e);
           });
       };
 
@@ -1057,7 +1059,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
         pendingBroadcastRef.current = setTimeout(performBroadcast, throttleMs);
       }
     },
-    [currentUser, projectId, selectedBook, selectedChapter],
+    [currentUser, projectId, selectedBook, selectedChapter, handleCatch],
   );
 
   // Throttled broadcast of in-progress verse text (keystrokes).
@@ -1088,7 +1090,8 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
             cleanText,
           )
           .catch((e) => {
-            console.error('Failed to broadcast verse edit:', e);
+            if (isPapiDisconnectedError(e)) handleCatch(e);
+            else console.error('Failed to broadcast verse edit:', e);
           });
       };
 
@@ -1100,7 +1103,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
         editBroadcastTimerRef.current = setTimeout(performEditBroadcast, throttleMs - elapsed);
       }
     },
-    [currentUser, projectId, selectedBook, selectedChapter],
+    [currentUser, projectId, selectedBook, selectedChapter, handleCatch],
   );
 
   // Verse editing states
@@ -1149,7 +1152,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     pre.selectNodeContents(verseEl);
     pre.setEnd(range.startContainer, range.startOffset);
     const start = pre.toString().length;
-    const length = range.toString().length;
+    const { length } = range.toString();
     const end = start + length;
     const selected = range.toString();
     if (!selected.trim()) {
@@ -1444,12 +1447,13 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
         },
       );
     } catch (e) {
-      console.error('Failed to subscribe to collab event:', e);
+      if (isPapiDisconnectedError(e)) handleCatch(e);
+      else console.error('Failed to subscribe to collab event:', e);
     }
     return () => {
       if (unsubEvent) unsubEvent();
     };
-  }, [projectId]);
+  }, [projectId, handleCatch]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -1485,7 +1489,8 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
           isEditingVerse ? initialOffset : null,
         );
       } catch (e) {
-        console.error('Failed to broadcast cursor position:', e);
+        if (isPapiDisconnectedError(e)) handleCatch(e);
+        else console.error('Failed to broadcast cursor position:', e);
       }
     };
     updateCursor();
@@ -1497,6 +1502,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     currentUser,
     projectId,
     initialOffset,
+    handleCatch,
   ]);
 
   // Scroll to active verse element when selectedVerseNum or chapterBlocks changes
@@ -1611,7 +1617,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
         selfVerseUpdateRef.current = null;
       }
     } catch (err) {
-      showErrorMessage(`Error al guardar el texto: ${err}`);
+      showErrorMessage(handleCatch(err, 'Error al guardar el texto: '));
       if (selectedVerseNum === verseNum) {
         setIsEditingVerse(false);
         setSelectedVerseNum(null);
@@ -1664,30 +1670,29 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
               {part}
             </mark>
           );
-        } else {
-          let symbol = '🚩';
-          if (notesDisplayStyle === 'pin') symbol = '📌';
-          else if (notesDisplayStyle === 'dialog') symbol = '💬';
-          else if (notesDisplayStyle === 'tag') symbol = '🏷️';
-
-          return (
-            <span
-              key={index}
-              onClick={clickHandler}
-              className={`tw:cursor-pointer tw:px-0.5 tw:rounded tw:transition tw:inline ${
-                isSelectedThread
-                  ? 'tw:border tw:border-indigo-400 tw:bg-indigo-50 tw:text-indigo-800 tw:font-semibold'
-                  : 'tw:hover:bg-slate-100 tw:text-slate-800'
-              }`}
-              title="Click para ver la nota"
-            >
-              <span className="tw:border-b tw:border-dashed tw:border-slate-400">{part}</span>
-              <span className="tw:text-xs tw:ml-0.5" role="img" aria-label="nota">
-                {symbol}
-              </span>
-            </span>
-          );
         }
+        let symbol = '🚩';
+        if (notesDisplayStyle === 'pin') symbol = '📌';
+        else if (notesDisplayStyle === 'dialog') symbol = '💬';
+        else if (notesDisplayStyle === 'tag') symbol = '🏷️';
+
+        return (
+          <span
+            key={index}
+            onClick={clickHandler}
+            className={`tw:cursor-pointer tw:px-0.5 tw:rounded tw:transition tw:inline ${
+              isSelectedThread
+                ? 'tw:border tw:border-indigo-400 tw:bg-indigo-50 tw:text-indigo-800 tw:font-semibold'
+                : 'tw:hover:bg-slate-100 tw:text-slate-800'
+            }`}
+            title="Click para ver la nota"
+          >
+            <span className="tw:border-b tw:border-dashed tw:border-slate-400">{part}</span>
+            <span className="tw:text-xs tw:ml-0.5" role="img" aria-label="nota">
+              {symbol}
+            </span>
+          </span>
+        );
       }
       return part;
     });
@@ -1759,18 +1764,17 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
             );
           }
           return child;
-        } else {
-          const childText =
-            child &&
-            typeof child === 'object' &&
-            'props' in child &&
-            typeof child.props?.children === 'string'
-              ? child.props.children
-              : '';
-          const childEnd = currentOffset + childText.length;
-          currentOffset = childEnd;
-          return child;
         }
+        const childText =
+          child &&
+          typeof child === 'object' &&
+          'props' in child &&
+          typeof child.props?.children === 'string'
+            ? child.props.children
+            : '';
+        const childEnd = currentOffset + childText.length;
+        currentOffset = childEnd;
+        return child;
       });
     }
 
@@ -1797,9 +1801,9 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       } else if (collabRes && collabRes.username) {
         setCurrentUser(collabRes.username);
       }
-      if (tmRes) setTeamMembers(JSON.parse(tmRes as string) as string[]);
+      if (tmRes) setTeamMembers(JSON.parse(tmRes) as string[]);
 
-      const bookList = JSON.parse(bRes as string) as BookInfo[];
+      const bookList = JSON.parse(bRes) as BookInfo[];
       setBooks(bookList);
 
       if (bookList.length > 0) {
@@ -1837,13 +1841,12 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
         setError('No se encontraron libros de Escritura en este proyecto (archivos .SFM).');
       }
     } catch (err) {
-      console.error(err);
       setError(handleCatch(err, 'Error al cargar libros de Escritura. '));
     } finally {
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId]);
+  }, [projectId, handleCatch]);
 
   useEffect(() => {
     initData();
@@ -1994,7 +1997,8 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                 showErrorMessage(`Error al guardar audio: ${saveRes?.error || 'Unknown error'}`);
               }
             } catch (err) {
-              console.error(err);
+              if (isPapiDisconnectedError(err)) handleCatch(err);
+              else console.error(err);
             }
           }
         };
@@ -2077,8 +2081,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       reader.onloadend = async () => {
         try {
           const base64Data = (reader.result as string).split(',')[1];
-          const cleanedName =
-            'att_' + Date.now() + '_' + file.name.replace(/[^a-zA-Z0-9_.-]/g, '_');
+          const cleanedName = `att_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
 
           const saveRes = await papi.commands.sendCommand(
             'paratextProjectManager.saveAttachment',
@@ -2121,7 +2124,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
             );
           }
         } catch (err) {
-          showErrorMessage(`Error al guardar adjunto: ${err}`);
+          showErrorMessage(handleCatch(err, 'Error al guardar adjunto: '));
         } finally {
           setReplyAttaching((prev) => ({ ...prev, [threadId]: false }));
           setActiveReplyThreadId(null);
@@ -2186,7 +2189,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
         showErrorMessage(`Error al enviar respuesta: ${res}`);
       }
     } catch (err) {
-      showErrorMessage(`Error al enviar respuesta: ${err}`);
+      showErrorMessage(handleCatch(err, 'Error al enviar respuesta: '));
     } finally {
       setReplying((prev) => ({ ...prev, [thread.threadId]: false }));
     }
@@ -2215,7 +2218,8 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
         console.error(`Error al eliminar comentario: ${res}`);
       }
     } catch (e) {
-      console.error(`Error al eliminar comentario: ${e}`);
+      if (isPapiDisconnectedError(e)) handleCatch(e);
+      else console.error(`Error al eliminar comentario: ${e}`);
     }
   };
 
@@ -2233,7 +2237,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       setSelectedText(selectedStr);
       setIsEditingVerse(false);
 
-      const anchorNode = selection.anchorNode;
+      const { anchorNode } = selection;
       const fullText = anchorNode?.textContent || '';
       const offset = selection.anchorOffset;
       setStartPosition(offset);
@@ -2259,7 +2263,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     if (isEditingVerse && selectedVerseNum !== null && selectedVerseNum !== verseNum) {
       const prevEditable = document.querySelector(
         `#verse-${selectedVerseNum} [contenteditable="true"]`,
-      ) as HTMLElement | null;
+      );
       prevEditable?.blur();
     }
     selectVerse(verseNum);
@@ -2282,7 +2286,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       setSelectedText(selectedStr);
       setIsEditingVerse(false);
 
-      const anchorNode = selection.anchorNode;
+      const { anchorNode } = selection;
       const fullText = anchorNode?.textContent || '';
       const offset = selection.anchorOffset;
       setStartPosition(offset);
@@ -2330,8 +2334,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
 
       // 2. Upload attachment if captured
       if (newNoteAttachment) {
-        const cleanedName =
-          'att_' + Date.now() + '_' + newNoteAttachment.filename.replace(/[^a-zA-Z0-9_.-]/g, '_');
+        const cleanedName = `att_${Date.now()}_${newNoteAttachment.filename.replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
         const attachRes = await papi.commands.sendCommand(
           'paratextProjectManager.saveAttachment',
           projectId,
@@ -2377,7 +2380,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
         showErrorMessage(`Error al crear la nota: ${res}`);
       }
     } catch (err) {
-      showErrorMessage(`Error al crear la nota: ${err}`);
+      showErrorMessage(handleCatch(err, 'Error al crear la nota: '));
     } finally {
       setLoading(false);
     }
@@ -2436,7 +2439,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                     strokeLinejoin="round"
                     strokeWidth="2"
                     d="M4 6h16M4 12h16M4 18h16"
-                  ></path>
+                  />
                 </svg>
               </button>
               <span className="tw:font-bold tw:text-slate-800 tw:text-base">Lector</span>
@@ -2519,7 +2522,9 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                               'paratextProjectManager.setCurrentUser',
                               val,
                             );
-                          } catch (_) {}
+                          } catch (e) {
+                            if (isPapiDisconnectedError(e)) handleCatch(e);
+                          }
                         }
                       }}
                     >
@@ -3022,7 +3027,10 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                                         'paratextProjectManager.openHebrewGreekDictionary',
                                         m.strongs || m.lemma,
                                       )
-                                      .catch((err) => console.error(err));
+                                      .catch((err) => {
+                                        if (isPapiDisconnectedError(err)) handleCatch(err);
+                                        else console.error(err);
+                                      });
                                   }}
                                   className="tw:text-left tw:font-bold tw:text-xs tw:text-slate-700 hover:tw:text-indigo-600 hover:tw:underline tw:cursor-pointer tw:bg-transparent tw:border-none tw:p-0"
                                   title={
@@ -3175,7 +3183,8 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                             m.termId,
                           );
                         } catch (e) {
-                          console.error('Failed to open key terms from popup:', e);
+                          if (isPapiDisconnectedError(e)) handleCatch(e);
+                          else console.error('Failed to open key terms from popup:', e);
                         }
                       }}
                       className="tw:text-[10px] tw:text-indigo-600 tw:hover:underline tw:font-medium tw:cursor-pointer tw:bg-transparent tw:border-none"

@@ -237,7 +237,7 @@ globalThis.webViewComponent = function MyTasksWebView({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const { disconnected, clearDisconnected, handleCatch } = usePapiDisconnect();
+  const { disconnected, disconnectedRef, clearDisconnected, handleCatch } = usePapiDisconnect();
 
   // Auto-dismiss error after 15 seconds
   useEffect(() => {
@@ -321,7 +321,7 @@ globalThis.webViewComponent = function MyTasksWebView({
       setDeletedTaskIds(store.deletedTaskIds ?? []);
       setStageConfig(store.stageConfig ?? {});
       if (userResult) persistCurrentUser(userResult);
-      if (membersResult) setTeamMembers(JSON.parse(membersResult as string) as string[]);
+      if (membersResult) setTeamMembers(JSON.parse(membersResult) as string[]);
     } catch (retryErr) {
       if (isCurrentRequest()) setError(handleCatch(retryErr, 'Error al cargar: '));
     } finally {
@@ -344,12 +344,14 @@ globalThis.webViewComponent = function MyTasksWebView({
 
   const silentRefresh = useCallback(async () => {
     if (!projectId || savingRef.current || refreshInProgressRef.current) return;
+    // Don't burn PAPI retries while the connection is known to be dead.
+    if (disconnectedRef.current) return;
     refreshInProgressRef.current = true;
     try {
       const result = await papiRetry(() =>
         papi.commands.sendCommand('paratextProjectManager.getTasks', projectId),
       );
-      const store = JSON.parse(result as string) as TaskStore;
+      const store = JSON.parse(result) as TaskStore;
       lastRefreshRef.current = Date.now();
       const incomingDeleted = new Set(store.deletedTaskIds ?? []);
       setDeletedTaskIds((prev) => {
@@ -605,7 +607,7 @@ globalThis.webViewComponent = function MyTasksWebView({
                   strokeLinejoin="round"
                   strokeWidth="2"
                   d="M4 6h16M4 12h16M4 18h16"
-                ></path>
+                />
               </svg>
             </button>
             <span className="tw:font-semibold tw:text-gray-700 tw:flex tw:items-center tw:gap-1.5">
@@ -642,7 +644,7 @@ globalThis.webViewComponent = function MyTasksWebView({
                   strokeLinejoin="round"
                   strokeWidth="2"
                   d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
-                ></path>
+                />
               </svg>
               {notifications.length > 0 && (
                 <span className="tw:absolute tw:-top-0.5 tw:-right-0.5 tw:bg-red-500 tw:text-white tw:text-[10px] tw:rounded-full tw:w-4 tw:h-4 tw:flex tw:items-center tw:justify-center tw:leading-none">

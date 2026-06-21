@@ -41,6 +41,13 @@ export interface UsePapiDisconnectOptions {
    * to false if a webview needs custom recovery, but this is rarely needed.
    */
   autoReloadOnFocus?: boolean;
+  /**
+   * Maximum random jitter (ms) added to the auto-reload delay. Default 2000. The actual delay is
+   * a random value in [0, reloadJitterMs] generated once per hook instance. Staggering prevents a
+   * thundering herd when multiple tabs all become visible at the same time and would otherwise
+   * fire ~30 simultaneous PAPI commands through the single shared notes-helper IPC channel.
+   */
+  reloadJitterMs?: number;
 }
 
 export interface UsePapiDisconnectResult {
@@ -69,10 +76,16 @@ export interface UsePapiDisconnectResult {
  *   socket cannot succeed).
  */
 export function usePapiDisconnect(options?: UsePapiDisconnectOptions): UsePapiDisconnectResult {
-  const { onBeforeReload, autoReloadOnFocus = true } = options ?? {};
+  const { onBeforeReload, autoReloadOnFocus = true, reloadJitterMs = 2000 } = options ?? {};
   const [disconnected, setDisconnected] = useState(false);
   const disconnectedRef = useRef(false);
   disconnectedRef.current = disconnected;
+
+  // Stable per-instance random jitter (generated once, never re-randomized). Spreads reloads
+  // across multiple webviews so they don't all hit the backend simultaneously.
+  const jitterRef = useRef<number>(Math.random() * reloadJitterMs);
+  // Guard against double-reload if visibilitychange fires twice while the reload timer is pending.
+  const reloadingRef = useRef(false);
 
   // Keep the onBeforeReload ref current without re-subscribing the listener.
   const onBeforeReloadRef = useRef(onBeforeReload);
@@ -95,11 +108,16 @@ export function usePapiDisconnect(options?: UsePapiDisconnectOptions): UsePapiDi
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return;
       if (!disconnectedRef.current) return;
+      if (reloadingRef.current) return;
+      reloadingRef.current = true;
       // The PAPI connection dropped while idle. Reload the webview to
       // re-establish the JSON-RPC connection from scratch — retrying
-      // commands on a dead connection cannot succeed.
+      // commands on a dead connection cannot succeed. Jitter spreads
+      // reloads across multiple webviews to prevent a thundering herd.
       onBeforeReloadRef.current?.();
-      window.location.reload();
+      setTimeout(() => {
+        window.location.reload();
+      }, jitterRef.current);
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);

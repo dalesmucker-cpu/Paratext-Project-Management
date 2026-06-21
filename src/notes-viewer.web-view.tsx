@@ -304,7 +304,8 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
         });
       }
     } catch (e) {
-      console.error('Failed to load notes settings:', e);
+      if (isPapiDisconnectedError(e)) handleCatch(e);
+      else console.error('Failed to load notes settings:', e);
     }
   }, []);
 
@@ -322,10 +323,11 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
         loadSettings(userResult);
       }
       if (membersResult) {
-        setTeamMembers(JSON.parse(membersResult as string) as string[]);
+        setTeamMembers(JSON.parse(membersResult) as string[]);
       }
     } catch (retryErr) {
-      console.error('Failed to load user and members after retry:', retryErr);
+      if (isPapiDisconnectedError(retryErr)) handleCatch(retryErr);
+      else console.error('Failed to load user and members after retry:', retryErr);
     }
   }, [loadSettings]);
 
@@ -394,7 +396,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
     if (projectId && currentUser) {
       loadNotes();
     }
-  }, [projectId, currentUser, loadNotes]);
+  }, [projectId, currentUser, loadNotes, handleCatch]);
 
   // Listen to collaboration events
   useEffect(() => {
@@ -412,12 +414,13 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
         },
       );
     } catch (err) {
-      console.warn('Error subscribing to collab event in notes-viewer:', err);
+      if (isPapiDisconnectedError(err)) handleCatch(err);
+      else console.warn('Error subscribing to collab event in notes-viewer:', err);
     }
     return () => {
       if (unsub) unsub();
     };
-  }, [projectId, loadNotes]);
+  }, [projectId, loadNotes, handleCatch]);
 
   // Refresh on visibility change but no more than once every 30 seconds.
   // (Auto-reload when disconnected is handled by usePapiDisconnect.)
@@ -433,7 +436,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [loadNotes, disconnected]);
+  }, [loadNotes, disconnected, handleCatch]);
 
   // Save Settings
   const saveSettings = async (updates: Partial<NotesDisplaySettings>) => {
@@ -447,7 +450,8 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
         JSON.stringify(newSettings),
       );
     } catch (e) {
-      console.error('Failed to save notes settings:', e);
+      if (isPapiDisconnectedError(e)) handleCatch(e);
+      else console.error('Failed to save notes settings:', e);
     }
   };
 
@@ -460,7 +464,8 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
       await papi.commands.sendCommand('paratextProjectManager.setCurrentUser', name);
       loadSettings(name);
     } catch (e) {
-      console.error('Failed to set current user:', e);
+      if (isPapiDisconnectedError(e)) handleCatch(e);
+      else console.error('Failed to set current user:', e);
     }
   };
 
@@ -494,7 +499,8 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
         );
       }
     } catch (e) {
-      console.error('Failed to mark note as read:', e);
+      if (isPapiDisconnectedError(e)) handleCatch(e);
+      else console.error('Failed to mark note as read:', e);
     }
   };
 
@@ -531,8 +537,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
       reader.onloadend = async () => {
         try {
           const base64Data = (reader.result as string).split(',')[1];
-          const cleanedName =
-            'att_' + Date.now() + '_' + file.name.replace(/[^a-zA-Z0-9_.-]/g, '_');
+          const cleanedName = `att_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
 
           const saveRes = await papi.commands.sendCommand(
             'paratextProjectManager.saveAttachment',
@@ -574,7 +579,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
             alert(`Error al guardar archivo: ${errMsg}`);
           }
         } catch (err) {
-          alert(`Error al procesar archivo adjunto: ${err}`);
+          alert(handleCatch(err, 'Error al procesar archivo adjunto: '));
         } finally {
           setAttaching(false);
           e.target.value = ''; // Reset input
@@ -724,7 +729,8 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
         console.error(`Error al eliminar comentario: ${res}`);
       }
     } catch (e) {
-      console.error(`Error al eliminar comentario: ${e}`);
+      if (isPapiDisconnectedError(e)) handleCatch(e);
+      else console.error(`Error al eliminar comentario: ${e}`);
     }
   };
 
@@ -791,7 +797,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
         alert(`Error al guardar edición: ${res}`);
       }
     } catch (e) {
-      alert(`Error al guardar edición: ${e}`);
+      alert(handleCatch(e, 'Error al guardar edición: '));
     } finally {
       setSavingEdit(false);
     }
@@ -846,13 +852,9 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
             .toLowerCase()
             .normalize('NFD')
             .replace(/[\u0300-\u036f]/g, '');
-          const matchText = (
-            t.verseRef +
-            ' ' +
-            t.selectedText +
-            ' ' +
-            t.comments.map((c) => c.plainText).join(' ')
-          )
+          const matchText = `${t.verseRef} ${t.selectedText} ${t.comments
+            .map((c) => c.plainText)
+            .join(' ')}`
             .toLowerCase()
             .normalize('NFD')
             .replace(/[\u0300-\u036f]/g, '');
@@ -876,7 +878,8 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
         Number(thread.verse),
       )
       .catch((err) => {
-        console.error('Failed to navigate to verse:', err);
+        if (isPapiDisconnectedError(err)) handleCatch(err);
+        else console.error('Failed to navigate to verse:', err);
       });
   };
 
@@ -937,13 +940,13 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                 strokeLinejoin="round"
                 strokeWidth="2"
                 d="M4 6h16M4 12h16M4 18h16"
-              ></path>
+              />
             </svg>
           </button>
           <span className="tw:font-bold tw:text-slate-800 tw:text-base tw:flex tw:items-center tw:gap-2">
             Visor de Notas
           </span>
-          {!loading && <div className="tw:h-4 tw:w-px tw:bg-gray-300 tw:hidden sm:tw:block"></div>}
+          {!loading && <div className="tw:h-4 tw:w-px tw:bg-gray-300 tw:hidden sm:tw:block" />}
           {!loading && (
             <div className="tw:text-xs">
               {currentUser && !showUserPicker ? (
@@ -1415,7 +1418,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                 <div className="tw:bg-white tw:border-t tw:border-gray-200 tw:p-4 tw:shrink-0 tw:shadow-lg">
                   <div className="tw:max-w-3xl tw:mx-auto tw:flex tw:flex-col sm:tw:flex-row tw:items-center tw:justify-between tw:gap-3 tw:bg-red-50/50 tw:p-3 tw:rounded-lg tw:border tw:border-red-100">
                     <span className="tw:text-red-600 tw:text-sm tw:flex tw:items-center tw:gap-2 tw:animate-pulse tw:font-medium">
-                      <span className="tw:w-2.5 tw:h-2.5 tw:rounded-full tw:bg-red-600"></span>
+                      <span className="tw:w-2.5 tw:h-2.5 tw:rounded-full tw:bg-red-600" />
                       Grabando nota de voz... ({formatDuration(recordDuration)})
                     </span>
                     <div className="tw:flex tw:gap-2">
@@ -1477,12 +1480,12 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                             r="10"
                             stroke="currentColor"
                             strokeWidth="4"
-                          ></circle>
+                          />
                           <path
                             className="tw:opacity-75"
                             fill="currentColor"
                             d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                          ></path>
+                          />
                         </svg>
                       ) : (
                         <svg
@@ -1497,7 +1500,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                             strokeLinejoin="round"
                             strokeWidth="2"
                             d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
-                          ></path>
+                          />
                         </svg>
                       )}
                     </button>
@@ -1522,7 +1525,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                           strokeLinejoin="round"
                           strokeWidth="2"
                           d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
-                        ></path>
+                        />
                       </svg>
                     </button>
                     {/* Collapse Toggle Button (visible only on small screens) */}
@@ -1560,12 +1563,12 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                             r="10"
                             stroke="currentColor"
                             strokeWidth="4"
-                          ></circle>
+                          />
                           <path
                             className="tw:opacity-75"
                             fill="currentColor"
                             d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                          ></path>
+                          />
                         </svg>
                       ) : (
                         <svg
@@ -1574,7 +1577,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
                           viewBox="0 0 24 24"
                           xmlns="http://www.w3.org/2000/svg"
                         >
-                          <path d="M2 21l21-9L2 3v7l15 2-15 2v7z"></path>
+                          <path d="M2 21l21-9L2 3v7l15 2-15 2v7z" />
                         </svg>
                       )}
                     </button>

@@ -108,7 +108,7 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
     const isCurrentRequest = () => requestId === scanBookRequestRef.current;
     setScanning(true);
     try {
-      const res = (await papiRetry(
+      const res = await papiRetry(
         () =>
           papi.commands.sendCommand(
             'paratextProjectManager.scanBookRenderings',
@@ -116,7 +116,7 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
             selectedBook,
           ),
         { isCancelled: () => !isCurrentRequest() },
-      )) as string;
+      );
       if (!isCurrentRequest()) return;
       const parsed = JSON.parse(res) as { matches: VerseMatchStatus[] };
       if (parsed && parsed.matches) {
@@ -357,7 +357,8 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
           verse,
         );
       } catch (e) {
-        console.error('Failed to navigate from analytics:', e);
+        if (isPapiDisconnectedError(e)) handleCatch(e);
+        else console.error('Failed to navigate from analytics:', e);
       }
     },
     [projectId],
@@ -371,7 +372,8 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
         await new Promise((r) => setTimeout(r, 450));
         await papi.commands.sendCommand('paratextProjectManager.selectKeyTerm', projectId, termId);
       } catch (e) {
-        console.error('Failed to open key terms editor:', e);
+        if (isPapiDisconnectedError(e)) handleCatch(e);
+        else console.error('Failed to open key terms editor:', e);
       }
     },
     [projectId],
@@ -420,15 +422,15 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
       const csvContent = csvLines.join('\n');
       const filename = `key-terms-analytics-${selectedBook}-${Date.now()}.csv`;
 
-      const downloadPath = (await papi.commands.sendCommand(
+      const downloadPath = await papi.commands.sendCommand(
         'paratextProjectManager.saveToDownloads',
         filename,
         csvContent,
-      )) as string;
+      );
 
       alert(`${tx('exportedCsv')}\n${downloadPath}`);
     } catch (e: any) {
-      alert(`${tx('errorExportingCsv')}: ${e.message || e}`);
+      alert(handleCatch(e, `${tx('errorExportingCsv')}: `));
     }
   }, [store, projectId, selectedBook, scanMatches, tx]);
 
@@ -509,15 +511,15 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
 </html>`;
 
       const filename = `key-terms-analytics-${selectedBook}-${Date.now()}.html`;
-      const downloadPath = (await papi.commands.sendCommand(
+      const downloadPath = await papi.commands.sendCommand(
         'paratextProjectManager.saveToDownloads',
         filename,
         htmlContent,
-      )) as string;
+      );
 
       alert(`${tx('exportedHtml')}\n${downloadPath}`);
     } catch (e: any) {
-      alert(`${tx('errorExportingHtml')}: ${e.message || e}`);
+      alert(handleCatch(e, `${tx('errorExportingHtml')}: `));
     }
   }, [store, projectId, selectedBook, scanMatches, bookStats, tx]);
 

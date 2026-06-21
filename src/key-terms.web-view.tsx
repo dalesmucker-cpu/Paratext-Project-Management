@@ -256,12 +256,12 @@ globalThis.webViewComponent = function KeyTermsWebView({
         const [book, chapStr] = bkChap.split(' ');
         const chapter = parseInt(chapStr, 10);
         try {
-          const res = (await papi.commands.sendCommand(
+          const res = await papi.commands.sendCommand(
             'paratextProjectManager.scanChapterRenderings',
             projectId,
             book,
             chapter,
-          )) as string;
+          );
           const parsed = JSON.parse(res) as { matches: VerseMatchStatus[] };
           if (parsed && parsed.matches) {
             for (const match of parsed.matches) {
@@ -269,14 +269,16 @@ globalThis.webViewComponent = function KeyTermsWebView({
             }
           }
         } catch (e) {
-          console.warn('scanChapter failed for', bkChap, e);
+          if (isPapiDisconnectedError(e)) handleCatch(e);
+          else console.warn('scanChapter failed for', bkChap, e);
         }
       });
 
       await Promise.all(scanPromises);
       if (isCurrentRequest()) setVerseMatches(newMatches);
     } catch (e) {
-      console.warn('scanChapter error', e);
+      if (isPapiDisconnectedError(e)) handleCatch(e);
+      else console.warn('scanChapter error', e);
     } finally {
       if (isCurrentRequest()) setScanning(false);
     }
@@ -307,7 +309,8 @@ globalThis.webViewComponent = function KeyTermsWebView({
           verse,
         );
       } catch (e) {
-        console.error('Failed to navigate to verse:', e);
+        if (isPapiDisconnectedError(e)) handleCatch(e);
+        else console.error('Failed to navigate to verse:', e);
       }
     },
     [projectId],

@@ -22,17 +22,6 @@ import {
   STATUS_LABELS,
 } from './types/task.types';
 
-/** Safely convert any caught value (including papi plain-object errors) to a readable string. */
-function errMsg(e: unknown): string {
-  if (e instanceof Error) return e.message;
-  if (typeof e === 'object' && e !== null) {
-    const obj = e as Record<string, unknown>;
-    if (typeof obj.message === 'string') return obj.message;
-    return JSON.stringify(obj);
-  }
-  return String(e);
-}
-
 interface GcalStatus {
   connected: boolean;
   email: string;
@@ -376,7 +365,7 @@ function CalendarTabContent({
           {/* Panel header */}
           <div className="tw:flex tw:items-center tw:justify-between tw:px-3 tw:py-2 tw:bg-gray-50 tw:border-b tw:sticky tw:top-0 tw:z-10">
             <span className="tw:font-semibold tw:text-xs tw:text-gray-700 tw:capitalize">
-              {new Date(selectedDay + 'T12:00:00').toLocaleDateString('es', {
+              {new Date(`${selectedDay}T12:00:00`).toLocaleDateString('es', {
                 weekday: 'long',
                 year: 'numeric',
                 month: 'long',
@@ -663,7 +652,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
   const [showTeamSection, setShowTeamSection] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const { disconnected, clearDisconnected, handleCatch } = usePapiDisconnect();
+  const { disconnected, disconnectedRef, clearDisconnected, handleCatch } = usePapiDisconnect();
 
   // Auto-dismiss error after 15 seconds
   useEffect(() => {
@@ -857,7 +846,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       setTasks(store.tasks ?? []);
       setStageConfig(store.stageConfig ?? {});
       extrasRef.current = { activityLog: store.activityLog, deletedTaskIds: store.deletedTaskIds };
-      if (membersResult) setTeamMembers(JSON.parse(membersResult as string) as string[]);
+      if (membersResult) setTeamMembers(JSON.parse(membersResult) as string[]);
       if (userResult && typeof userResult === 'string' && userResult.length > 0)
         setCurrentUser(userResult);
     } catch (e2) {
@@ -880,12 +869,14 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
 
   const silentRefresh = useCallback(async () => {
     if (!projectId || refreshInProgressRef.current) return;
+    // Don't burn PAPI retries while the connection is known to be dead.
+    if (disconnectedRef.current) return;
     refreshInProgressRef.current = true;
     try {
       const result = await papiRetry(() =>
         papi.commands.sendCommand('paratextProjectManager.getTasks', projectId),
       );
-      const store = JSON.parse(result as string) as TaskStore;
+      const store = JSON.parse(result) as TaskStore;
       lastRefreshRef.current = Date.now();
       const incomingDeleted = new Set(store.deletedTaskIds ?? []);
       extrasRef.current = {
@@ -940,7 +931,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
   const loadGcalStatus = useCallback(async () => {
     try {
       const result = await papi.commands.sendCommand('paratextProjectManager.gcalGetStatus');
-      const status = JSON.parse(result as string) as GcalStatus;
+      const status = JSON.parse(result) as GcalStatus;
       setGcalStatus(status);
       // Pre-populate clientId field if previously saved
       if (status.clientId) setGcalClientId(status.clientId);
@@ -950,15 +941,15 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
           const calsResult = await papi.commands.sendCommand(
             'paratextProjectManager.gcalListCalendars',
           );
-          setGcalCalendars(JSON.parse(calsResult as string));
-        } catch (_) {
-          /* non-critical */
+          setGcalCalendars(JSON.parse(calsResult));
+        } catch (e) {
+          if (isPapiDisconnectedError(e)) handleCatch(e);
         }
       }
-    } catch (_) {
-      /* non-critical */
+    } catch (e) {
+      if (isPapiDisconnectedError(e)) handleCatch(e);
     }
-  }, []);
+  }, [handleCatch]);
 
   // --- Collaboration callbacks & subscription ---
 
@@ -977,9 +968,10 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         if (status.username) setCollabUsername(status.username);
       }
     } catch (e) {
-      console.error('Failed to load collab status:', e);
+      if (isPapiDisconnectedError(e)) handleCatch(e);
+      else console.error('Failed to load collab status:', e);
     }
-  }, []);
+  }, [handleCatch]);
 
   const handleStartCollabHost = async () => {
     if (!projectId) {
@@ -1024,7 +1016,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         }
       }
     } catch (e: any) {
-      setCollabErrorMsg(e?.message || String(e));
+      setCollabErrorMsg(handleCatch(e, ''));
     } finally {
       setCollabConnecting(false);
     }
@@ -1082,7 +1074,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         setCollabErrorMsg(res?.error || 'No se pudo conectar.');
       }
     } catch (e: any) {
-      setCollabErrorMsg(e?.message || String(e));
+      setCollabErrorMsg(handleCatch(e, ''));
     } finally {
       setCollabConnecting(false);
     }
@@ -1097,7 +1089,8 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       setCollabStatusMsg('');
       setCollabErrorMsg('');
     } catch (e) {
-      console.error('Failed to stop collab:', e);
+      if (isPapiDisconnectedError(e)) handleCatch(e);
+      else console.error('Failed to stop collab:', e);
     }
   };
 
@@ -1116,7 +1109,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         setCollabErrorMsg(res?.error || 'No se pudo iniciar la reconexión.');
       }
     } catch (e: any) {
-      setCollabErrorMsg(e?.message || String(e));
+      setCollabErrorMsg(handleCatch(e, ''));
     }
   };
 
@@ -1131,7 +1124,9 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         chatInput.trim(),
       );
       setChatInput('');
-    } catch (_) {}
+    } catch (e) {
+      if (isPapiDisconnectedError(e)) handleCatch(e);
+    }
   };
 
   const handleAddMember = async () => {
@@ -1151,7 +1146,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       if (teamMessageRef.current) clearTimeout(teamMessageRef.current);
       teamMessageRef.current = setTimeout(() => setTeamMessage(''), 3000);
     } catch (e) {
-      setTeamMessage(`Error: ${e}`);
+      setTeamMessage(handleCatch(e, 'Error: '));
     } finally {
       setTeamSaving(false);
     }
@@ -1206,26 +1201,27 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         },
       );
     } catch (err) {
-      console.warn('Error subscribing to collab event:', err);
+      if (isPapiDisconnectedError(err)) handleCatch(err);
+      else console.warn('Error subscribing to collab event:', err);
     }
     return () => {
       if (unsub) unsub();
     };
-  }, [silentRefresh]);
+  }, [silentRefresh, handleCatch]);
 
   useEffect(() => {
     const checkUpdateStatus = async () => {
       try {
         const msg = await papi.commands.sendCommand('paratextProjectManager.getUpdateStatus');
         if (msg) {
-          setUpdateMessage(msg as string);
+          setUpdateMessage(msg);
         }
-      } catch (_) {
-        /* ignore */
+      } catch (e) {
+        if (isPapiDisconnectedError(e)) handleCatch(e);
       }
     };
     checkUpdateStatus();
-  }, []);
+  }, [handleCatch]);
 
   useEffect(() => {
     loadGcalStatus();
@@ -1236,7 +1232,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
   const loadDriveStatus = useCallback(async () => {
     try {
       const result = await papi.commands.sendCommand('paratextProjectManager.tasksDriveGetStatus');
-      const status = JSON.parse(result as string) as DriveStatus;
+      const status = JSON.parse(result) as DriveStatus;
       setDriveStatus(status);
       if (status.clientId) setDriveClientId(status.clientId);
     } catch (_) {
@@ -1269,7 +1265,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         driveClientSecret.trim(),
       );
     } catch (e) {
-      setDriveError(`Error al iniciar: ${errMsg(e)}`);
+      setDriveError(handleCatch(e, 'Error al iniciar: '));
       setDriveMessage('');
       setDriveConnecting(false);
       return;
@@ -1292,7 +1288,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       papi.commands
         .sendCommand('paratextProjectManager.tasksDrivePollAuth')
         .then((res) => {
-          const { status, error } = JSON.parse(res as string) as { status: string; error?: string };
+          const { status, error } = JSON.parse(res) as { status: string; error?: string };
           if (status === 'pending') {
             driveAuthPollRef.current = setTimeout(doPoll, 4000);
           } else if (status === 'success') {
@@ -1311,7 +1307,12 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
             driveAuthPollRef.current = null;
           }
         })
-        .catch(() => {
+        .catch((e) => {
+          if (isPapiDisconnectedError(e)) {
+            handleCatch(e);
+            driveAuthPollRef.current = null;
+            return;
+          }
           driveAuthPollRef.current = setTimeout(doPoll, 4000); // retry on transient error
         });
     };
@@ -1324,7 +1325,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       const result = await papi.commands.sendCommand(
         'paratextProjectManager.tasksDriveExportConfig',
       );
-      const data = JSON.parse(result as string) as {
+      const data = JSON.parse(result) as {
         success: boolean;
         config?: string;
         error?: string;
@@ -1335,7 +1336,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         setDriveError(data.error ?? 'No se pudo exportar la configuración');
       }
     } catch (e) {
-      setDriveError(String(e));
+      setDriveError(handleCatch(e, ''));
     }
   }, []);
 
@@ -1351,7 +1352,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         'paratextProjectManager.tasksDriveForceSyncProject',
         projectId,
       );
-      const data = JSON.parse(res as string) as {
+      const data = JSON.parse(res) as {
         success: boolean;
         step?: string;
         error?: string;
@@ -1367,7 +1368,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         setDriveSyncResult(`✗ Error en paso "${data.step}": ${data.error}`);
       }
     } catch (e) {
-      setDriveSyncResult(`✗ Error: ${String(e)}`);
+      setDriveSyncResult(`✗ ${handleCatch(e, 'Error: ')}`);
     } finally {
       setDriveSyncing(false);
     }
@@ -1378,7 +1379,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
     setDriveTestResult('Probando…');
     try {
       const res = await papi.commands.sendCommand('paratextProjectManager.tasksDriveTest');
-      const data = JSON.parse(res as string) as {
+      const data = JSON.parse(res) as {
         success: boolean;
         step?: string;
         error?: string;
@@ -1392,7 +1393,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         setDriveTestResult(`✗ Error en paso "${data.step}": ${data.error}`);
       }
     } catch (e) {
-      setDriveTestResult(`✗ Error: ${String(e)}`);
+      setDriveTestResult(`✗ ${handleCatch(e, 'Error: ')}`);
     } finally {
       setDriveTesting(false);
     }
@@ -1408,7 +1409,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         'paratextProjectManager.tasksDriveImportConfig',
         driveImportJson.trim(),
       );
-      const data = JSON.parse(result as string) as { success: boolean; error?: string };
+      const data = JSON.parse(result) as { success: boolean; error?: string };
       if (data.success) {
         setDriveMessage('✓ Configuración importada. Recarga el proyecto para ver las tareas.');
         setShowDriveImport(false);
@@ -1418,7 +1419,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         setDriveError(data.error ?? 'Error al importar');
       }
     } catch (e) {
-      setDriveError(String(e));
+      setDriveError(handleCatch(e, ''));
     }
   }, [driveImportJson, loadDriveStatus]);
 
@@ -1427,12 +1428,13 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
     papi.commands
       .sendCommand('paratextProjectManager.getCurrentUser')
       .then((u) => {
-        if (u && typeof u === 'string' && u.length > 0) setLogTimeUser(u as string);
+        if (u && typeof u === 'string' && u.length > 0) setLogTimeUser(u);
       })
       .catch((e) => {
-        console.error('Failed to get current user:', e);
+        if (isPapiDisconnectedError(e)) handleCatch(e);
+        else console.error('Failed to get current user:', e);
       });
-  }, []);
+  }, [handleCatch]);
 
   // Shared polling logic: call after gcalConnect or gcalReconnect returns { status: 'started' }
   const pollGcalAuth = useCallback(
@@ -1448,7 +1450,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         }
         try {
           const raw = await papi.commands.sendCommand('paratextProjectManager.gcalPollAuth');
-          const state = JSON.parse(raw as string) as {
+          const state = JSON.parse(raw) as {
             status: string;
             email?: string;
             error?: string;
@@ -1463,9 +1465,9 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
               const calsResult = await papi.commands.sendCommand(
                 'paratextProjectManager.gcalListCalendars',
               );
-              setGcalCalendars(JSON.parse(calsResult as string));
-            } catch (_) {
-              /* non-critical */
+              setGcalCalendars(JSON.parse(calsResult));
+            } catch (e) {
+              if (isPapiDisconnectedError(e)) handleCatch(e);
             }
             setGcalConnecting(false);
             onSuccess?.();
@@ -1477,14 +1479,26 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
             // still pending — check again in 2s
             setTimeout(() => {
               poll().catch((e) => {
+                if (isPapiDisconnectedError(e)) {
+                  handleCatch(e);
+                  return;
+                }
                 console.error('GCal auth poll failed:', e);
               });
             }, 2000);
           }
         } catch (e) {
+          if (isPapiDisconnectedError(e)) {
+            handleCatch(e);
+            return;
+          }
           console.error('GCal auth poll error:', e);
           setTimeout(() => {
             poll().catch((pollErr) => {
+              if (isPapiDisconnectedError(pollErr)) {
+                handleCatch(pollErr);
+                return;
+              }
               console.error('GCal auth retry poll failed:', pollErr);
             });
           }, 2000);
@@ -1511,7 +1525,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       );
       await pollGcalAuth();
     } catch (e) {
-      setGcalError(`Error: ${errMsg(e)}`);
+      setGcalError(handleCatch(e, 'Error: '));
       setGcalMessage('');
       setGcalConnecting(false);
     }
@@ -1524,7 +1538,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
     setGcalMessage('Abriendo el navegador para autorización… (puede tardar hasta 5 min)');
     try {
       const result = await papi.commands.sendCommand('paratextProjectManager.gcalReconnect');
-      const data = JSON.parse(result as string);
+      const data = JSON.parse(result);
       if (data.status === 'started') {
         await pollGcalAuth();
       } else {
@@ -1534,7 +1548,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         setGcalConnecting(false);
       }
     } catch (e) {
-      setGcalError(`Error: ${errMsg(e)}`);
+      setGcalError(handleCatch(e, 'Error: '));
       setGcalMessage('');
       setGcalConnecting(false);
     }
@@ -1548,14 +1562,14 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       setGcalMessage('');
       setGcalError('');
     } catch (e) {
-      setGcalError(`Error al desconectar: ${errMsg(e)}`);
+      setGcalError(handleCatch(e, 'Error al desconectar: '));
     }
   }, []);
 
   const gcalLoadCalendars = useCallback(async () => {
     try {
       const result = await papi.commands.sendCommand('paratextProjectManager.gcalListCalendars');
-      const cals = JSON.parse(result as string) as GcalCalendar[];
+      const cals = JSON.parse(result) as GcalCalendar[];
       setGcalCalendars(cals);
     } catch (_) {
       /* non-critical */
@@ -1567,7 +1581,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       await papi.commands.sendCommand('paratextProjectManager.gcalSetCalendarId', calId);
       setGcalStatus((prev) => ({ ...prev, calendarId: calId }));
     } catch (e) {
-      setGcalError(`Error: ${errMsg(e)}`);
+      setGcalError(handleCatch(e, 'Error: '));
     }
   }, []);
 
@@ -1581,7 +1595,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         'paratextProjectManager.gcalSyncDeadlines',
         projectId,
       );
-      const data = JSON.parse(result as string);
+      const data = JSON.parse(result);
       if (data.errors && data.errors.length > 0) {
         setGcalError(`${data.errors.length} error(es): ${data.errors[0]}`);
       }
@@ -1590,7 +1604,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       );
       await loadGcalStatus();
     } catch (e) {
-      setGcalError(`Error al sincronizar: ${errMsg(e)}`);
+      setGcalError(handleCatch(e, 'Error al sincronizar: '));
     } finally {
       setGcalSyncing(false);
     }
@@ -1599,7 +1613,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
   const flushPendingTime = useCallback(async () => {
     try {
       const res = await papi.commands.sendCommand('paratextProjectManager.gcalFlushPendingTime');
-      const { synced, remaining } = JSON.parse(res as string) as {
+      const { synced, remaining } = JSON.parse(res) as {
         synced: number;
         remaining: number;
       };
@@ -1616,8 +1630,8 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
           alert(`${remaining} registro(s) aún pendientes (sin conexión).`);
         }
       }
-    } catch {
-      /* ignore */
+    } catch (e) {
+      if (isPapiDisconnectedError(e)) handleCatch(e);
     }
   }, []);
 
@@ -1636,9 +1650,10 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         timeMin,
         timeMax,
       );
-      setGcalEvents(JSON.parse(res as string) as GcalEvent[]);
-    } catch (_) {
-      setGcalEvents([]);
+      setGcalEvents(JSON.parse(res) as GcalEvent[]);
+    } catch (e) {
+      if (isPapiDisconnectedError(e)) handleCatch(e);
+      else setGcalEvents([]);
     } finally {
       setGcalEventsLoading(false);
     }
@@ -1820,7 +1835,10 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                 : '✓ Horas registradas + ☁ GCal',
             );
           })
-          .catch(() => setLogTimeSuccess('✓ Horas registradas (sin GCal)'));
+          .catch((e) => {
+            if (isPapiDisconnectedError(e)) handleCatch(e);
+            else setLogTimeSuccess('✓ Horas registradas (sin GCal)');
+          });
         return;
       }
 
@@ -1878,11 +1896,14 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                   : '✓ Horas registradas + ☁ GCal',
               );
             })
-            .catch(() => setLogTimeSuccess('✓ Horas registradas (sin conexión GCal)'));
+            .catch((e) => {
+              if (isPapiDisconnectedError(e)) handleCatch(e);
+              else setLogTimeSuccess('✓ Horas registradas (sin conexión GCal)');
+            });
         }
       }
     } catch (e) {
-      setLogTimeError(`Error al guardar: ${e}`);
+      setLogTimeError(handleCatch(e, 'Error al guardar: '));
     } finally {
       setLogTimeSaving(false);
     }
@@ -1929,7 +1950,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         );
         setTasks(updatedTasks);
       } catch (e) {
-        setLogTimeError(`Error al eliminar: ${e}`);
+        setLogTimeError(handleCatch(e, 'Error al eliminar: '));
       }
     },
     [tasks, stageConfig, projectId],
@@ -1955,10 +1976,10 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
             const evJson = await papi.commands.sendCommand(
               'paratextProjectManager.gcalGetEvents',
               gcalStatus.calendarId,
-              new Date(calMonth + '-01').toISOString(),
+              new Date(`${calMonth}-01`).toISOString(),
               new Date(
-                new Date(calMonth + '-01').getFullYear(),
-                new Date(calMonth + '-01').getMonth() + 1,
+                new Date(`${calMonth}-01`).getFullYear(),
+                new Date(`${calMonth}-01`).getMonth() + 1,
                 1,
               ).toISOString(),
             );
@@ -1967,8 +1988,9 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
             setGcalEventsLoading(false);
           }
         }
-      } catch (_) {
-        // Silent — event already removed from UI; a manual refresh will restore if needed
+      } catch (e) {
+        // Event already removed from UI; a manual refresh will restore if needed.
+        if (isPapiDisconnectedError(e)) handleCatch(e);
       }
     },
     [gcalStatus.calendarId, calMonth],
@@ -1992,9 +2014,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         return s ? `${icons[s] ?? ''}${cellTasks.length > 1 ? ` (${cellTasks.length})` : ''}` : '';
       }),
     ]);
-    return (
-      '\uFEFF' + [header, ...rows].map((row) => row.map((c) => `"${c}"`).join(',')).join('\r\n')
-    );
+    return `\uFEFF${[header, ...rows].map((row) => row.map((c) => `"${c}"`).join(',')).join('\r\n')}`;
   }, [orderedStages, stageConfig, booksInUse, grid]);
 
   const downloadCsv = useCallback(async () => {
@@ -2007,7 +2027,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         'resumen-proyecto.csv',
         content,
       );
-      const data = JSON.parse(result as string);
+      const data = JSON.parse(result);
       if (data.success) {
         setExportStatus(`✓ CSV guardado en Descargas`);
       } else {
@@ -2015,7 +2035,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         setExportStatus('');
       }
     } catch (e) {
-      setExportError(`Error: ${e}`);
+      setExportError(handleCatch(e, 'Error: '));
       setExportStatus('');
     }
     setTimeout(() => {
@@ -2060,27 +2080,23 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
     const date = new Date().toLocaleDateString('es');
     const datetime = new Date().toLocaleString('es');
     return (
-      '<!DOCTYPE html>' +
-      '<html lang="es"><head><meta charset="utf-8">' +
+      `<!DOCTYPE html>` +
+      `<html lang="es"><head><meta charset="utf-8">` +
       `<title>Resumen del Proyecto \u2014 ${date}</title>` +
-      '<style>' +
-      'body{font-family:sans-serif;padding:24px;font-size:12px}' +
-      'h1{font-size:16px;margin-bottom:12px}' +
-      'table{border-collapse:collapse;width:100%}' +
-      'th{background:#1d4ed8;color:white;padding:6px 8px;text-align:left;font-size:11px}' +
-      'td{border:1px solid #e5e7eb}' +
-      '@media print{body{padding:8px}}' +
-      '</style>' +
+      `<style>` +
+      `body{font-family:sans-serif;padding:24px;font-size:12px}` +
+      `h1{font-size:16px;margin-bottom:12px}` +
+      `table{border-collapse:collapse;width:100%}` +
+      `th{background:#1d4ed8;color:white;padding:6px 8px;text-align:left;font-size:11px}` +
+      `td{border:1px solid #e5e7eb}` +
+      `@media print{body{padding:8px}}` +
+      `</style>` +
       `</head><body onload="window.print()">` +
       `<h1>Resumen del Proyecto \u2014 ${date}</h1>` +
-      '<table><thead><tr><th>Libro</th>' +
-      stageHeaders +
-      '</tr></thead>' +
-      '<tbody>' +
-      rows +
-      '</tbody></table>' +
+      `<table><thead><tr><th>Libro</th>${stageHeaders}</tr></thead>` +
+      `<tbody>${rows}</tbody></table>` +
       `<p style="margin-top:16px;color:#666;font-size:11px;">Generado por Paratext Project Manager \u00b7 ${datetime}</p>` +
-      '</body></html>'
+      `</body></html>`
     );
   }, [orderedStages, stageConfig, booksInUse, grid]);
 
@@ -2094,7 +2110,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         'resumen-proyecto.html',
         content,
       );
-      const data = JSON.parse(result as string);
+      const data = JSON.parse(result);
       if (data.success) {
         setExportStatus('✓ Abierto en navegador — usa Ctrl+P para imprimir/PDF');
       } else {
@@ -2102,7 +2118,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
         setExportStatus('');
       }
     } catch (e) {
-      setExportError(`Error: ${e}`);
+      setExportError(handleCatch(e, 'Error: '));
       setExportStatus('');
     }
     setTimeout(() => {
@@ -2180,7 +2196,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                 strokeLinejoin="round"
                 strokeWidth="2"
                 d="M4 6h16M4 12h16M4 18h16"
-              ></path>
+              />
             </svg>
           </button>
           <span className="tw:font-semibold tw:text-sm tw:text-gray-700">Resumen del Proyecto</span>
@@ -2313,7 +2329,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
                                 if (teamMessageRef.current) clearTimeout(teamMessageRef.current);
                                 teamMessageRef.current = setTimeout(() => setTeamMessage(''), 3000);
                               } catch (e) {
-                                setTeamMessage(`Error: ${e}`);
+                                setTeamMessage(handleCatch(e, 'Error: '));
                               } finally {
                                 setTeamSaving(false);
                               }

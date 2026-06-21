@@ -108,7 +108,9 @@ export default function UnreadNotesWidget({
   const [error, setError] = useState('');
   // True when the PAPI JSON-RPC connection to the host has dropped (typically
   // after the program has been idle). See notes-viewer.web-view.tsx for details.
-  const { disconnected, clearDisconnected, handleCatch } = usePapiDisconnect();
+  const { disconnected, clearDisconnected, handleCatch } = usePapiDisconnect({
+    autoReloadOnFocus: false,
+  });
 
   // Auto-dismiss error after 15 seconds
   useEffect(() => {
@@ -209,7 +211,7 @@ export default function UnreadNotesWidget({
               saveRes.driveUrl ||
               `http://localhost:49876/play?project=${projectId}&file=${filename}`;
             const replyData = {
-              threadId: threadId,
+              threadId,
               verseRef: currentThread.verseRef,
               language: currentThread.language,
               selectedText: currentThread.selectedText,
@@ -317,7 +319,8 @@ export default function UnreadNotesWidget({
         console.error(`Error al eliminar comentario: ${res}`);
       }
     } catch (e) {
-      console.error(`Error al eliminar comentario: ${e}`);
+      if (isPapiDisconnectedError(e)) handleCatch(e);
+      else console.error(`Error al eliminar comentario: ${e}`);
     }
   };
 
@@ -334,8 +337,9 @@ export default function UnreadNotesWidget({
       } else {
         setSettings(DEFAULT_NOTES_SETTINGS);
       }
-    } catch (_) {
-      setSettings(DEFAULT_NOTES_SETTINGS);
+    } catch (e) {
+      if (isPapiDisconnectedError(e)) handleCatch(e);
+      else setSettings(DEFAULT_NOTES_SETTINGS);
     }
   }, [currentUser]);
 
@@ -351,7 +355,8 @@ export default function UnreadNotesWidget({
         JSON.stringify(newSettings),
       );
     } catch (e) {
-      console.error('Failed to save notes settings:', e);
+      if (isPapiDisconnectedError(e)) handleCatch(e);
+      else console.error('Failed to save notes settings:', e);
     }
   };
 
@@ -382,8 +387,7 @@ export default function UnreadNotesWidget({
       reader.onloadend = async () => {
         try {
           const base64Data = (reader.result as string).split(',')[1];
-          const cleanedName =
-            'att_' + Date.now() + '_' + file.name.replace(/[^a-zA-Z0-9_.-]/g, '_');
+          const cleanedName = `att_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
 
           const saveRes = await papi.commands.sendCommand(
             'paratextProjectManager.saveAttachment',
@@ -426,7 +430,7 @@ export default function UnreadNotesWidget({
             alert(`Error al guardar archivo adjunto: ${errMsg}`);
           }
         } catch (err) {
-          alert(`Error al guardar adjunto: ${err}`);
+          alert(handleCatch(err, 'Error al guardar adjunto: '));
         } finally {
           setReplying((prev) => ({ ...prev, [threadId]: false }));
           setAttachingThreadId(null);
@@ -491,12 +495,13 @@ export default function UnreadNotesWidget({
         },
       );
     } catch (err) {
-      console.warn('Error subscribing to collab event in unread-notes-widget:', err);
+      if (isPapiDisconnectedError(err)) handleCatch(err);
+      else console.warn('Error subscribing to collab event in unread-notes-widget:', err);
     }
     return () => {
       if (unsub) unsub();
     };
-  }, [projectId, loadNotes]);
+  }, [projectId, loadNotes, handleCatch]);
 
   // Refresh on visibility change but no more than once every 30 seconds
   const lastRefreshRef = useRef(0);
@@ -597,7 +602,7 @@ export default function UnreadNotesWidget({
         alert(`Error al enviar respuesta: ${res}`);
       }
     } catch (e) {
-      alert(`Error al enviar respuesta: ${e}`);
+      alert(handleCatch(e, 'Error al enviar respuesta: '));
     } finally {
       setReplying((prev) => ({ ...prev, [thread.threadId]: false }));
     }
@@ -618,7 +623,8 @@ export default function UnreadNotesWidget({
         );
       }
     } catch (e) {
-      console.error('Failed to mark note as read:', e);
+      if (isPapiDisconnectedError(e)) handleCatch(e);
+      else console.error('Failed to mark note as read:', e);
     }
   };
 
@@ -658,7 +664,8 @@ export default function UnreadNotesWidget({
         Number(thread.verse),
       );
     } catch (err) {
-      console.error('Failed to navigate to verse:', err);
+      if (isPapiDisconnectedError(err)) handleCatch(err);
+      else console.error('Failed to navigate to verse:', err);
     }
   };
 
@@ -923,7 +930,7 @@ export default function UnreadNotesWidget({
                         {isEditingThis ? (
                           <div className="tw:space-y-1 tw:mt-1 tw:bg-gray-50 tw:p-1.5 tw:rounded tw:border tw:border-gray-200">
                             <textarea
-                              value={editingComment!.text}
+                              value={editingComment.text}
                               onChange={(e) =>
                                 setEditingComment((prev) =>
                                   prev ? { ...prev, text: e.target.value } : null,
@@ -965,7 +972,7 @@ export default function UnreadNotesWidget({
                 {isRecording && recordingThreadId === thread.threadId ? (
                   <div className="tw:mt-2 tw:flex tw:items-center tw:justify-between tw:gap-2 tw:pt-1.5 tw:border-t tw:border-gray-50 tw:bg-red-50/50 tw:p-1.5 tw:rounded tw:border tw:border-red-100">
                     <span className="tw:text-red-600 tw:text-xs tw:flex tw:items-center tw:gap-1.5 tw:animate-pulse tw:font-medium">
-                      <span className="tw:w-2 tw:h-2 tw:rounded-full tw:bg-red-600"></span>
+                      <span className="tw:w-2 tw:h-2 tw:rounded-full tw:bg-red-600" />
                       Grabando... ({formatDuration(recordDuration)})
                     </span>
                     <div className="tw:flex tw:gap-1.5">

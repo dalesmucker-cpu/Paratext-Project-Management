@@ -401,7 +401,7 @@ function StageConfigPanel({
   const addStage = () => {
     const label = newStageLabel.trim();
     if (!label) return;
-    const key = 'custom-' + generateId();
+    const key = `custom-${generateId()}`;
     const nextOrder = localOrdered.length;
     setLocalConfig((prev) => ({ ...prev, [key]: { label, order: nextOrder } }));
     setNewStageLabel('');
@@ -1051,7 +1051,7 @@ globalThis.webViewComponent = function TaskBoardWebView({
   const [saving, setSaving] = useState(false);
   const [syncPending, setSyncPending] = useState(false);
   const [error, setError] = useState('');
-  const { disconnected, clearDisconnected, handleCatch } = usePapiDisconnect();
+  const { disconnected, disconnectedRef, clearDisconnected, handleCatch } = usePapiDisconnect();
 
   // Auto-dismiss error after 15 seconds
   useEffect(() => {
@@ -1127,7 +1127,7 @@ globalThis.webViewComponent = function TaskBoardWebView({
       setTasks((store.tasks ?? []).filter((t) => !knownDeleted.includes(t.id)));
       setStageConfig(store.stageConfig ?? {});
       setActivityLog(store.activityLog ?? []);
-      if (membersResult) setTeamMembers(JSON.parse(membersResult as string) as string[]);
+      if (membersResult) setTeamMembers(JSON.parse(membersResult) as string[]);
     } catch (retryErr) {
       if (isCurrentRequest()) setError(handleCatch(retryErr, 'Error al cargar tareas: '));
     } finally {
@@ -1151,12 +1151,14 @@ globalThis.webViewComponent = function TaskBoardWebView({
 
   const silentRefresh = useCallback(async () => {
     if (!projectId || savingRef.current || refreshInProgressRef.current) return;
+    // Don't burn PAPI retries while the connection is known to be dead.
+    if (disconnectedRef.current) return;
     refreshInProgressRef.current = true;
     try {
       const result = await papiRetry(() =>
         papi.commands.sendCommand('paratextProjectManager.getTasks', projectId),
       );
-      const store = JSON.parse(result as string) as TaskStore;
+      const store = JSON.parse(result) as TaskStore;
       lastRefreshRef.current = Date.now();
       const incomingDeleted = new Set(store.deletedTaskIds ?? []);
       // Merge tombstones: add any newly deleted IDs from Drive
@@ -1186,10 +1188,10 @@ globalThis.webViewComponent = function TaskBoardWebView({
         const pendingRaw = await papiRetry(() =>
           papi.commands.sendCommand('paratextProjectManager.tasksDriveGetPendingSync'),
         );
-        const pending = JSON.parse(pendingRaw as string) as string[];
+        const pending = JSON.parse(pendingRaw) as string[];
         if (!pending.includes(projectId)) setSyncPending(false);
-      } catch (_) {
-        /* ignore */
+      } catch (e) {
+        if (isPapiDisconnectedError(e)) handleCatch(e);
       }
     } catch (e) {
       // Surface disconnects so the reconnect banner + auto-reload engage;
@@ -1205,7 +1207,7 @@ globalThis.webViewComponent = function TaskBoardWebView({
     if (!projectId) return undefined;
     const interval = setInterval(silentRefresh, 60_000);
     return () => clearInterval(interval);
-  }, [projectId, silentRefresh]);
+  }, [projectId, silentRefresh, handleCatch]);
 
   // Refresh on visibility change but no more than once every 30 seconds.
   // (Auto-reload when disconnected is handled by usePapiDisconnect.)
@@ -1231,7 +1233,7 @@ globalThis.webViewComponent = function TaskBoardWebView({
           'paratextProjectManager.getTasks',
           projectId,
         );
-        const store = JSON.parse(result as string) as TaskStore;
+        const store = JSON.parse(result) as TaskStore;
         const fresh = store.tasks?.find((t) => t.id === task.id);
         setEditingTask(fresh ?? task);
         // Also update the board with the fresh data while we're here
@@ -1245,8 +1247,9 @@ globalThis.webViewComponent = function TaskBoardWebView({
         });
         if (store.stageConfig && Object.keys(store.stageConfig).length > 0)
           setStageConfig(store.stageConfig);
-      } catch (_) {
-        setEditingTask(task); // fall back to local copy on error
+      } catch (e) {
+        if (isPapiDisconnectedError(e)) handleCatch(e);
+        else setEditingTask(task); // fall back to local copy on error
       }
     },
     [projectId],
@@ -1462,12 +1465,13 @@ globalThis.webViewComponent = function TaskBoardWebView({
         },
       );
     } catch (err) {
-      console.warn('[TaskBoard] Error subscribing to collab event:', err);
+      if (isPapiDisconnectedError(err)) handleCatch(err);
+      else console.warn('[TaskBoard] Error subscribing to collab event:', err);
     }
     return () => {
       if (unsub) unsub();
     };
-  }, [projectId, silentRefresh]);
+  }, [projectId, silentRefresh, handleCatch]);
 
   /** Live-update a task without adding an activity log entry — used for real-time typing sync */
   const liveEditTask = useCallback(
@@ -1490,8 +1494,9 @@ globalThis.webViewComponent = function TaskBoardWebView({
           projectId,
           JSON.stringify(store),
         );
-      } catch (_) {
-        /* silent — live sync failure is non-critical, the final Save click will still succeed */
+      } catch (e) {
+        /* Live sync failure is non-critical, the final Save click will still succeed. */
+        if (isPapiDisconnectedError(e)) handleCatch(e);
       }
     },
     [projectId, tasks, stageConfig, activityLog, deletedTaskIds],
@@ -1541,7 +1546,7 @@ globalThis.webViewComponent = function TaskBoardWebView({
               strokeLinejoin="round"
               strokeWidth="2"
               d="M4 6h16M4 12h16M4 18h16"
-            ></path>
+            />
           </svg>
         </button>
         <span className="tw:font-semibold tw:text-gray-700">Tablero de Tareas</span>
@@ -1689,7 +1694,7 @@ globalThis.webViewComponent = function TaskBoardWebView({
               });
             const isOver = dragOverStage === stage && draggingTaskId !== null;
             const noAssignees =
-              !stageConfig[stage]?.assignees || stageConfig[stage].assignees!.length === 0;
+              !stageConfig[stage]?.assignees || stageConfig[stage].assignees.length === 0;
             return (
               <div
                 key={stage}
