@@ -1005,6 +1005,14 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     keyTermsAnalyticsProvider,
   );
 
+  // --- Lightweight ping command (no notes-helper IPC) ---
+  // Used by the usePapiDisconnect hook's heartbeat to keep the PAPI WebSocket
+  // alive during idle and to proactively check connectivity on visibility change.
+  const pingPromise = papi.commands.registerCommand(
+    'paratextProjectManager.ping',
+    (): string => 'pong',
+  );
+
   // --- Open commands ---
 
   const openTaskBoardPromise = papi.commands.registerCommand(
@@ -3368,6 +3376,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
 
   // Await all registrations
   context.registrations.add(
+    await pingPromise,
     await taskBoardProviderPromise,
     await myTasksProviderPromise,
     await projectOverviewProviderPromise,

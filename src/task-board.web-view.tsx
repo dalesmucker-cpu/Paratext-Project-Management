@@ -1051,7 +1051,7 @@ globalThis.webViewComponent = function TaskBoardWebView({
   const [saving, setSaving] = useState(false);
   const [syncPending, setSyncPending] = useState(false);
   const [error, setError] = useState('');
-  const { disconnected, disconnectedRef, clearDisconnected, handleCatch } = usePapiDisconnect();
+  const { disconnected, clearDisconnected, handleCatch } = usePapiDisconnect();
 
   // Auto-dismiss error after 15 seconds
   useEffect(() => {
@@ -1151,8 +1151,6 @@ globalThis.webViewComponent = function TaskBoardWebView({
 
   const silentRefresh = useCallback(async () => {
     if (!projectId || savingRef.current || refreshInProgressRef.current) return;
-    // Don't burn PAPI retries while the connection is known to be dead.
-    if (disconnectedRef.current) return;
     refreshInProgressRef.current = true;
     try {
       const result = await papiRetry(() =>

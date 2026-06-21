@@ -61,9 +61,8 @@ function errorToText(e: unknown): string {
  * 4s -> 8s (assuming default baseDelayMs of 2000)
  *
  * If the failure looks like the PAPI connection has dropped (see {@link isPapiDisconnectedError}),
- * retrying on a dead connection is futile, so we do at most one short retry (in case it was a
- * transient blip) and then throw a {@link PapiDisconnectedError} so the caller can offer a
- * reconnect.
+ * the error is thrown immediately as a {@link PapiDisconnectedError} — retrying on a dead
+ * connection is futile and only adds latency (500ms × N commands = significant during a herd).
  */
 export async function papiRetry<T>(fn: () => Promise<T>, options?: PapiRetryOptions): Promise<T> {
   const { maxRetries = 3, baseDelayMs = 2000, isCancelled } = options ?? {};
@@ -79,17 +78,9 @@ export async function papiRetry<T>(fn: () => Promise<T>, options?: PapiRetryOpti
     } catch (err) {
       lastError = err;
 
-      // A dead JSON-RPC connection won't recover by retrying. Try once more
-      // quickly (transient blips do happen), then surface a typed error so the
-      // UI can prompt the user to reconnect instead of wasting ~14s.
+      // A dead JSON-RPC connection won't recover by retrying. Throw immediately
+      // so the caller can surface the disconnect and trigger recovery (reload).
       if (isPapiDisconnectedError(err)) {
-        if (attempt < 1) {
-          await new Promise((r) => setTimeout(r, 500));
-          if (isCancelled?.()) {
-            throw new PapiDisconnectedError(errorToText(err), err);
-          }
-          continue;
-        }
         throw new PapiDisconnectedError(errorToText(err), err);
       }
 

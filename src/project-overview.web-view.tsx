@@ -652,7 +652,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
   const [showTeamSection, setShowTeamSection] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const { disconnected, disconnectedRef, clearDisconnected, handleCatch } = usePapiDisconnect();
+  const { disconnected, clearDisconnected, handleCatch } = usePapiDisconnect();
 
   // Auto-dismiss error after 15 seconds
   useEffect(() => {
@@ -869,8 +869,6 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
 
   const silentRefresh = useCallback(async () => {
     if (!projectId || refreshInProgressRef.current) return;
-    // Don't burn PAPI retries while the connection is known to be dead.
-    if (disconnectedRef.current) return;
     refreshInProgressRef.current = true;
     try {
       const result = await papiRetry(() =>

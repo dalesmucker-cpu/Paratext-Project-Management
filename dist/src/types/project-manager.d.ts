@@ -16,6 +16,8 @@ declare module 'papi-shared-types' {
     'paratextProjectManager.getTasks': (projectId: string) => Promise<string>;
     /** Saves all tasks for a project from a JSON string (TaskStore) */
     'paratextProjectManager.saveTasks': (projectId: string, tasksJson: string) => Promise<string>;
+    /** Lightweight ping that returns 'pong' instantly — used by the disconnect heartbeat */
+    'paratextProjectManager.ping': () => Promise<string>;
     /** Gets the current user name from extension settings */
     'paratextProjectManager.getCurrentUser': () => Promise<string>;
     /** Writes the current user name to extension settings */

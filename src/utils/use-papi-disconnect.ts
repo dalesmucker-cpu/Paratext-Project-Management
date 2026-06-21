@@ -1,3 +1,4 @@
+import papi from '@papi/frontend';
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react';
 import { isPapiDisconnectedError } from './papi-retry';
 
@@ -28,6 +29,9 @@ export function errMsg(e: unknown): string {
  */
 export const DISCONNECT_MESSAGE =
   'Se perdió la conexión con Paratext (probablemente por inactividad). Haz clic en "Reconectar" para reanudar.';
+
+/** Heartbeat interval — sends a lightweight ping to keep the PAPI WebSocket alive during idle. */
+const HEARTBEAT_INTERVAL_MS = 30_000;
 
 export interface UsePapiDisconnectOptions {
   /**
@@ -66,14 +70,18 @@ export interface UsePapiDisconnectResult {
 }
 
 /**
- * Encapsulates the proven disconnect-recovery pattern used by the notes viewer and unread-notes
- * widget so every webview behaves consistently when the PAPI JSON-RPC WebSocket closes after idle.
+ * Encapsulates the disconnect-prevention and recovery pattern for all webviews.
  *
- * - Tracks a `disconnected` flag plus a ref mirror for stable listeners.
- * - Provides `handleCatch` to normalize error messages and flip the flag.
- * - Optionally installs a `visibilitychange` listener that reloads the webview when it regains focus
- *   while disconnected (re-establishing the connection from scratch — retrying commands on a dead
- *   socket cannot succeed).
+ * **Heartbeat (prevention):** Sends a lightweight `ping` command every 30 seconds to keep the
+ * PAPI JSON-RPC WebSocket alive during idle. This is the primary defense — if the socket never
+ * closes, none of the recovery machinery is needed.
+ *
+ * **Disconnect detection:** If the heartbeat ping fails with a disconnect error, or if any PAPI
+ * command fails with a disconnect error (via `handleCatch`), the `disconnected` flag is set.
+ *
+ * **Recovery:** On `visibilitychange` to visible, if `disconnected` is true, the webview is
+ * reloaded (with random jitter to prevent thundering herd). The reload re-establishes the
+ * JSON-RPC connection from scratch.
  */
 export function usePapiDisconnect(options?: UsePapiDisconnectOptions): UsePapiDisconnectResult {
   const { onBeforeReload, autoReloadOnFocus = true, reloadJitterMs = 2000 } = options ?? {};
@@ -103,6 +111,39 @@ export function usePapiDisconnect(options?: UsePapiDisconnectOptions): UsePapiDi
     return `${fallbackPrefix}${errMsg(err)}`;
   }, []);
 
+  // ── Heartbeat: ping every 30s to keep the WebSocket alive ──────────────
+  // This is the primary defense against idle disconnects. The ping command is
+  // handled directly in main.ts (no notes-helper IPC), so it's nearly free.
+  // If the ping succeeds and we were disconnected, clear the flag (the
+  // connection recovered on its own). If it fails, set disconnected so the
+  // next visibility change triggers a reload.
+  useEffect(() => {
+    let cancelled = false;
+    const heartbeat = setInterval(async () => {
+      if (cancelled) return;
+      try {
+        await papi.commands.sendCommand('paratextProjectManager.ping');
+        // Connection is alive — if we were disconnected, the connection
+        // recovered on its own (e.g. platform reconnected the WebSocket).
+        if (disconnectedRef.current && !cancelled) {
+          setDisconnected(false);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        if (isPapiDisconnectedError(err)) {
+          setDisconnected(true);
+        }
+        // Non-disconnect errors are likely transient — ignore them so the
+        // heartbeat doesn't flip the banner for unrelated failures.
+      }
+    }, HEARTBEAT_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(heartbeat);
+    };
+  }, []);
+
+  // ── Recovery: reload on visibility change if disconnected ──────────────
   useEffect(() => {
     if (!autoReloadOnFocus) return undefined;
     const onVisible = () => {
