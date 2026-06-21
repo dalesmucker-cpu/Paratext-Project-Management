@@ -4,8 +4,6 @@ import { isPapiDisconnectedError } from './papi-retry';
 
 /**
  * Safely convert any caught value (including papi plain-object errors) to a readable string.
- * Mirrors the local `errMsg` helpers defined in several webviews; consolidated here so the
- * disconnect hook can format errors without each call site repeating the logic.
  */
 export function errMsg(e: unknown): string {
   if (e instanceof Error) return e.message;
@@ -23,65 +21,46 @@ export function errMsg(e: unknown): string {
 }
 
 /**
- * Spanish message shown in the reconnect banner when the PAPI JSON-RPC connection between the
- * webview and the host has dropped (typically after the program has been idle). Kept as a constant
- * so every webview surfaces the same wording.
+ * Spanish message shown in the reconnect banner when the PAPI JSON-RPC connection has dropped.
  */
 export const DISCONNECT_MESSAGE =
   'Se perdió la conexión con Paratext (probablemente por inactividad). Haz clic en "Reconectar" para reanudar.';
 
 /** Heartbeat interval — sends a lightweight ping to keep the PAPI WebSocket alive during idle. */
-const HEARTBEAT_INTERVAL_MS = 30_000;
+const HEARTBEAT_INTERVAL_MS = 15_000;
+
+/** Delay before per-tab visibility data loads, giving the hook's ping check time to complete. */
+export const VISIBILITY_LOAD_DELAY_MS = 300;
 
 export interface UsePapiDisconnectOptions {
-  /**
-   * Called when the tab becomes visible while disconnected, just before `window.location.reload()`
-   * runs. Useful for logging; the reload is unconditional when disconnected.
-   */
   onBeforeReload?: () => void;
-  /**
-   * When true (default), a `visibilitychange` listener auto-reloads the webview when it regains
-   * focus while disconnected — the only reliable way to re-establish the JSON-RPC connection. Set
-   * to false if a webview needs custom recovery, but this is rarely needed.
-   */
   autoReloadOnFocus?: boolean;
-  /**
-   * Maximum random jitter (ms) added to the auto-reload delay. Default 2000. The actual delay is
-   * a random value in [0, reloadJitterMs] generated once per hook instance. Staggering prevents a
-   * thundering herd when multiple tabs all become visible at the same time and would otherwise
-   * fire ~30 simultaneous PAPI commands through the single shared notes-helper IPC channel.
-   */
   reloadJitterMs?: number;
 }
 
 export interface UsePapiDisconnectResult {
-  /** True when the PAPI connection is known to be down. Drives the banner UI. */
   disconnected: boolean;
-  /** Stable mirror of {@link disconnected} for use inside long-lived listeners. */
   disconnectedRef: MutableRefObject<boolean>;
-  /** Mark connected again (e.g. at the start of a fresh load attempt). */
   clearDisconnected: () => void;
-  /**
-   * Inspect a caught error. If it looks like a PAPI disconnect, set {@link disconnected} and return
-   * {@link DISCONNECT_MESSAGE}; otherwise return `fallbackPrefix + errMsg(err)`. Call this in every
-   * catch block that surfaces errors to the UI.
-   */
   handleCatch: (err: unknown, fallbackPrefix?: string) => string;
 }
 
 /**
- * Encapsulates the disconnect-prevention and recovery pattern for all webviews.
+ * Disconnect prevention + recovery for all webviews.
  *
- * **Heartbeat (prevention):** Sends a lightweight `ping` command every 30 seconds to keep the
- * PAPI JSON-RPC WebSocket alive during idle. This is the primary defense — if the socket never
- * closes, none of the recovery machinery is needed.
+ * **Heartbeat:** Pings every 15s to keep the WebSocket alive. Browsers throttle
+ * timers in background tabs, so this may not fire reliably while idle — the
+ * proactive ping on visibility change is the real safety net.
  *
- * **Disconnect detection:** If the heartbeat ping fails with a disconnect error, or if any PAPI
- * command fails with a disconnect error (via `handleCatch`), the `disconnected` flag is set.
+ * **Proactive ping on visibility change:** When the tab becomes visible, the
+ * hook immediately pings the backend to verify the connection is alive. This
+ * fires BEFORE per-tab data-load effects (which are delayed by
+ * {@link VISIBILITY_LOAD_DELAY_MS}). If the ping fails, `disconnected` is set
+ * to `true` synchronously, so the delayed data loads see it and skip. The webview
+ * is then reloaded to re-establish the connection.
  *
- * **Recovery:** On `visibilitychange` to visible, if `disconnected` is true, the webview is
- * reloaded (with random jitter to prevent thundering herd). The reload re-establishes the
- * JSON-RPC connection from scratch.
+ * **Recovery:** If `disconnected` is true, the webview is reloaded (with random
+ * jitter to prevent thundering herd).
  */
 export function usePapiDisconnect(options?: UsePapiDisconnectOptions): UsePapiDisconnectResult {
   const { onBeforeReload, autoReloadOnFocus = true, reloadJitterMs = 2000 } = options ?? {};
@@ -89,13 +68,9 @@ export function usePapiDisconnect(options?: UsePapiDisconnectOptions): UsePapiDi
   const disconnectedRef = useRef(false);
   disconnectedRef.current = disconnected;
 
-  // Stable per-instance random jitter (generated once, never re-randomized). Spreads reloads
-  // across multiple webviews so they don't all hit the backend simultaneously.
   const jitterRef = useRef<number>(Math.random() * reloadJitterMs);
-  // Guard against double-reload if visibilitychange fires twice while the reload timer is pending.
   const reloadingRef = useRef(false);
 
-  // Keep the onBeforeReload ref current without re-subscribing the listener.
   const onBeforeReloadRef = useRef(onBeforeReload);
   useEffect(() => {
     onBeforeReloadRef.current = onBeforeReload;
@@ -111,20 +86,13 @@ export function usePapiDisconnect(options?: UsePapiDisconnectOptions): UsePapiDi
     return `${fallbackPrefix}${errMsg(err)}`;
   }, []);
 
-  // ── Heartbeat: ping every 30s to keep the WebSocket alive ──────────────
-  // This is the primary defense against idle disconnects. The ping command is
-  // handled directly in main.ts (no notes-helper IPC), so it's nearly free.
-  // If the ping succeeds and we were disconnected, clear the flag (the
-  // connection recovered on its own). If it fails, set disconnected so the
-  // next visibility change triggers a reload.
+  // ── Heartbeat: ping every 15s to keep the WebSocket alive ──────────────
   useEffect(() => {
     let cancelled = false;
     const heartbeat = setInterval(async () => {
       if (cancelled) return;
       try {
         await papi.commands.sendCommand('paratextProjectManager.ping');
-        // Connection is alive — if we were disconnected, the connection
-        // recovered on its own (e.g. platform reconnected the WebSocket).
         if (disconnectedRef.current && !cancelled) {
           setDisconnected(false);
         }
@@ -133,8 +101,6 @@ export function usePapiDisconnect(options?: UsePapiDisconnectOptions): UsePapiDi
         if (isPapiDisconnectedError(err)) {
           setDisconnected(true);
         }
-        // Non-disconnect errors are likely transient — ignore them so the
-        // heartbeat doesn't flip the banner for unrelated failures.
       }
     }, HEARTBEAT_INTERVAL_MS);
     return () => {
@@ -143,22 +109,44 @@ export function usePapiDisconnect(options?: UsePapiDisconnectOptions): UsePapiDi
     };
   }, []);
 
-  // ── Recovery: reload on visibility change if disconnected ──────────────
+  // ── Proactive ping + recovery on visibility change ─────────────────────
+  // When the tab becomes visible, immediately ping to check connectivity.
+  // This is the safety net for when the heartbeat was throttled by the
+  // browser while in the background. The ping fails synchronously if the
+  // connection is dead ("Tried to send payload while not connected"), so
+  // `disconnected` is set before the per-tab data-load effects fire (they
+  // are delayed by VISIBILITY_LOAD_DELAY_MS via a setTimeout wrapper).
   useEffect(() => {
     if (!autoReloadOnFocus) return undefined;
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return;
-      if (!disconnectedRef.current) return;
       if (reloadingRef.current) return;
-      reloadingRef.current = true;
-      // The PAPI connection dropped while idle. Reload the webview to
-      // re-establish the JSON-RPC connection from scratch — retrying
-      // commands on a dead connection cannot succeed. Jitter spreads
-      // reloads across multiple webviews to prevent a thundering herd.
-      onBeforeReloadRef.current?.();
-      setTimeout(() => {
-        window.location.reload();
-      }, jitterRef.current);
+
+      // If we already know we're disconnected, skip the ping and reload.
+      if (disconnectedRef.current) {
+        reloadingRef.current = true;
+        onBeforeReloadRef.current?.();
+        setTimeout(() => window.location.reload(), jitterRef.current);
+        return;
+      }
+
+      // Proactively ping to verify the connection is alive. The heartbeat
+      // may not have fired while the tab was backgrounded (browser throttling),
+      // so we can't trust that `disconnected === false` means the connection
+      // is actually alive.
+      papi.commands
+        .sendCommand('paratextProjectManager.ping')
+        .then(() => {
+          // Connection is alive — nothing to do.
+        })
+        .catch((err) => {
+          if (isPapiDisconnectedError(err)) {
+            setDisconnected(true);
+            reloadingRef.current = true;
+            onBeforeReloadRef.current?.();
+            setTimeout(() => window.location.reload(), jitterRef.current);
+          }
+        });
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);

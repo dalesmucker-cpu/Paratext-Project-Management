@@ -237,7 +237,7 @@ globalThis.webViewComponent = function MyTasksWebView({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const { disconnected, clearDisconnected, handleCatch } = usePapiDisconnect();
+  const { disconnected, disconnectedRef, clearDisconnected, handleCatch } = usePapiDisconnect();
 
   // Auto-dismiss error after 15 seconds
   useEffect(() => {
@@ -389,15 +389,22 @@ globalThis.webViewComponent = function MyTasksWebView({
 
   // Refresh on visibility change but no more than once every 30 seconds.
   // (Auto-reload when disconnected is handled by usePapiDisconnect.)
+  // The 300ms delay gives the hook's proactive ping time to detect a dead
+  // connection and set disconnectedRef before we send PAPI commands.
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return;
       if (disconnected) return;
-      if (Date.now() - lastRefreshRef.current > 30_000) silentRefresh();
+      if (Date.now() - lastRefreshRef.current > 30_000) {
+        setTimeout(() => {
+          if (disconnectedRef.current) return;
+          silentRefresh();
+        }, 300);
+      }
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [silentRefresh, disconnected]);
+  }, [silentRefresh, disconnected, disconnectedRef]);
 
   const persistTasks = useCallback(
     async (updated: ProjectTask[], previousTasks?: ProjectTask[]) => {

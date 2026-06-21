@@ -151,7 +151,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
   // True when the PAPI JSON-RPC connection to the host has dropped (typically
   // after the program has been idle). When true, retrying commands is futile,
   // so the UI offers a "Reconectar" button that reloads the webview.
-  const { disconnected, clearDisconnected, handleCatch } = usePapiDisconnect();
+  const { disconnected, disconnectedRef, clearDisconnected, handleCatch } = usePapiDisconnect();
   const [currentUser, setCurrentUser] = useState('');
 
   // Auto-dismiss error after 15 seconds
@@ -424,6 +424,8 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
 
   // Refresh on visibility change but no more than once every 30 seconds.
   // (Auto-reload when disconnected is handled by usePapiDisconnect.)
+  // The 300ms delay gives the hook's proactive ping time to detect a dead
+  // connection and set disconnectedRef before we send PAPI commands.
   const lastRefreshRef = useRef(0);
   useEffect(() => {
     const onVisible = () => {
@@ -431,12 +433,15 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
       if (disconnected) return;
       if (Date.now() - lastRefreshRef.current > 30_000) {
         lastRefreshRef.current = Date.now();
-        loadNotes();
+        setTimeout(() => {
+          if (disconnectedRef.current) return;
+          loadNotes();
+        }, 300);
       }
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [loadNotes, disconnected, handleCatch]);
+  }, [loadNotes, disconnected, disconnectedRef, handleCatch]);
 
   // Save Settings
   const saveSettings = async (updates: Partial<NotesDisplaySettings>) => {

@@ -108,7 +108,7 @@ export default function UnreadNotesWidget({
   const [error, setError] = useState('');
   // True when the PAPI JSON-RPC connection to the host has dropped (typically
   // after the program has been idle). See notes-viewer.web-view.tsx for details.
-  const { disconnected, clearDisconnected, handleCatch } = usePapiDisconnect({
+  const { disconnected, disconnectedRef, clearDisconnected, handleCatch } = usePapiDisconnect({
     autoReloadOnFocus: false,
   });
 
@@ -503,21 +503,26 @@ export default function UnreadNotesWidget({
     };
   }, [projectId, loadNotes, handleCatch]);
 
-  // Refresh on visibility change but no more than once every 30 seconds
+  // Refresh on visibility change but no more than once every 30 seconds.
+  // (Auto-reload when disconnected is handled by usePapiDisconnect.)
+  // The 300ms delay gives the hook's proactive ping time to detect a dead
+  // connection and set disconnectedRef before we send PAPI commands.
   const lastRefreshRef = useRef(0);
-  // Auto-reload when disconnected is handled by usePapiDisconnect.
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return;
       if (disconnected) return;
       if (Date.now() - lastRefreshRef.current > 30_000) {
         lastRefreshRef.current = Date.now();
-        loadNotes();
+        setTimeout(() => {
+          if (disconnectedRef.current) return;
+          loadNotes();
+        }, 300);
       }
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [loadNotes, disconnected]);
+  }, [loadNotes, disconnected, disconnectedRef]);
 
   // Helper: check if a name matches currentUser
   const isMe = (name: string) => {
