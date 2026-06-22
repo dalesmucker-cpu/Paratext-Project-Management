@@ -857,7 +857,6 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
   }, [projectId, clearDisconnected, handleCatch]);
 
   useEffect(() => {
-  useEffect(() => {
     if (ready) loadTasks();
   }, [ready, loadTasks]);
 
