@@ -1853,9 +1853,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   }, [initData]);
 
   // Refresh on visibility change but no more than once every 30 seconds.
-  // (Auto-reload when disconnected is handled by usePapiDisconnect.)
-  // The 300ms delay gives the hook's proactive ping time to detect a dead
-  // connection and set disconnectedRef before we send PAPI commands.
+  // (Disconnect detection and recovery is handled by usePapiDisconnect.)
   const lastRefreshRef = useRef(0);
   useEffect(() => {
     const onVisible = () => {
@@ -1863,18 +1861,15 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       if (disconnected) return;
       if (Date.now() - lastRefreshRef.current > 30_000) {
         lastRefreshRef.current = Date.now();
-        setTimeout(() => {
-          if (disconnectedRef.current) return;
-          if (selectedBook) {
-            loadChapter(selectedBook, selectedChapter);
-          }
-          loadNotes();
-        }, 300);
+        if (selectedBook) {
+          loadChapter(selectedBook, selectedChapter);
+        }
+        loadNotes();
       }
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [selectedBook, selectedChapter, loadChapter, loadNotes, disconnected, disconnectedRef]);
+  }, [selectedBook, selectedChapter, loadChapter, loadNotes, disconnected]);
 
   // Cleaned up original non-callback loadChapter/loadNotes definitions since they were moved to top.
 

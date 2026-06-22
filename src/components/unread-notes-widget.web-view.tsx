@@ -504,9 +504,7 @@ export default function UnreadNotesWidget({
   }, [projectId, loadNotes, handleCatch]);
 
   // Refresh on visibility change but no more than once every 30 seconds.
-  // (Auto-reload when disconnected is handled by usePapiDisconnect.)
-  // The 300ms delay gives the hook's proactive ping time to detect a dead
-  // connection and set disconnectedRef before we send PAPI commands.
+  // (Disconnect detection and recovery is handled by usePapiDisconnect.)
   const lastRefreshRef = useRef(0);
   useEffect(() => {
     const onVisible = () => {
@@ -514,15 +512,12 @@ export default function UnreadNotesWidget({
       if (disconnected) return;
       if (Date.now() - lastRefreshRef.current > 30_000) {
         lastRefreshRef.current = Date.now();
-        setTimeout(() => {
-          if (disconnectedRef.current) return;
-          loadNotes();
-        }, 300);
+        loadNotes();
       }
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [loadNotes, disconnected, disconnectedRef]);
+  }, [loadNotes, disconnected]);
 
   // Helper: check if a name matches currentUser
   const isMe = (name: string) => {

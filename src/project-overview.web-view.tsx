@@ -913,23 +913,16 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
   }, [projectId, silentRefresh]);
 
   // Refresh on visibility change but no more than once every 30 seconds.
-  // (Auto-reload when disconnected is handled by usePapiDisconnect.)
-  // The 300ms delay gives the hook's proactive ping time to detect a dead
-  // connection and set disconnectedRef before we send PAPI commands.
+  // (Disconnect detection and recovery is handled by usePapiDisconnect.)
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return;
       if (disconnected) return;
-      if (Date.now() - lastRefreshRef.current > 30_000) {
-        setTimeout(() => {
-          if (disconnectedRef.current) return;
-          silentRefresh();
-        }, 300);
-      }
+      if (Date.now() - lastRefreshRef.current > 30_000) silentRefresh();
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [silentRefresh, disconnected, disconnectedRef]);
+  }, [silentRefresh, disconnected]);
 
   // --- Google Calendar callbacks ---
 
