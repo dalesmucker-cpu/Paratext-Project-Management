@@ -1311,6 +1311,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
   async function loadOrUpdateKeyTermsStore(
     projectId: string,
     projectDir: string,
+    languageCode?: string,
   ): Promise<KeyTermsStore> {
     const keyTermsPath = `${projectDir}${SEP}${KEY_TERMS_FILENAME}`;
     const exists = await runFileHelper('exists', keyTermsPath);
@@ -1318,6 +1319,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     let store: KeyTermsStore;
     let modified = false;
     const pt9ListsDir = 'C:\\Program Files\\Paratext 9\\Terms\\Lists';
+    const activeLang = languageCode || 'es';
 
     if (exists.trim() === 'true') {
       store = JSON.parse(await runFileHelper('read', keyTermsPath));
@@ -1337,7 +1339,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
           const newStore = await loadLegacyKeyTermsAsync(
             pt9ListsDir,
             projectDir,
-            'es',
+            activeLang as 'en' | 'es',
             runFileHelper,
           );
           const existingMap = new Map(store.terms.map((t) => [t.id, t]));
@@ -1357,7 +1359,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         }
       }
     } else {
-      store = await loadLegacyKeyTermsAsync(pt9ListsDir, projectDir, 'es', runFileHelper);
+      store = await loadLegacyKeyTermsAsync(pt9ListsDir, projectDir, activeLang as 'en' | 'es', runFileHelper);
       modified = true;
     }
 
@@ -1415,6 +1417,37 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
       await runFileHelper('write', keyTermsPath, JSON.stringify(store, null, 2));
     }
 
+    // Apply localization override in memory based on requested languageCode (without saving to JSON)
+    const locXmlPath = `${pt9ListsDir}${SEP}${activeLang === 'es' ? 'BiblicalTermsEs.xml' : 'BiblicalTermsEn.xml'}`;
+    const locXmlExists = await runFileHelper('exists', locXmlPath);
+    if (locXmlExists.trim() === 'true') {
+      try {
+        const locXml = await runFileHelper('read', locXmlPath);
+        const tagRegex = /<Localization\s+([^>]+)>/g;
+        const locMap = new Map<string, string>();
+        let match;
+        while ((match = tagRegex.exec(locXml)) !== null) {
+          const attributes = match[1];
+          const idMatch = /Id="([^"]+)"/.exec(attributes);
+          const glossMatch = /Gloss="([^"]+)"/.exec(attributes);
+          if (idMatch && glossMatch) {
+            locMap.set(idMatch[1], glossMatch[1]);
+          }
+        }
+
+        // Override term glosses
+        store.terms = store.terms.map((term) => {
+          const localizedGloss = locMap.get(term.id);
+          if (localizedGloss) {
+            return { ...term, gloss: localizedGloss };
+          }
+          return term;
+        });
+      } catch (err) {
+        logger.warn(`Failed to localize key terms in memory: ${err}`);
+      }
+    }
+
     return store;
   }
 
@@ -1442,10 +1475,10 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
 
   const getKeyTermsDataPromise = papi.commands.registerCommand(
     'paratextProjectManager.getKeyTermsData',
-    async (projectId: string): Promise<string> => {
+    async (projectId: string, languageCode?: string): Promise<string> => {
       try {
         const projectDir = await resolveProjectDir(projectId);
-        const store = await loadOrUpdateKeyTermsStore(projectId, projectDir);
+        const store = await loadOrUpdateKeyTermsStore(projectId, projectDir, languageCode);
         return JSON.stringify(store, null, 2);
       } catch (e: any) {
         logger.warn(`getKeyTermsData failed for "${projectId}": ${e}`);

@@ -279,7 +279,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
 
   // Collapsible panels
   const [morphPanelOpen, setMorphPanelOpen] = useState(false);
-  const [collabPanelOpen, setCollabPanelOpen] = useState(false);
+  const [collabPanelOpen, setCollabPanelOpen] = useState(true);
 
   // Morphology Rule Editor states
   const [newPrefix, setNewPrefix] = useState('');
@@ -313,8 +313,9 @@ globalThis.webViewComponent = function KeyTermsWebView({
 
   const loadDataRequestRef = useRef(0);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (activeLang?: string) => {
     if (!projectId) return;
+    const langToUse = activeLang || lang;
     const requestId = ++loadDataRequestRef.current;
     const isCurrentRequest = () => requestId === loadDataRequestRef.current;
     setLoading(true);
@@ -322,7 +323,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
     clearDisconnected();
     try {
       const dataStr = await papiRetry(
-        () => papi.commands.sendCommand('paratextProjectManager.getKeyTermsData', projectId),
+        () => papi.commands.sendCommand('paratextProjectManager.getKeyTermsData', projectId, langToUse),
         { isCancelled: () => !isCurrentRequest() },
       );
       if (!isCurrentRequest()) return;
@@ -354,8 +355,8 @@ globalThis.webViewComponent = function KeyTermsWebView({
   }, [projectId, tx, clearDisconnected, handleCatch, loadProjectNotes]);
 
   useEffect(() => {
-    if (ready) loadData();
-  }, [ready, loadData]);
+    if (ready) loadData(lang);
+  }, [ready, loadData, lang]);
 
   const persistStore = useCallback(
     async (updated: KeyTermsStore) => {
@@ -1695,6 +1696,167 @@ globalThis.webViewComponent = function KeyTermsWebView({
               </div>
             </div>
 
+            {/* Collaborative notes panel */}
+            <div className="tw:bg-card tw:rounded-xl tw:border tw:border-border tw:shadow-sm tw:overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setCollabPanelOpen((o) => !o)}
+                aria-expanded={collabPanelOpen}
+                className="tw:w-full tw:px-4 tw:py-3 tw:bg-secondary tw:flex tw:items-center tw:justify-between tw:cursor-pointer tw:border-b tw:border-border hover:tw:bg-accent tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring"
+              >
+                <span className="tw:font-bold tw:text-xs tw:text-muted-foreground tw:uppercase tw:tracking-wider">
+                  {tx('collabNotesTitle')}
+                </span>
+                <span className="tw:flex tw:items-center tw:gap-2">
+                  {termThreads.length > 0 && (
+                    <span className="tw:px-1.5 tw:py-0.5 tw:bg-primary/10 tw:text-primary tw:rounded tw:text-[10px] tw:font-semibold">
+                      {termThreads.length} {termThreads.length === 1 ? 'thread' : 'threads'}
+                    </span>
+                  )}
+                  {collabPanelOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                </span>
+              </button>
+
+              {collabPanelOpen && (
+                <div className="tw:p-4 tw:space-y-6">
+                  {/* List of active threads */}
+                  {termThreads.length > 0 && (
+                    <div className="tw:space-y-4">
+                      {termThreads.map((thread) => (
+                        <div key={thread.threadId} className="tw:border tw:border-border tw:rounded-xl tw:overflow-hidden tw:bg-secondary/20">
+                          {/* Thread Header */}
+                          <div className="tw:px-3 tw:py-2 tw:bg-secondary/60 tw:border-b tw:border-border tw:flex tw:items-center tw:justify-between tw:gap-2">
+                            <span className="tw:text-xs tw:font-bold tw:text-foreground">
+                              Reference: {thread.verseRef}
+                            </span>
+                            <span className="tw:text-[10px] tw:text-muted-foreground">
+                              {thread.comments.length} {thread.comments.length === 1 ? 'comment' : 'comments'}
+                            </span>
+                          </div>
+
+                          {/* Comments list */}
+                          <div className="tw:p-3 tw:space-y-2.5 tw:max-h-60 tw:overflow-y-auto">
+                            {thread.comments.map((comment) => {
+                              const commentKey = `${thread.threadId}-${comment.date}`;
+                              const isEditing = editingCommentKey === commentKey;
+                              const isMyComment = isSameUser(comment.user, currentUser);
+                              return (
+                                <div key={commentKey} className="tw:p-2 tw:bg-card tw:rounded-lg tw:border tw:border-border tw:space-y-1">
+                                  <div className="tw:flex tw:items-center tw:justify-between tw:gap-2 tw:text-[10px] tw:text-muted-foreground">
+                                    <div className="tw:flex tw:items-center tw:gap-1.5">
+                                      <span className="tw:font-semibold tw:text-foreground">
+                                        {comment.user}
+                                      </span>
+                                      {isMyComment && (
+                                        <span className="tw:text-[9px] tw:bg-primary/10 tw:text-primary tw:px-1 tw:rounded tw:font-medium">
+                                          {lang === 'en' ? 'You' : 'Tú'}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="tw:flex tw:items-center tw:gap-2">
+                                      <span>
+                                        {new Date(comment.date).toLocaleString(lang === 'en' ? 'en' : 'es')}
+                                      </span>
+                                      {isMyComment && !isEditing && (
+                                        <div className="tw:flex tw:items-center tw:gap-1">
+                                          <button
+                                            type="button"
+                                            onClick={() => setEditingCommentKey(commentKey)}
+                                            className="tw:p-0.5 tw:text-muted-foreground hover:tw:text-primary tw:rounded hover:tw:bg-accent tw:transition-colors tw:cursor-pointer"
+                                            title={lang === 'en' ? 'Edit comment' : 'Editar comentario'}
+                                          >
+                                            <Pencil size={10} />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleDeleteComment(thread.threadId, comment.date, comment.user)}
+                                            className="tw:p-0.5 tw:text-muted-foreground hover:tw:text-destructive tw:rounded hover:tw:bg-accent tw:transition-colors tw:cursor-pointer"
+                                            title={lang === 'en' ? 'Delete comment' : 'Eliminar comentario'}
+                                          >
+                                            <Trash2 size={10} />
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {isEditing ? (
+                                    <InlineEditComment
+                                      initialText={comment.plainText || comment.contents}
+                                      onSave={async (newText) => {
+                                        await handleSaveComment(thread.threadId, comment.date, comment.user, newText);
+                                        setEditingCommentKey(null);
+                                      }}
+                                      onCancel={() => setEditingCommentKey(null)}
+                                    />
+                                  ) : (
+                                    <p className="tw:text-xs tw:text-foreground tw:whitespace-pre-wrap tw:break-words">
+                                      {comment.plainText || comment.contents}
+                                    </p>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {/* Reply box for this thread */}
+                          <div className="tw:p-3 tw:bg-secondary/10 tw:border-t tw:border-border">
+                            <CommentBox
+                              placeholder="Write a reply..."
+                              buttonText="Reply"
+                              onSubmit={async (txt) => {
+                                return await handleReplyToThread(thread.threadId, txt, thread.verseRef);
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {termThreads.length === 0 && (
+                    <div className="tw:text-xs tw:text-muted-foreground tw:text-center tw:py-4 tw:italic">
+                      {tx('noNotes')}
+                    </div>
+                  )}
+
+                  {/* Start new thread section */}
+                  <div className="tw:border-t tw:border-border tw:pt-4 tw:space-y-3">
+                    <h4 className="tw:text-xs tw:font-bold tw:text-foreground">
+                      Start a New Discussion Thread
+                    </h4>
+                    <div className="tw:flex tw:items-center tw:gap-2">
+                      <label className="tw:text-xs tw:text-muted-foreground">Associate with reference:</label>
+                      <select
+                        value={newNoteVerseRef}
+                        onChange={(e) => setNewNoteVerseRef(e.target.value)}
+                        className="tw:border tw:border-border tw:rounded-md tw:px-2 tw:py-1 tw:text-xs tw:bg-background tw:text-foreground"
+                      >
+                        {selectedTerm.references && selectedTerm.references.length > 0 ? (
+                          selectedTerm.references.map((ref) => (
+                            <option key={ref} value={ref}>
+                              {ref}
+                            </option>
+                          ))
+                        ) : (
+                          <option value="GEN 1:1">GEN 1:1</option>
+                        )}
+                      </select>
+                    </div>
+
+                    <CommentBox
+                      placeholder={tx('notesPlaceholder')}
+                      buttonText={tx('sendNote')}
+                      icon={<CheckCircle2 size={12} />}
+                      rows={2}
+                      onSubmit={async (txt) => {
+                        return await handleStartThread(txt, newNoteVerseRef);
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Expected Verse References List */}
             <div className="tw:bg-card tw:p-4 tw:rounded-xl tw:border tw:border-border tw:shadow-sm tw:space-y-3">
               <div className="tw:flex tw:items-center tw:justify-between tw:flex-wrap tw:gap-2">
@@ -1954,166 +2116,6 @@ globalThis.webViewComponent = function KeyTermsWebView({
               )}
             </div>
 
-            {/* Collaborative notes panel */}
-            <div className="tw:bg-card tw:rounded-xl tw:border tw:border-border tw:shadow-sm tw:overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setCollabPanelOpen((o) => !o)}
-                aria-expanded={collabPanelOpen}
-                className="tw:w-full tw:px-4 tw:py-3 tw:bg-secondary tw:flex tw:items-center tw:justify-between tw:cursor-pointer tw:border-b tw:border-border hover:tw:bg-accent tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring"
-              >
-                <span className="tw:font-bold tw:text-xs tw:text-muted-foreground tw:uppercase tw:tracking-wider">
-                  {tx('collabNotesTitle')}
-                </span>
-                <span className="tw:flex tw:items-center tw:gap-2">
-                  {termThreads.length > 0 && (
-                    <span className="tw:px-1.5 tw:py-0.5 tw:bg-primary/10 tw:text-primary tw:rounded tw:text-[10px] tw:font-semibold">
-                      {termThreads.length} {termThreads.length === 1 ? 'thread' : 'threads'}
-                    </span>
-                  )}
-                  {collabPanelOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                </span>
-              </button>
-
-              {collabPanelOpen && (
-                <div className="tw:p-4 tw:space-y-6">
-                  {/* List of active threads */}
-                  {termThreads.length > 0 && (
-                    <div className="tw:space-y-4">
-                      {termThreads.map((thread) => (
-                        <div key={thread.threadId} className="tw:border tw:border-border tw:rounded-xl tw:overflow-hidden tw:bg-secondary/20">
-                          {/* Thread Header */}
-                          <div className="tw:px-3 tw:py-2 tw:bg-secondary/60 tw:border-b tw:border-border tw:flex tw:items-center tw:justify-between tw:gap-2">
-                            <span className="tw:text-xs tw:font-bold tw:text-foreground">
-                              Reference: {thread.verseRef}
-                            </span>
-                            <span className="tw:text-[10px] tw:text-muted-foreground">
-                              {thread.comments.length} {thread.comments.length === 1 ? 'comment' : 'comments'}
-                            </span>
-                          </div>
-
-                          {/* Comments list */}
-                          <div className="tw:p-3 tw:space-y-2.5 tw:max-h-60 tw:overflow-y-auto">
-                            {thread.comments.map((comment) => {
-                              const commentKey = `${thread.threadId}-${comment.date}`;
-                              const isEditing = editingCommentKey === commentKey;
-                              const isMyComment = isSameUser(comment.user, currentUser);
-                              return (
-                                <div key={commentKey} className="tw:p-2 tw:bg-card tw:rounded-lg tw:border tw:border-border tw:space-y-1">
-                                  <div className="tw:flex tw:items-center tw:justify-between tw:gap-2 tw:text-[10px] tw:text-muted-foreground">
-                                    <div className="tw:flex tw:items-center tw:gap-1.5">
-                                      <span className="tw:font-semibold tw:text-foreground">
-                                        {comment.user}
-                                      </span>
-                                      {isMyComment && (
-                                        <span className="tw:text-[9px] tw:bg-primary/10 tw:text-primary tw:px-1 tw:rounded tw:font-medium">
-                                          {lang === 'en' ? 'You' : 'Tú'}
-                                        </span>
-                                      )}
-                                    </div>
-                                    <div className="tw:flex tw:items-center tw:gap-2">
-                                      <span>
-                                        {new Date(comment.date).toLocaleString(lang === 'en' ? 'en' : 'es')}
-                                      </span>
-                                      {isMyComment && !isEditing && (
-                                        <div className="tw:flex tw:items-center tw:gap-1">
-                                          <button
-                                            type="button"
-                                            onClick={() => setEditingCommentKey(commentKey)}
-                                            className="tw:p-0.5 tw:text-muted-foreground hover:tw:text-primary tw:rounded hover:tw:bg-accent tw:transition-colors tw:cursor-pointer"
-                                            title={lang === 'en' ? 'Edit comment' : 'Editar comentario'}
-                                          >
-                                            <Pencil size={10} />
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={() => handleDeleteComment(thread.threadId, comment.date, comment.user)}
-                                            className="tw:p-0.5 tw:text-muted-foreground hover:tw:text-destructive tw:rounded hover:tw:bg-accent tw:transition-colors tw:cursor-pointer"
-                                            title={lang === 'en' ? 'Delete comment' : 'Eliminar comentario'}
-                                          >
-                                            <Trash2 size={10} />
-                                          </button>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                  {isEditing ? (
-                                    <InlineEditComment
-                                      initialText={comment.plainText || comment.contents}
-                                      onSave={async (newText) => {
-                                        await handleSaveComment(thread.threadId, comment.date, comment.user, newText);
-                                        setEditingCommentKey(null);
-                                      }}
-                                      onCancel={() => setEditingCommentKey(null)}
-                                    />
-                                  ) : (
-                                    <p className="tw:text-xs tw:text-foreground tw:whitespace-pre-wrap tw:break-words">
-                                      {comment.plainText || comment.contents}
-                                    </p>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-
-                          {/* Reply box for this thread */}
-                          <div className="tw:p-3 tw:bg-secondary/10 tw:border-t tw:border-border">
-                            <CommentBox
-                              placeholder="Write a reply..."
-                              buttonText="Reply"
-                              onSubmit={async (txt) => {
-                                return await handleReplyToThread(thread.threadId, txt, thread.verseRef);
-                              }}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {termThreads.length === 0 && (
-                    <div className="tw:text-xs tw:text-muted-foreground tw:text-center tw:py-4 tw:italic">
-                      {tx('noNotes')}
-                    </div>
-                  )}
-
-                  {/* Start new thread section */}
-                  <div className="tw:border-t tw:border-border tw:pt-4 tw:space-y-3">
-                    <h4 className="tw:text-xs tw:font-bold tw:text-foreground">
-                      Start a New Discussion Thread
-                    </h4>
-                    <div className="tw:flex tw:items-center tw:gap-2">
-                      <label className="tw:text-xs tw:text-muted-foreground">Associate with reference:</label>
-                      <select
-                        value={newNoteVerseRef}
-                        onChange={(e) => setNewNoteVerseRef(e.target.value)}
-                        className="tw:border tw:border-border tw:rounded-md tw:px-2 tw:py-1 tw:text-xs tw:bg-background tw:text-foreground"
-                      >
-                        {selectedTerm.references && selectedTerm.references.length > 0 ? (
-                          selectedTerm.references.map((ref) => (
-                            <option key={ref} value={ref}>
-                              {ref}
-                            </option>
-                          ))
-                        ) : (
-                          <option value="GEN 1:1">GEN 1:1</option>
-                        )}
-                      </select>
-                    </div>
-
-                    <CommentBox
-                      placeholder={tx('notesPlaceholder')}
-                      buttonText={tx('sendNote')}
-                      icon={<CheckCircle2 size={12} />}
-                      rows={2}
-                      onSubmit={async (txt) => {
-                        return await handleStartThread(txt, newNoteVerseRef);
-                      }}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
           </div>
         ) : (
           <div className="tw:flex-1 tw:flex tw:flex-col tw:items-center tw:justify-center tw:text-muted-foreground tw:text-sm tw:gap-3 tw:p-8 tw:text-center">
