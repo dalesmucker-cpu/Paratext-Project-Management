@@ -1151,6 +1151,7 @@ globalThis.webViewComponent = function TaskBoardWebView({
 
   const silentRefresh = useCallback(async () => {
     if (!projectId || savingRef.current || refreshInProgressRef.current) return;
+    if (disconnectedRef.current) return; // skip PAPI calls while disconnected
     refreshInProgressRef.current = true;
     try {
       const result = await papiRetry(() =>

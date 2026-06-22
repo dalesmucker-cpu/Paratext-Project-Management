@@ -869,6 +869,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
 
   const silentRefresh = useCallback(async () => {
     if (!projectId || refreshInProgressRef.current) return;
+    if (disconnectedRef.current) return; // skip PAPI calls while disconnected
     refreshInProgressRef.current = true;
     try {
       const result = await papiRetry(() =>

@@ -21,7 +21,7 @@ export function errMsg(e: unknown): string {
 }
 
 /**
- * Spanish message shown in the reconnect banner when the PAPI JSON-RPC connection has dropped.
+ * Spanish message shown in the reconnect banner.
  */
 export const DISCONNECT_MESSAGE =
   'Se perdió la conexión con Paratext. Reconectando automáticamente…';
@@ -29,22 +29,19 @@ export const DISCONNECT_MESSAGE =
 /** Heartbeat interval — sends a lightweight ping to keep the PAPI WebSocket alive during idle. */
 const HEARTBEAT_INTERVAL_MS = 15_000;
 
-/** How often to poll for connection recovery while disconnected. */
-const RECOVERY_POLL_INTERVAL_MS = 2000;
-
 /**
  * Disconnect prevention + recovery for all webviews.
  *
  * **Heartbeat (prevention):** Pings every 15s to keep the WebSocket alive.
- * Stops pinging once disconnected (no point pinging a dead connection).
+ * Stops immediately when disconnected (no error spam).
  *
  * **Detection:** If the heartbeat ping fails, or any PAPI command fails via
  * `handleCatch`, the `disconnected` flag is set.
  *
- * **Recovery:** Once disconnected, polls every 2s with a ping to check if the
- * connection has recovered. When the ping succeeds, reloads the webview (with
- * jitter to prevent thundering herd). This avoids reloading into a still-dead
- * connection, which was causing the persistent errors.
+ * **Recovery:** Once disconnected, ALL PAPI calls stop (heartbeat, intervals,
+ * data loads). After a staggered delay (jitter 1000-4000ms per tab), the
+ * webview reloads — this is the ONLY way to re-establish the PAPI WebSocket.
+ * No polling (the connection never recovers without a reload).
  */
 export function usePapiDisconnect(options?: {
   onBeforeReload?: () => void;
@@ -56,14 +53,13 @@ export function usePapiDisconnect(options?: {
   clearDisconnected: () => void;
   handleCatch: (err: unknown, fallbackPrefix?: string) => string;
 } {
-  const { onBeforeReload, autoReloadOnFocus = true, reloadJitterMs = 1500 } = options ?? {};
+  const { onBeforeReload, autoReloadOnFocus = true, reloadJitterMs = 3000 } = options ?? {};
   const [disconnected, setDisconnected] = useState(false);
   const disconnectedRef = useRef(false);
   disconnectedRef.current = disconnected;
 
-  const jitterRef = useRef<number>(Math.random() * reloadJitterMs);
-  const reloadingRef = useRef(false);
-  const recoveryPollRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const jitterRef = useRef<number>(1000 + Math.random() * reloadJitterMs);
+  const reloadTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const onBeforeReloadRef = useRef(onBeforeReload);
   useEffect(() => {
@@ -81,7 +77,7 @@ export function usePapiDisconnect(options?: {
   }, []);
 
   // ── Heartbeat: ping every 15s to keep the WebSocket alive ──────────────
-  // Stops when disconnected — the recovery poll takes over.
+  // Stops when disconnected — no pinging a dead connection.
   useEffect(() => {
     let cancelled = false;
     const heartbeat = setInterval(async () => {
@@ -101,54 +97,34 @@ export function usePapiDisconnect(options?: {
     };
   }, []);
 
-  // ── Recovery poll: when disconnected, ping every 2s until connection ──
-  // comes back, then reload the webview. This avoids reloading into a
-  // still-dead connection (which was causing the persistent errors).
+  // ── Recovery: reload after staggered delay when disconnected ───────────
+  // The PAPI WebSocket never recovers without a reload. So we reload after
+  // a random delay (1-4s per tab) to stagger the load on the backend.
+  // No polling — just wait and reload.
   useEffect(() => {
-    if (!disconnected || !autoReloadOnFocus) {
-      if (recoveryPollRef.current) {
-        clearInterval(recoveryPollRef.current);
-        recoveryPollRef.current = undefined;
-      }
-      return undefined;
-    }
+    if (!disconnected || !autoReloadOnFocus) return undefined;
+    if (reloadTimerRef.current) return undefined;
 
-    if (reloadingRef.current) return undefined;
+    onBeforeReloadRef.current?.();
+    reloadTimerRef.current = setTimeout(() => {
+      window.location.reload();
+    }, jitterRef.current);
 
-    const poll = setInterval(async () => {
-      if (reloadingRef.current) return;
-      try {
-        await papi.commands.sendCommand('paratextProjectManager.ping');
-        // Connection recovered! Reload to re-establish the full WebSocket.
-        reloadingRef.current = true;
-        clearInterval(poll);
-        recoveryPollRef.current = undefined;
-        onBeforeReloadRef.current?.();
-        setTimeout(() => window.location.reload(), jitterRef.current);
-      } catch {
-        // Still dead — keep polling. The error is silently swallowed to
-        // avoid console spam (the platform logs it at debug level regardless).
-      }
-    }, RECOVERY_POLL_INTERVAL_MS);
-
-    recoveryPollRef.current = poll;
     return () => {
-      clearInterval(poll);
-      if (recoveryPollRef.current === poll) recoveryPollRef.current = undefined;
+      if (reloadTimerRef.current) {
+        clearTimeout(reloadTimerRef.current);
+        reloadTimerRef.current = undefined;
+      }
     };
   }, [disconnected, autoReloadOnFocus]);
 
   // ── Proactive ping on visibility change ────────────────────────────────
-  // When the tab becomes visible, immediately check connectivity. The
-  // heartbeat may not have fired while backgrounded (browser throttling).
+  // The heartbeat may not have fired while backgrounded (browser throttling).
   useEffect(() => {
     if (!autoReloadOnFocus) return undefined;
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return;
-      if (reloadingRef.current) return;
-      // If already disconnected, the recovery poll is handling it.
-      if (disconnectedRef.current) return;
-      // Proactively ping to check connectivity.
+      if (disconnectedRef.current) return; // already handling recovery
       papi.commands
         .sendCommand('paratextProjectManager.ping')
         .then(() => {})
