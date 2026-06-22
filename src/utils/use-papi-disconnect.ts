@@ -30,9 +30,7 @@ export interface UsePapiDisconnectOptions {
 }
 
 export interface UsePapiDisconnectResult {
-  /** True after a brief startup delay, so mount effects don't fire PAPI commands before the WebSocket is ready. */
   ready: boolean;
-  /** True when the PAPI connection is known to be down. Drives the banner UI. */
   disconnected: boolean;
   disconnectedRef: MutableRefObject<boolean>;
   clearDisconnected: () => void;
@@ -42,19 +40,21 @@ export interface UsePapiDisconnectResult {
 /**
  * Disconnect detection and recovery for all webviews.
  *
- * **Startup delay:** On mount, waits 1 second before setting `ready=true`.
- * This gives the PAPI WebSocket time to connect after a reload, without
- * sending any pings that would generate "Tried to send payload" errors.
- * All mount-time data loads should check `ready` before proceeding.
+ * **Global unhandled rejection handler:** Installs a `window` handler that
+ * catches PAPI-related unhandled promise rejections (the platform's JSON-RPC
+ * layer logs these at error level before our catch handlers can suppress them).
+ *
+ * **Startup delay:** On mount, waits 3 seconds before setting `ready=true`.
+ * The PAPI WebSocket needs time to connect after a reload. Without this delay,
+ * mount-effect data loads fire PAPI commands before the WebSocket is ready,
+ * producing "Tried to send payload" errors.
  *
  * **Detection:** When any PAPI command fails with a disconnect error (via
- * `handleCatch`), the `disconnected` flag is set and the reconnect banner
- * appears.
+ * `handleCatch`), the `disconnected` flag is set and the banner appears.
  *
- * **Recovery:** The user clicks "Reconectar" which reloads the webview.
- * After reload, the 1-second startup delay gives the WebSocket time to
- * connect, then data loads proceed normally. If the connection is still
- * dead, the first data load will fail and the banner appears again.
+ * **Recovery:** User clicks "Reconectar" → webview reloads → 3s delay →
+ * data loads proceed. If the connection is still dead, the first data load
+ * fails and the banner appears again.
  */
 export function usePapiDisconnect(options?: UsePapiDisconnectOptions): UsePapiDisconnectResult {
   const { autoReloadOnFocus: _autoReloadOnFocus = true } = options ?? {};
@@ -65,12 +65,26 @@ export function usePapiDisconnect(options?: UsePapiDisconnectOptions): UsePapiDi
   const readyRef = useRef(false);
   readyRef.current = ready;
 
-  // ── Startup delay: wait 1s for the WebSocket to connect ────────────────
-  // No pings — pinging a dead connection generates "Tried to send payload"
-  // errors in the console. The 1-second delay is enough for the WebSocket
-  // to connect after a reload.
+  // ── Global unhandled rejection handler ────────────────────────────────
+  // The PAPI platform logs "Tried to send payload while not connected" at
+  // the renderer level when the WebSocket is dead. Even though our try/catch
+  // blocks catch the rejection, some PAPI calls at the module level (before
+  // any component mounts) may produce unhandled rejections. This handler
+  // suppresses those.
   useEffect(() => {
-    const timer = setTimeout(() => setReady(true), 1000);
+    const handler = (event: PromiseRejectionEvent) => {
+      const reason = event.reason;
+      if (isPapiDisconnectedError(reason)) {
+        event.preventDefault();
+      }
+    };
+    window.addEventListener('unhandledrejection', handler);
+    return () => window.removeEventListener('unhandledrejection', handler);
+  }, []);
+
+  // ── Startup delay: wait 3s for the WebSocket to connect ────────────────
+  useEffect(() => {
+    const timer = setTimeout(() => setReady(true), 3000);
     return () => clearTimeout(timer);
   }, []);
 
