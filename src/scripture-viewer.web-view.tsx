@@ -546,7 +546,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   // True when the PAPI JSON-RPC connection to the host has dropped (typically
   // after the program has been idle). When true, the UI offers a "Reconectar"
   // button that reloads the webview.
-  const { disconnected, disconnectedRef, clearDisconnected, handleCatch } = usePapiDisconnect();
+  const { ready, disconnected, disconnectedRef, clearDisconnected, handleCatch } = usePapiDisconnect();
   // Auto-dismiss error after 15 seconds
   useEffect(() => {
     if (!error) return;
@@ -1849,8 +1849,8 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   }, [projectId, handleCatch]);
 
   useEffect(() => {
-    initData();
-  }, [initData]);
+    if (ready) initData();
+  }, [ready, initData]);
 
   // Refresh on visibility change but no more than once every 30 seconds.
   // (Disconnect detection and recovery is handled by usePapiDisconnect.)

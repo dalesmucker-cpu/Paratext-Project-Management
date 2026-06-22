@@ -151,7 +151,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
   // True when the PAPI JSON-RPC connection to the host has dropped (typically
   // after the program has been idle). When true, retrying commands is futile,
   // so the UI offers a "Reconectar" button that reloads the webview.
-  const { disconnected, disconnectedRef, clearDisconnected, handleCatch } = usePapiDisconnect();
+  const { ready, disconnected, disconnectedRef, clearDisconnected, handleCatch } = usePapiDisconnect();
   const [currentUser, setCurrentUser] = useState('');
 
   // Auto-dismiss error after 15 seconds
@@ -389,14 +389,14 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
   );
 
   useEffect(() => {
-    loadUserAndMembers();
-  }, [loadUserAndMembers]);
+    if (ready) loadUserAndMembers();
+  }, [ready, loadUserAndMembers]);
 
   useEffect(() => {
-    if (projectId && currentUser) {
+    if (ready && projectId && currentUser) {
       loadNotes();
     }
-  }, [projectId, currentUser, loadNotes, handleCatch]);
+  }, [ready, projectId, currentUser, loadNotes, handleCatch]);
 
   // Listen to collaboration events
   useEffect(() => {

@@ -108,7 +108,7 @@ export default function UnreadNotesWidget({
   const [error, setError] = useState('');
   // True when the PAPI JSON-RPC connection to the host has dropped (typically
   // after the program has been idle). See notes-viewer.web-view.tsx for details.
-  const { disconnected, disconnectedRef, clearDisconnected, handleCatch } = usePapiDisconnect({
+  const { ready, disconnected, disconnectedRef, clearDisconnected, handleCatch } = usePapiDisconnect({
     autoReloadOnFocus: false,
   });
 
@@ -472,8 +472,8 @@ export default function UnreadNotesWidget({
   }, [projectId, currentUser, clearDisconnected, handleCatch]);
 
   useEffect(() => {
-    loadSettings();
-  }, [loadSettings]);
+    if (ready) loadSettings();
+  }, [ready, loadSettings]);
 
   useEffect(() => {
     if (projectId && currentUser) {

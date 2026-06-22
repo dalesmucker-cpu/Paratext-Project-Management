@@ -652,7 +652,7 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
   const [showTeamSection, setShowTeamSection] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const { disconnected, disconnectedRef, clearDisconnected, handleCatch } = usePapiDisconnect();
+  const { ready, disconnected, disconnectedRef, clearDisconnected, handleCatch } = usePapiDisconnect();
 
   // Auto-dismiss error after 15 seconds
   useEffect(() => {
@@ -857,8 +857,9 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
   }, [projectId, clearDisconnected, handleCatch]);
 
   useEffect(() => {
-    loadTasks();
-  }, [loadTasks]);
+  useEffect(() => {
+    if (ready) loadTasks();
+  }, [ready, loadTasks]);
 
   // Carries activityLog + deletedTaskIds through time-entry saves without causing re-renders
   const extrasRef = useRef<{ activityLog?: unknown[]; deletedTaskIds?: string[] }>({});

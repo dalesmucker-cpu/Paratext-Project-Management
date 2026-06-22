@@ -1051,7 +1051,7 @@ globalThis.webViewComponent = function TaskBoardWebView({
   const [saving, setSaving] = useState(false);
   const [syncPending, setSyncPending] = useState(false);
   const [error, setError] = useState('');
-  const { disconnected, disconnectedRef, clearDisconnected, handleCatch } = usePapiDisconnect();
+  const { ready, disconnected, disconnectedRef, clearDisconnected, handleCatch } = usePapiDisconnect();
 
   // Auto-dismiss error after 15 seconds
   useEffect(() => {
@@ -1136,8 +1136,8 @@ globalThis.webViewComponent = function TaskBoardWebView({
   }, [projectId, clearDisconnected, handleCatch]);
 
   useEffect(() => {
-    loadTasks();
-  }, [loadTasks]);
+    if (ready) loadTasks();
+  }, [ready, loadTasks]);
 
   // Background auto-refresh — silently picks up changes saved by other computers
   const savingRef = useRef(false);

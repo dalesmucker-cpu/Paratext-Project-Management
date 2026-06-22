@@ -46,7 +46,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
   const [store, setStore] = useState<KeyTermsStore | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const { disconnected, clearDisconnected, handleCatch } = usePapiDisconnect();
+  const { ready, disconnected, clearDisconnected, handleCatch } = usePapiDisconnect();
 
   useEffect(() => {
     if (!error) return undefined;
@@ -202,8 +202,8 @@ globalThis.webViewComponent = function KeyTermsWebView({
   }, [projectId, tx, clearDisconnected, handleCatch]);
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    if (ready) loadData();
+  }, [ready, loadData]);
 
   const persistStore = useCallback(
     async (updated: KeyTermsStore) => {
