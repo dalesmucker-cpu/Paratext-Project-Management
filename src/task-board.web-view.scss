@@ -1,7 +1,12 @@
 @use './tailwind.css';
 
 /* Ensure the root fills the panel */
+html,
+body,
 #root {
-  height: 100%;
-  overflow: hidden;
+  height: 100% !important;
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
 }
