@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import papi from '@papi/frontend';
-import type { ParatextNoteThread, NotesDisplaySettings } from '../types/note.types';
+import type { ParatextNoteThread, NotesDisplaySettings, NotesSortBy } from '../types/note.types';
 import { DEFAULT_NOTES_SETTINGS } from '../types/note.types';
+import { BIBLE_BOOKS } from '../types/shared.constants';
 import { papiRetry } from '../utils/papi-retry';
 import { usePapiDisconnect } from '../utils/use-papi-disconnect';
 
@@ -565,6 +566,29 @@ export default function UnreadNotesWidget({
 
       return true;
     })
+    .sort((a, b) => {
+      const sortBy: NotesSortBy = settings.sortBy || 'most_recent';
+      if (sortBy === 'most_recent') {
+        return b.latestDate.localeCompare(a.latestDate);
+      }
+      if (sortBy === 'oldest') {
+        return a.latestDate.localeCompare(b.latestDate);
+      }
+      if (sortBy === 'unread_first') {
+        if (a.isUnread !== b.isUnread) return a.isUnread ? -1 : 1;
+        return b.latestDate.localeCompare(a.latestDate);
+      }
+      if (sortBy === 'book_order') {
+        const bookOrder = new Map(BIBLE_BOOKS.map((bk, i) => [bk, i]));
+        const ai = bookOrder.has(a.book) ? (bookOrder.get(a.book) as number) : 9999;
+        const bi = bookOrder.has(b.book) ? (bookOrder.get(b.book) as number) : 9999;
+        if (ai !== bi) return ai - bi;
+        if (a.chapter !== b.chapter) return a.chapter - b.chapter;
+        if (a.verse !== b.verse) return a.verse - b.verse;
+        return b.latestDate.localeCompare(a.latestDate);
+      }
+      return 0;
+    })
     .slice(0, settings.limitCount);
 
   // Reply handler
@@ -769,6 +793,19 @@ export default function UnreadNotesWidget({
             </div>
           </div>
           <div className="tw:grid tw:grid-cols-2 tw:gap-2">
+            <div>
+              <label className="tw:block tw:text-gray-500 tw:mb-0.5">Ordenar por</label>
+              <select
+                value={settings.sortBy || 'most_recent'}
+                onChange={(e) => saveSettings({ sortBy: e.target.value as NotesSortBy })}
+                className="tw:w-full tw:border tw:rounded tw:px-1.5 tw:py-0.5 tw:bg-white"
+              >
+                <option value="most_recent">Más reciente</option>
+                <option value="oldest">Más antiguo</option>
+                <option value="unread_first">No leídas primero</option>
+                <option value="book_order">Orden bíblico</option>
+              </select>
+            </div>
             <div>
               <label className="tw:block tw:text-gray-500 tw:mb-0.5">Tamaño de letra</label>
               <select

@@ -1,7 +1,7 @@
 import { WebViewProps } from '@papi/core';
 import papi from '@papi/frontend';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import type { ParatextNoteThread, NotesDisplaySettings } from './types/note.types';
+import type { ParatextNoteThread, NotesDisplaySettings, NotesSortBy } from './types/note.types';
 import { DEFAULT_NOTES_SETTINGS } from './types/note.types';
 import { papiRetry } from './utils/papi-retry';
 import { usePapiDisconnect } from './utils/use-papi-disconnect';
@@ -805,65 +805,90 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
 
   // Process threads with filters and settings
   const filteredThreads = useMemo(() => {
-    return threads
-      .filter((t) => {
-        // 1. Show mode
-        if (settings.showMode === 'unread_only' && !t.isUnread) return false;
+    const filtered = threads.filter((t) => {
+      // 1. Show mode
+      if (settings.showMode === 'unread_only' && !t.isUnread) return false;
 
-        // 2. Scope
-        if (settings.scope === 'assigned_to_me') {
-          if (!t.assignedUser || !isMe(t.assignedUser)) return false;
-        } else if (settings.scope === 'my_threads') {
-          const rootUser = t.comments[0]?.user || '';
-          if (!isMe(rootUser)) return false;
+      // 2. Scope
+      if (settings.scope === 'assigned_to_me') {
+        if (!t.assignedUser || !isMe(t.assignedUser)) return false;
+      } else if (settings.scope === 'my_threads') {
+        const rootUser = t.comments[0]?.user || '';
+        if (!isMe(rootUser)) return false;
+      }
+
+      // 3. Max age
+      if (settings.maxAgeDays > 0) {
+        const ageMs = settings.maxAgeDays * 24 * 60 * 60 * 1000;
+        const noteTime = new Date(t.latestDate).getTime();
+        if (Date.now() - noteTime > ageMs) return false;
+      }
+
+      // 4. Quick book filter
+      if (filterBook !== 'all' && t.book !== filterBook) return false;
+
+      // 5. Quick author filter
+      if (filterAuthor !== 'all') {
+        const matchAuthor = (cUser: string) => {
+          const clean = (n: string) =>
+            n
+              .toLowerCase()
+              .normalize('NFD')
+              .replace(/[\u0300-\u036f]/g, '')
+              .replace(/[^a-z0-9]/g, '');
+          const cleanC = clean(cUser);
+          const cleanF = clean(filterAuthor);
+          return cleanC.includes(cleanF) || cleanF.includes(cleanC);
+        };
+        if (!t.comments.some((c) => matchAuthor(c.user))) {
+          return false;
         }
+      }
 
-        // 3. Max age
-        if (settings.maxAgeDays > 0) {
-          const ageMs = settings.maxAgeDays * 24 * 60 * 60 * 1000;
-          const noteTime = new Date(t.latestDate).getTime();
-          if (Date.now() - noteTime > ageMs) return false;
-        }
+      // 6. Text search
+      if (searchText.trim()) {
+        const query = searchText
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '');
+        const matchText = `${t.verseRef} ${t.selectedText} ${t.comments
+          .map((c) => c.plainText)
+          .join(' ')}`
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '');
+        if (!matchText.includes(query)) return false;
+      }
 
-        // 4. Quick book filter
-        if (filterBook !== 'all' && t.book !== filterBook) return false;
+      return true;
+    });
 
-        // 5. Quick author filter
-        if (filterAuthor !== 'all') {
-          const matchAuthor = (cUser: string) => {
-            const clean = (n: string) =>
-              n
-                .toLowerCase()
-                .normalize('NFD')
-                .replace(/[\u0300-\u036f]/g, '')
-                .replace(/[^a-z0-9]/g, '');
-            const cleanC = clean(cUser);
-            const cleanF = clean(filterAuthor);
-            return cleanC.includes(cleanF) || cleanF.includes(cleanC);
-          };
-          if (!t.comments.some((c) => matchAuthor(c.user))) {
-            return false;
-          }
-        }
+    // 7. Sort
+    const sortBy: NotesSortBy = settings.sortBy || 'most_recent';
+    const bookOrder = new Map(BIBLE_BOOKS.map((b, i) => [b, i]));
+    const sorted = [...filtered].sort((a, b) => {
+      if (sortBy === 'most_recent') {
+        return b.latestDate.localeCompare(a.latestDate);
+      }
+      if (sortBy === 'oldest') {
+        return a.latestDate.localeCompare(b.latestDate);
+      }
+      if (sortBy === 'unread_first') {
+        if (a.isUnread !== b.isUnread) return a.isUnread ? -1 : 1;
+        return b.latestDate.localeCompare(a.latestDate);
+      }
+      if (sortBy === 'book_order') {
+        const ai = bookOrder.has(a.book) ? (bookOrder.get(a.book) as number) : 9999;
+        const bi = bookOrder.has(b.book) ? (bookOrder.get(b.book) as number) : 9999;
+        if (ai !== bi) return ai - bi;
+        if (a.chapter !== b.chapter) return a.chapter - b.chapter;
+        if (a.verse !== b.verse) return a.verse - b.verse;
+        return b.latestDate.localeCompare(a.latestDate);
+      }
+      return 0;
+    });
 
-        // 6. Text search
-        if (searchText.trim()) {
-          const query = searchText
-            .toLowerCase()
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '');
-          const matchText = `${t.verseRef} ${t.selectedText} ${t.comments
-            .map((c) => c.plainText)
-            .join(' ')}`
-            .toLowerCase()
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '');
-          if (!matchText.includes(query)) return false;
-        }
-
-        return true;
-      })
-      .slice(0, settings.limitCount || 200);
+    return sorted.slice(0, settings.limitCount || 200);
   }, [threads, settings, filterBook, filterAuthor, searchText, currentUser]);
 
   const handleNavigateToVerse = (thread: ParatextNoteThread) => {
@@ -1018,7 +1043,7 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
 
       {/* Settings Dropdown Panel */}
       {showSettings && (
-        <div className="tw:bg-white tw:border-b tw:border-gray-200 tw:p-4 tw:shrink-0 tw:shadow-inner tw:grid tw:grid-cols-1 sm:tw:grid-cols-5 tw:gap-4 tw:text-xs">
+        <div className="tw:bg-white tw:border-b tw:border-gray-200 tw:p-4 tw:shrink-0 tw:shadow-inner tw:grid tw:grid-cols-1 sm:tw:grid-cols-3 lg:tw:grid-cols-6 tw:gap-4 tw:text-xs">
           <div className="tw:space-y-1">
             <label className="tw:font-semibold tw:text-slate-600">Estado de lectura</label>
             <select
@@ -1042,6 +1067,19 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
               <option value="all">Todos los hilos</option>
               <option value="assigned_to_me">Asignados a mí</option>
               <option value="my_threads">Iniciados por mí</option>
+            </select>
+          </div>
+          <div className="tw:space-y-1">
+            <label className="tw:font-semibold tw:text-slate-600">Ordenar por</label>
+            <select
+              value={settings.sortBy || 'most_recent'}
+              onChange={(e) => saveSettings({ sortBy: e.target.value as NotesSortBy })}
+              className="tw:w-full tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:bg-white"
+            >
+              <option value="most_recent">Más reciente</option>
+              <option value="oldest">Más antiguo</option>
+              <option value="unread_first">No leídas primero</option>
+              <option value="book_order">Orden bíblico</option>
             </select>
           </div>
           <div className="tw:space-y-1">
