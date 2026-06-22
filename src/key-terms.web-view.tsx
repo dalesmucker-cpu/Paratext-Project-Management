@@ -1,7 +1,7 @@
 import { WebViewProps } from '@papi/core';
 import papi from '@papi/frontend';
 import { useDialogCallback } from '@papi/frontend/react';
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Menu,
   X,
@@ -85,7 +85,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
   const selectedButtonRef = useRef<HTMLButtonElement | null>(null);
   const sidebarListRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (rightPanelRef.current) {
       rightPanelRef.current.scrollTop = 0;
     }
@@ -230,65 +230,130 @@ globalThis.webViewComponent = function KeyTermsWebView({
   );
 
   const scanChapterRequestRef = useRef(0);
+  // Tracks chapters that have already been scanned in this session, keyed `${book} ${chapter}`,
+  // so re-selecting a term (or switching to a term sharing the same chapters) doesn't re-scan.
+  const scannedChaptersRef = useRef<Set<string>>(new Set());
 
-  const scanChapter = useCallback(async () => {
-    if (!projectId || !store || !selectedTermId) return;
-    const requestId = ++scanChapterRequestRef.current;
-    const isCurrentRequest = () => requestId === scanChapterRequestRef.current;
-    const term = store.terms.find((t) => t.id === selectedTermId);
-    if (!term || term.references.length === 0) return;
-
-    setScanning(true);
-    try {
-      const chaptersToScan = new Set<string>();
+  const termChapterKeys = useCallback(
+    (termId: string): Set<string> => {
+      if (!store) return new Set();
+      const term = store.terms.find((t) => t.id === termId);
+      if (!term) return new Set();
+      const keys = new Set<string>();
       for (const ref of term.references) {
         const parts = ref.split(' ');
         if (parts.length >= 2) {
           const book = parts[0];
           const chap = parts[1].split(':')[0];
-          chaptersToScan.add(`${book} ${chap}`);
+          keys.add(`${book} ${chap}`);
+        }
+      }
+      return keys;
+    },
+    [store],
+  );
+
+  // Drop cached scan results for one term's chapters (or all when `keys` is undefined)
+  // and remove the matching verseMatches entries so the UI shows them as "Not scanned" again.
+  const invalidateScanCache = useCallback((keys?: Set<string>) => {
+    if (keys) {
+      for (const k of keys) scannedChaptersRef.current.delete(k);
+    } else {
+      scannedChaptersRef.current.clear();
+    }
+    const keysToDelete = keys ? Array.from(keys) : null;
+    setVerseMatches((prev) => {
+      if (!keysToDelete) return {}; // clear all
+      const next: Record<string, VerseMatchStatus> = {};
+      for (const [mk, v] of Object.entries(prev)) {
+        const ref = v.reference || '';
+        const parts = ref.split(' ');
+        const chapKey = parts.length >= 2 ? `${parts[0]} ${parts[1].split(':')[0]}` : '';
+        if (keysToDelete.includes(chapKey)) continue;
+        next[mk] = v;
+      }
+      return next;
+    });
+  }, []);
+
+  const scanChapter = useCallback(
+    async (opts?: { forceRescan?: boolean }) => {
+      if (!projectId || !store || !selectedTermId) return;
+      const requestId = ++scanChapterRequestRef.current;
+      const isCurrentRequest = () => requestId === scanChapterRequestRef.current;
+      const term = store.terms.find((t) => t.id === selectedTermId);
+      if (!term || term.references.length === 0) return;
+
+      const allChapters = new Set<string>();
+      for (const ref of term.references) {
+        const parts = ref.split(' ');
+        if (parts.length >= 2) {
+          const book = parts[0];
+          const chap = parts[1].split(':')[0];
+          allChapters.add(`${book} ${chap}`);
         }
       }
 
-      const newMatches: Record<string, VerseMatchStatus> = { ...verseMatches };
-
-      const scanPromises = Array.from(chaptersToScan).map(async (bkChap) => {
-        const [book, chapStr] = bkChap.split(' ');
-        const chapter = parseInt(chapStr, 10);
-        try {
-          const res = await papi.commands.sendCommand(
-            'paratextProjectManager.scanChapterRenderings',
-            projectId,
-            book,
-            chapter,
-          );
-          const parsed = JSON.parse(res) as { matches: VerseMatchStatus[] };
-          if (parsed && parsed.matches) {
-            for (const match of parsed.matches) {
-              newMatches[`${match.termId}-${match.reference}`] = match;
-            }
+      if (opts?.forceRescan) {
+        for (const k of allChapters) scannedChaptersRef.current.delete(k);
+        // Drop existing matches for this term so the UI refreshes cleanly.
+        setVerseMatches((prev) => {
+          const next = { ...prev };
+          for (const ref of term.references) {
+            if (next[`${term.id}-${ref}`]) delete next[`${term.id}-${ref}`];
           }
-        } catch (e) {
-          if (isPapiDisconnectedError(e)) handleCatch(e);
-          else console.warn('scanChapter failed for', bkChap, e);
+          return next;
+        });
+      } else {
+        for (const k of allChapters) {
+          if (scannedChaptersRef.current.has(k)) allChapters.delete(k);
         }
-      });
+        if (allChapters.size === 0) return; // everything cached; nothing to do
+      }
 
-      await Promise.all(scanPromises);
-      if (isCurrentRequest()) setVerseMatches(newMatches);
-    } catch (e) {
-      if (isPapiDisconnectedError(e)) handleCatch(e);
-      else console.warn('scanChapter error', e);
-    } finally {
-      if (isCurrentRequest()) setScanning(false);
-    }
-  }, [projectId, store, selectedTermId, verseMatches]);
+      setScanning(true);
+      try {
+        const chaptersToScan = allChapters;
+        const newMatches: Record<string, VerseMatchStatus> = {};
+        const scannedNow: string[] = [];
 
-  useEffect(() => {
-    if (selectedTermId) {
-      scanChapter();
-    }
-  }, [selectedTermId, scanChapter]);
+        const scanPromises = Array.from(chaptersToScan).map(async (bkChap) => {
+          const [book, chapStr] = bkChap.split(' ');
+          const chapter = parseInt(chapStr, 10);
+          try {
+            const res = await papi.commands.sendCommand(
+              'paratextProjectManager.scanChapterRenderings',
+              projectId,
+              book,
+              chapter,
+            );
+            const parsed = JSON.parse(res) as { matches: VerseMatchStatus[] };
+            if (parsed && parsed.matches) {
+              for (const match of parsed.matches) {
+                newMatches[`${match.termId}-${match.reference}`] = match;
+              }
+              scannedNow.push(bkChap);
+            }
+          } catch (e) {
+            if (isPapiDisconnectedError(e)) handleCatch(e);
+            else console.warn('scanChapter failed for', bkChap, e);
+          }
+        });
+
+        await Promise.all(scanPromises);
+        for (const k of scannedNow) scannedChaptersRef.current.add(k);
+        if (isCurrentRequest()) {
+          setVerseMatches((prev) => ({ ...prev, ...newMatches }));
+        }
+      } catch (e) {
+        if (isPapiDisconnectedError(e)) handleCatch(e);
+        else console.warn('scanChapter error', e);
+      } finally {
+        if (isCurrentRequest()) setScanning(false);
+      }
+    },
+    [projectId, store, selectedTermId, handleCatch],
+  );
 
   const handleVerseClick = useCallback(
     async (ref: string) => {
@@ -327,9 +392,10 @@ globalThis.webViewComponent = function KeyTermsWebView({
         },
       };
       await persistStore(updatedStore);
-      setTimeout(scanChapter, 300);
+      invalidateScanCache(); // morpho config affects every chapter
+      setTimeout(() => scanChapter({ forceRescan: true }), 300);
     },
-    [store, persistStore, scanChapter],
+    [store, persistStore, scanChapter, invalidateScanCache],
   );
 
   const addAffixRule = useCallback(
@@ -359,9 +425,10 @@ globalThis.webViewComponent = function KeyTermsWebView({
       clearAffix();
       clearLabel();
       await persistStore(updatedStore);
-      setTimeout(scanChapter, 300);
+      invalidateScanCache(); // affix rules affect every chapter
+      setTimeout(() => scanChapter({ forceRescan: true }), 300);
     },
-    [store, persistStore, scanChapter],
+    [store, persistStore, scanChapter, invalidateScanCache],
   );
 
   const addPrefixRule = useCallback(
@@ -410,9 +477,10 @@ globalThis.webViewComponent = function KeyTermsWebView({
         r.id === ruleId ? { ...r, enabled: !r.enabled } : r,
       );
       await persistStore({ ...store, morphologyConfig: { ...config, [key]: updated } });
-      setTimeout(scanChapter, 300);
+      invalidateScanCache();
+      setTimeout(() => scanChapter({ forceRescan: true }), 300);
     },
-    [store, persistStore, scanChapter],
+    [store, persistStore, scanChapter, invalidateScanCache],
   );
 
   const deleteRule = useCallback(
@@ -422,15 +490,23 @@ globalThis.webViewComponent = function KeyTermsWebView({
       const key = type === 'prefix' ? 'prefixes' : type === 'suffix' ? 'suffixes' : 'infixes';
       const updated = ((config as any)[key] || []).filter((r: AffixRule) => r.id !== ruleId);
       await persistStore({ ...store, morphologyConfig: { ...config, [key]: updated } });
-      setTimeout(scanChapter, 300);
+      invalidateScanCache();
+      setTimeout(() => scanChapter({ forceRescan: true }), 300);
     },
-    [store, persistStore, scanChapter],
+    [store, persistStore, scanChapter, invalidateScanCache],
   );
 
   const selectedTerm = useMemo(() => {
     if (!store || !selectedTermId) return null;
     return store.terms.find((t) => t.id === selectedTermId) || null;
   }, [store, selectedTermId]);
+
+  // True when every reference for the currently selected term already has a scan result
+  // (used to toggle the Scan vs Re-scan label on the pasajes section).
+  const allReferencesScanned = useMemo(() => {
+    if (!selectedTerm || selectedTerm.references.length === 0) return false;
+    return selectedTerm.references.every((ref) => !!verseMatches[`${selectedTerm.id}-${ref}`]);
+  }, [selectedTerm, verseMatches]);
 
   const addRendering = useCallback(async () => {
     if (!store || !selectedTermId || !newRenderingText.trim()) return;
@@ -459,8 +535,18 @@ globalThis.webViewComponent = function KeyTermsWebView({
 
     setNewRenderingText('');
     await persistStore({ ...store, terms });
-    setTimeout(scanChapter, 300);
-  }, [store, selectedTermId, newRenderingText, currentUser, persistStore, scanChapter]);
+    invalidateScanCache(termChapterKeys(selectedTermId));
+    setTimeout(() => scanChapter({ forceRescan: true }), 300);
+  }, [
+    store,
+    selectedTermId,
+    newRenderingText,
+    currentUser,
+    persistStore,
+    scanChapter,
+    invalidateScanCache,
+    termChapterKeys,
+  ]);
 
   const updateRenderingStatus = useCallback(
     async (renderingId: string, status: RenderingStatus) => {
@@ -476,9 +562,10 @@ globalThis.webViewComponent = function KeyTermsWebView({
         return t;
       });
       await persistStore({ ...store, terms });
-      setTimeout(scanChapter, 300);
+      invalidateScanCache(termChapterKeys(selectedTermId));
+      setTimeout(() => scanChapter({ forceRescan: true }), 300);
     },
-    [store, selectedTermId, persistStore, scanChapter],
+    [store, selectedTermId, persistStore, scanChapter, invalidateScanCache, termChapterKeys],
   );
 
   const voteRendering = useCallback(
@@ -720,7 +807,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
   };
 
   return (
-    <div className="tw:flex tw:h-full tw:bg-background tw:text-foreground tw:font-sans">
+    <div className="tw:flex tw:h-full tw:overflow-hidden tw:bg-background tw:text-foreground tw:font-sans">
       {/* Sidebar - Terms list */}
       {sidebarVisible && (
         <aside
@@ -1225,17 +1312,34 @@ globalThis.webViewComponent = function KeyTermsWebView({
                 <h3 className="tw:font-bold tw:text-sm tw:text-foreground tw:uppercase tw:tracking-wider">
                   {tx('expectedPassages')}
                 </h3>
-                {scanning && (
-                  <span
-                    role="status"
-                    aria-live="polite"
-                    className="tw:inline-flex tw:items-center tw:gap-1.5 tw:text-xs tw:text-muted-foreground"
+                <div className="tw:flex tw:items-center tw:gap-2 tw:flex-wrap">
+                  {scanning && (
+                    <span
+                      role="status"
+                      aria-live="polite"
+                      className="tw:inline-flex tw:items-center tw:gap-1.5 tw:text-xs tw:text-muted-foreground"
+                    >
+                      <RefreshCw size={12} className="tw:animate-spin" />
+                      {tx('scanning')}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => scanChapter({ forceRescan: true })}
+                    disabled={scanning}
+                    className="tw:inline-flex tw:items-center tw:gap-1 tw:px-2.5 tw:py-1 tw:bg-primary/10 tw:text-primary tw:border tw:border-primary/20 tw:rounded-lg tw:text-xs tw:font-medium hover:tw:bg-primary/20 tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring disabled:tw:opacity-50 disabled:tw:cursor-not-allowed"
                   >
-                    <RefreshCw size={12} className="tw:animate-spin" />
-                    {tx('scanning')}
-                  </span>
-                )}
+                    <RefreshCw size={12} className={scanning ? 'tw:animate-spin' : ''} />
+                    {allReferencesScanned ? tx('rescanPassages') : tx('scanPassages')}
+                  </button>
+                </div>
               </div>
+
+              {!allReferencesScanned && !scanning && (
+                <p className="tw:text-[11px] tw:text-muted-foreground tw:italic">
+                  {tx('scanPrompt')}
+                </p>
+              )}
 
               <div className="tw:divide-y tw:divide-border tw:max-h-72 tw:overflow-y-auto">
                 {selectedTerm.references &&
