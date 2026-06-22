@@ -124,6 +124,8 @@ const tagRegexes = {
   HideInTextWindow: /<HideInTextWindow>([\s\S]*?)<\/HideInTextWindow>/i,
   AssignedUser: /<AssignedUser>([\s\S]*?)<\/AssignedUser>/i,
   Contents: /<Contents>([\s\S]*?)<\/Contents>/i,
+  BiblicalTermId: /<BiblicalTermId>([\s\S]*?)<\/BiblicalTermId>/i,
+  RenderingId: /<RenderingId>([\s\S]*?)<\/RenderingId>/i,
 };
 
 function parseNotesXml(filePath) {
@@ -175,6 +177,8 @@ function parseNotesXmlContent(xml, filename) {
       const hideInTextWindow = getTag('HideInTextWindow').trim();
       const assignedUser = getTag('AssignedUser').trim();
       const contents = getTag('Contents');
+      const biblicalTermId = getTag('BiblicalTermId').trim();
+      const renderingId = getTag('RenderingId').trim();
 
       comments.push({
         thread,
@@ -193,6 +197,8 @@ function parseNotesXmlContent(xml, filename) {
         hideInTextWindow,
         contents,
         assignedUser,
+        biblicalTermId,
+        renderingId,
         sourceFile: filename,
       });
     }
@@ -1173,6 +1179,12 @@ async function handleAction(action, args) {
         }));
 
         const rootComment = commentsList[0];
+        let biblicalTermId = '';
+        let renderingId = '';
+        for (const c of commentsList) {
+          if (c.biblicalTermId) biblicalTermId = c.biblicalTermId;
+          if (c.renderingId) renderingId = c.renderingId;
+        }
 
         threads.push({
           threadId,
@@ -1194,6 +1206,8 @@ async function handleAction(action, args) {
           contextAfter: rootComment.contextAfter,
           verseXml: rootComment.verse,
           hideInTextWindow: rootComment.hideInTextWindow,
+          biblicalTermId,
+          renderingId,
         });
       }
 
@@ -1299,6 +1313,8 @@ async function handleAction(action, args) {
         hideInTextWindow,
         contents,
         assignedUser,
+        biblicalTermId,
+        renderingId,
       } = replyData;
 
       let formattedContents = '';
@@ -1322,6 +1338,8 @@ async function handleAction(action, args) {
     <HideInTextWindow>${hideInTextWindow || 'false'}</HideInTextWindow>
     <AssignedUser>${escapeXml(assignedUser || '')}</AssignedUser>
     <Contents>${formattedContents}</Contents>
+    ${biblicalTermId ? `<BiblicalTermId>${escapeXml(biblicalTermId)}</BiblicalTermId>` : ''}
+    ${renderingId ? `<RenderingId>${escapeXml(renderingId)}</RenderingId>` : ''}
   </Comment>\n`;
 
       let fileXml = '';

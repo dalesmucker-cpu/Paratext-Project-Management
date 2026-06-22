@@ -30,6 +30,8 @@ export interface ParatextNoteThread {
   contextAfter: string;
   verseXml: string; // <Verse> content
   hideInTextWindow: string;
+  biblicalTermId?: string;
+  renderingId?: string;
 }
 
 export type NotesSortBy = 'most_recent' | 'oldest' | 'book_order' | 'unread_first';

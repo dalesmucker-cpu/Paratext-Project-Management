@@ -33,6 +33,7 @@ import type {
   MorphologyConfig,
   AffixRule,
 } from './types/key-terms.types';
+import type { ParatextNoteThread } from './types/note.types';
 
 globalThis.webViewComponent = function KeyTermsWebView({
   projectId,
@@ -66,7 +67,27 @@ globalThis.webViewComponent = function KeyTermsWebView({
   const [newRenderingText, setNewRenderingText] = useState('');
   const [newContextTags, setNewContextTags] = useState<Record<string, string>>({});
   const [newNoteText, setNewNoteText] = useState('');
+  const [newNoteVerseRef, setNewNoteVerseRef] = useState('GEN 1:1');
+  const [threadReplyTexts, setThreadReplyTexts] = useState<Record<string, string>>({});
+  const [expandedRendDiscussions, setExpandedRendDiscussions] = useState<Record<string, boolean>>({});
   const [currentUser, setCurrentUser] = useState('Traductor');
+  const [projectThreads, setProjectThreads] = useState<ParatextNoteThread[]>([]);
+
+  const loadProjectNotes = useCallback(async (userOverride?: string) => {
+    const activeUser = userOverride || currentUser;
+    if (!projectId || !activeUser) return;
+    try {
+      const notesStr = await papi.commands.sendCommand(
+        'paratextProjectManager.getProjectNotes',
+        projectId,
+        activeUser,
+      );
+      const parsed = JSON.parse(notesStr) as { threads: ParatextNoteThread[] };
+      setProjectThreads(parsed.threads || []);
+    } catch (err) {
+      console.error('Failed to load project notes:', err);
+    }
+  }, [projectId, currentUser]);
 
   const rightPanelRef = useRef<HTMLDivElement | null>(null);
   const isExternalSelectionRef = useRef(false);
@@ -187,7 +208,12 @@ globalThis.webViewComponent = function KeyTermsWebView({
         { isCancelled: () => !isCurrentRequest() },
       );
       if (!isCurrentRequest()) return;
-      if (user) setCurrentUser(user);
+      if (user) {
+        setCurrentUser(user);
+        await loadProjectNotes(user);
+      } else {
+        await loadProjectNotes();
+      }
     } catch (e: any) {
       if (isCurrentRequest()) {
         if (isPapiDisconnectedError(e)) {
@@ -199,7 +225,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
     } finally {
       if (isCurrentRequest()) setLoading(false);
     }
-  }, [projectId, tx, clearDisconnected, handleCatch]);
+  }, [projectId, tx, clearDisconnected, handleCatch, loadProjectNotes]);
 
   useEffect(() => {
     if (ready) loadData();
@@ -501,6 +527,30 @@ globalThis.webViewComponent = function KeyTermsWebView({
     return store.terms.find((t) => t.id === selectedTermId) || null;
   }, [store, selectedTermId]);
 
+  const termThreads = useMemo(() => {
+    if (!selectedTermId) return [];
+    return projectThreads.filter(
+      (t) => t.biblicalTermId === selectedTermId && !t.renderingId,
+    );
+  }, [projectThreads, selectedTermId]);
+
+  const getRenderingThreads = useCallback(
+    (rendId: string) => {
+      return projectThreads.filter(
+        (t) => t.biblicalTermId === selectedTermId && t.renderingId === rendId,
+      );
+    },
+    [projectThreads, selectedTermId],
+  );
+
+  useEffect(() => {
+    if (selectedTerm && selectedTerm.references && selectedTerm.references.length > 0) {
+      setNewNoteVerseRef(selectedTerm.references[0]);
+    } else {
+      setNewNoteVerseRef('GEN 1:1');
+    }
+  }, [selectedTermId, selectedTerm]);
+
   // True when every reference for the currently selected term already has a scan result
   // (used to toggle the Scan vs Re-scan label on the pasajes section).
   const allReferencesScanned = useMemo(() => {
@@ -642,28 +692,65 @@ globalThis.webViewComponent = function KeyTermsWebView({
     [store, selectedTermId, persistStore],
   );
 
-  const addNote = useCallback(async () => {
-    if (!store || !selectedTermId || !newNoteText.trim()) return;
-    const now = new Date().toISOString();
-    const newNote = {
-      id: `n-${Date.now()}`,
-      author: currentUser,
-      text: newNoteText.trim(),
-      timestamp: now,
-    };
-    const terms = store.terms.map((t) => {
-      if (t.id === selectedTermId) {
-        return {
-          ...t,
-          notes: [...(t.notes || []), newNote],
-          updatedAt: now,
+  const handleReplyToThread = useCallback(
+    async (threadId: string, text: string, verseRef: string, renderingId?: string) => {
+      if (!projectId || !currentUser || !text.trim() || !selectedTermId) return;
+      try {
+        const replyData = {
+          threadId,
+          verseRef,
+          contents: text.trim(),
+          biblicalTermId: selectedTermId,
+          renderingId,
         };
+        const res = await papi.commands.sendCommand(
+          'paratextProjectManager.addNoteReply',
+          projectId,
+          currentUser,
+          JSON.stringify(replyData),
+        );
+        if (res === 'ok' || (res && (res as any).status === 'ok')) {
+          await loadProjectNotes();
+        } else {
+          console.error('Failed to post reply:', res);
+        }
+      } catch (err) {
+        console.error('Error posting reply:', err);
       }
-      return t;
-    });
-    setNewNoteText('');
-    await persistStore({ ...store, terms });
-  }, [store, selectedTermId, newNoteText, currentUser, persistStore]);
+    },
+    [projectId, currentUser, selectedTermId, loadProjectNotes],
+  );
+
+  const handleStartThread = useCallback(
+    async (text: string, verseRef: string, renderingId?: string) => {
+      if (!projectId || !currentUser || !text.trim() || !selectedTermId) return;
+      try {
+        const threadId = `th_bt_${Date.now()}`;
+        const replyData = {
+          threadId,
+          verseRef,
+          contents: text.trim(),
+          biblicalTermId: selectedTermId,
+          renderingId,
+        };
+        const res = await papi.commands.sendCommand(
+          'paratextProjectManager.addNoteReply',
+          projectId,
+          currentUser,
+          JSON.stringify(replyData),
+        );
+        if (res === 'ok' || (res && (res as any).status === 'ok')) {
+          setNewNoteText('');
+          await loadProjectNotes();
+        } else {
+          console.error('Failed to start thread:', res);
+        }
+      } catch (err) {
+        console.error('Error starting thread:', err);
+      }
+    },
+    [projectId, currentUser, selectedTermId, loadProjectNotes],
+  );
 
   const allDomains = useMemo(() => {
     if (!store) return [];
@@ -1165,6 +1252,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
                   selectedTerm.renderings.map((rend, rendIdx) => {
                     const rendId =
                       rend.id || `rend-${selectedTermId}-${rendIdx}-${rend.text.slice(0, 8)}`;
+                    const rendThreads = getRenderingThreads(rendId);
                     const upVotes = rend.votes
                       ? rend.votes.filter((v) => v.value === 'up').length
                       : 0;
@@ -1248,6 +1336,24 @@ globalThis.webViewComponent = function KeyTermsWebView({
                               <ThumbsDown size={12} />
                               <span className="tw:font-semibold">{downVotes}</span>
                             </button>
+                            <button
+                              type="button"
+                              onClick={() => toggleRendDiscussion(rendId)}
+                              aria-pressed={expandedRendDiscussions[rendId]}
+                              className={`tw:inline-flex tw:items-center tw:gap-1.5 tw:px-2 tw:py-1 tw:rounded-md tw:border tw:text-xs tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring ${
+                                expandedRendDiscussions[rendId]
+                                  ? 'tw:bg-indigo-100/40 tw:text-indigo-600 tw:border-indigo-200'
+                                  : 'tw:bg-card tw:text-muted-foreground tw:border-border hover:tw:bg-accent'
+                              }`}
+                              title="Discuss this rendering"
+                            >
+                              <span>💬 Discuss</span>
+                              {rendThreads.length > 0 && (
+                                <span className="tw:font-semibold tw:bg-indigo-100 tw:text-indigo-700 tw:px-1.5 tw:py-0.2 tw:rounded-full tw:text-[9px]">
+                                  {rendThreads.reduce((sum, t) => sum + t.comments.length, 0)}
+                                </span>
+                              )}
+                            </button>
                           </div>
 
                           <div className="tw:flex tw:items-center tw:gap-1 tw:flex-wrap">
@@ -1294,6 +1400,73 @@ globalThis.webViewComponent = function KeyTermsWebView({
                             </div>
                           </div>
                         </div>
+
+                        {expandedRendDiscussions[rendId] && (
+                          <div className="tw:mt-3 tw:pt-3 tw:border-t tw:border-border/60 tw:space-y-3">
+                            <div className="tw:text-[11px] tw:font-semibold tw:text-muted-foreground tw:uppercase">
+                              Discussion on "{rend.text}"
+                            </div>
+                            
+                            {/* Render active comments for this rendering */}
+                            {rendThreads.length > 0 ? (
+                              <div className="tw:space-y-2.5 tw:max-h-48 tw:overflow-y-auto">
+                                {rendThreads.map((thread) => 
+                                  thread.comments.map((comment, commentIdx) => (
+                                    <div key={`${thread.threadId}-${commentIdx}`} className="tw:p-2 tw:bg-secondary/40 tw:rounded-lg tw:border tw:border-border/40 tw:space-y-1">
+                                      <div className="tw:flex tw:items-center tw:justify-between tw:gap-2 tw:text-[9px] tw:text-muted-foreground">
+                                        <span className="tw:font-bold tw:text-foreground">
+                                          {comment.user}
+                                        </span>
+                                        <span>
+                                          {new Date(comment.date).toLocaleString(lang === 'en' ? 'en' : 'es')}
+                                        </span>
+                                      </div>
+                                      <p className="tw:text-xs tw:text-foreground tw:whitespace-pre-wrap tw:break-words">
+                                        {comment.plainText || comment.contents}
+                                      </p>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            ) : (
+                              <div className="tw:text-xs tw:text-muted-foreground tw:italic tw:py-1">
+                                No discussion on this rendering yet. Start one below.
+                              </div>
+                            )}
+
+                            {/* Post a comment for this rendering */}
+                            <div className="tw:space-y-2">
+                              <textarea
+                                placeholder="Start discussion or reply..."
+                                value={threadReplyTexts[`rend-${rendId}`] || ''}
+                                onChange={(e) => setThreadReplyTexts(prev => ({ ...prev, [`rend-${rendId}`]: e.target.value }))}
+                                rows={1}
+                                className="tw:w-full tw:border tw:border-border tw:rounded-lg tw:px-2.5 tw:py-1.5 tw:text-xs tw:bg-background tw:text-foreground tw:placeholder:tw:text-muted-foreground tw:focus:outline-none tw:focus:ring-1 tw:focus:ring-primary tw:resize-y"
+                              />
+                              <div className="tw:flex tw:justify-end">
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    const txt = threadReplyTexts[`rend-${rendId}`] || '';
+                                    if (!txt.trim()) return;
+                                    
+                                    const existingThread = rendThreads[0];
+                                    const verseRef = selectedTerm.references[0] || 'GEN 1:1';
+                                    if (existingThread) {
+                                      await handleReplyToThread(existingThread.threadId, txt, existingThread.verseRef, rendId);
+                                    } else {
+                                      await handleStartThread(txt, verseRef, rendId);
+                                    }
+                                    setThreadReplyTexts(prev => ({ ...prev, [`rend-${rendId}`]: '' }));
+                                  }}
+                                  className="tw:inline-flex tw:items-center tw:gap-1 tw:px-2.5 tw:py-1 tw:bg-primary tw:text-primary-foreground tw:rounded-md tw:text-[11px] tw:font-medium hover:tw:opacity-90 tw:cursor-pointer"
+                                >
+                                  Comment
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -1576,55 +1749,129 @@ globalThis.webViewComponent = function KeyTermsWebView({
                 <span className="tw:font-bold tw:text-xs tw:text-muted-foreground tw:uppercase tw:tracking-wider">
                   {tx('collabNotesTitle')}
                 </span>
-                {collabPanelOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                <span className="tw:flex tw:items-center tw:gap-2">
+                  {termThreads.length > 0 && (
+                    <span className="tw:px-1.5 tw:py-0.5 tw:bg-primary/10 tw:text-primary tw:rounded tw:text-[10px] tw:font-semibold">
+                      {termThreads.length} {termThreads.length === 1 ? 'thread' : 'threads'}
+                    </span>
+                  )}
+                  {collabPanelOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                </span>
               </button>
 
               {collabPanelOpen && (
-                <div className="tw:p-4 tw:space-y-4">
-                  <div className="tw:space-y-2.5 tw:max-h-60 tw:overflow-y-auto">
-                    {selectedTerm.notes &&
-                      selectedTerm.notes.map((note) => (
-                        <div
-                          key={note.id}
-                          className="tw:p-2.5 tw:bg-secondary tw:rounded-lg tw:border tw:border-border tw:space-y-1"
-                        >
-                          <div className="tw:flex tw:items-center tw:justify-between tw:gap-2 tw:text-[10px] tw:text-muted-foreground">
-                            <span className="tw:font-bold tw:text-foreground tw:truncate">
-                              {note.author}
+                <div className="tw:p-4 tw:space-y-6">
+                  {/* List of active threads */}
+                  {termThreads.length > 0 && (
+                    <div className="tw:space-y-4">
+                      {termThreads.map((thread) => (
+                        <div key={thread.threadId} className="tw:border tw:border-border tw:rounded-xl tw:overflow-hidden tw:bg-secondary/20">
+                          {/* Thread Header */}
+                          <div className="tw:px-3 tw:py-2 tw:bg-secondary/60 tw:border-b tw:border-border tw:flex tw:items-center tw:justify-between tw:gap-2">
+                            <span className="tw:text-xs tw:font-bold tw:text-foreground">
+                              Reference: {thread.verseRef}
                             </span>
-                            <span className="tw:flex-shrink-0">
-                              {new Date(note.timestamp).toLocaleString(lang === 'en' ? 'en' : 'es')}
+                            <span className="tw:text-[10px] tw:text-muted-foreground">
+                              {thread.comments.length} {thread.comments.length === 1 ? 'comment' : 'comments'}
                             </span>
                           </div>
-                          <p className="tw:text-xs tw:text-foreground tw:whitespace-pre-wrap tw:break-words">
-                            {note.text}
-                          </p>
+
+                          {/* Comments list */}
+                          <div className="tw:p-3 tw:space-y-2.5 tw:max-h-60 tw:overflow-y-auto">
+                            {thread.comments.map((comment, commentIdx) => (
+                              <div key={`${thread.threadId}-${commentIdx}`} className="tw:p-2 tw:bg-card tw:rounded-lg tw:border tw:border-border tw:space-y-1">
+                                <div className="tw:flex tw:items-center tw:justify-between tw:gap-2 tw:text-[10px] tw:text-muted-foreground">
+                                  <span className="tw:font-semibold tw:text-foreground">
+                                    {comment.user}
+                                  </span>
+                                  <span>
+                                    {new Date(comment.date).toLocaleString(lang === 'en' ? 'en' : 'es')}
+                                  </span>
+                                </div>
+                                <p className="tw:text-xs tw:text-foreground tw:whitespace-pre-wrap tw:break-words">
+                                  {comment.plainText || comment.contents}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Reply box for this thread */}
+                          <div className="tw:p-3 tw:bg-secondary/10 tw:border-t tw:border-border tw:space-y-2">
+                            <textarea
+                              placeholder="Write a reply..."
+                              value={threadReplyTexts[thread.threadId] || ''}
+                              onChange={(e) => setThreadReplyTexts(prev => ({ ...prev, [thread.threadId]: e.target.value }))}
+                              rows={1}
+                              className="tw:w-full tw:border tw:border-border tw:rounded-lg tw:px-2.5 tw:py-1.5 tw:text-xs tw:bg-background tw:text-foreground tw:placeholder:tw:text-muted-foreground tw:focus:outline-none tw:focus:ring-1 tw:focus:ring-primary tw:resize-y"
+                            />
+                            <div className="tw:flex tw:justify-end">
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  const txt = threadReplyTexts[thread.threadId] || '';
+                                  if (!txt.trim()) return;
+                                  await handleReplyToThread(thread.threadId, txt, thread.verseRef);
+                                  setThreadReplyTexts(prev => ({ ...prev, [thread.threadId]: '' }));
+                                }}
+                                className="tw:inline-flex tw:items-center tw:gap-1 tw:px-2.5 tw:py-1 tw:bg-primary tw:text-primary-foreground tw:rounded-md tw:text-[11px] tw:font-medium hover:tw:opacity-90 tw:cursor-pointer"
+                              >
+                                Reply
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       ))}
-                    {(!selectedTerm.notes || selectedTerm.notes.length === 0) && (
-                      <div className="tw:text-xs tw:text-muted-foreground tw:text-center tw:py-4 tw:italic">
-                        {tx('noNotes')}
-                      </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
 
-                  <div className="tw:space-y-2">
-                    <textarea
-                      placeholder={tx('notesPlaceholder')}
-                      value={newNoteText}
-                      onChange={(e) => setNewNoteText(e.target.value)}
-                      rows={2}
-                      className="tw:w-full tw:border tw:border-border tw:rounded-lg tw:px-2.5 tw:py-1.5 tw:text-xs tw:bg-background tw:text-foreground tw:placeholder:tw:text-muted-foreground tw:focus:outline-none tw:focus:ring-1 tw:focus:ring-primary tw:resize-y"
-                    />
-                    <div className="tw:flex tw:justify-end">
-                      <button
-                        type="button"
-                        onClick={addNote}
-                        className="tw:inline-flex tw:items-center tw:gap-1 tw:px-3 tw:py-1.5 tw:bg-primary tw:text-primary-foreground tw:rounded-lg tw:text-xs tw:font-medium hover:tw:opacity-90 tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring"
+                  {termThreads.length === 0 && (
+                    <div className="tw:text-xs tw:text-muted-foreground tw:text-center tw:py-4 tw:italic">
+                      {tx('noNotes')}
+                    </div>
+                  )}
+
+                  {/* Start new thread section */}
+                  <div className="tw:border-t tw:border-border tw:pt-4 tw:space-y-3">
+                    <h4 className="tw:text-xs tw:font-bold tw:text-foreground">
+                      Start a New Discussion Thread
+                    </h4>
+                    <div className="tw:flex tw:items-center tw:gap-2">
+                      <label className="tw:text-xs tw:text-muted-foreground">Associate with reference:</label>
+                      <select
+                        value={newNoteVerseRef}
+                        onChange={(e) => setNewNoteVerseRef(e.target.value)}
+                        className="tw:border tw:border-border tw:rounded-md tw:px-2 tw:py-1 tw:text-xs tw:bg-background tw:text-foreground"
                       >
-                        <CheckCircle2 size={12} />
-                        {tx('sendNote')}
-                      </button>
+                        {selectedTerm.references && selectedTerm.references.length > 0 ? (
+                          selectedTerm.references.map((ref) => (
+                            <option key={ref} value={ref}>
+                              {ref}
+                            </option>
+                          ))
+                        ) : (
+                          <option value="GEN 1:1">GEN 1:1</option>
+                        )}
+                      </select>
+                    </div>
+
+                    <div className="tw:space-y-2">
+                      <textarea
+                        placeholder={tx('notesPlaceholder')}
+                        value={newNoteText}
+                        onChange={(e) => setNewNoteText(e.target.value)}
+                        rows={2}
+                        className="tw:w-full tw:border tw:border-border tw:rounded-lg tw:px-2.5 tw:py-1.5 tw:text-xs tw:bg-background tw:text-foreground tw:placeholder:tw:text-muted-foreground tw:focus:outline-none tw:focus:ring-1 tw:focus:ring-primary tw:resize-y"
+                      />
+                      <div className="tw:flex tw:justify-end">
+                        <button
+                          type="button"
+                          onClick={() => handleStartThread(newNoteText, newNoteVerseRef)}
+                          className="tw:inline-flex tw:items-center tw:gap-1 tw:px-3 tw:py-1.5 tw:bg-primary tw:text-primary-foreground tw:rounded-lg tw:text-xs tw:font-medium hover:tw:opacity-90 tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring"
+                        >
+                          <CheckCircle2 size={12} />
+                          {tx('sendNote')}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
