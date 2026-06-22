@@ -1338,7 +1338,12 @@ globalThis.webViewComponent = function KeyTermsWebView({
                             </button>
                             <button
                               type="button"
-                              onClick={() => toggleRendDiscussion(rendId)}
+                              onClick={() =>
+                                setExpandedRendDiscussions((prev) => ({
+                                  ...prev,
+                                  [rendId]: !prev[rendId],
+                                }))
+                              }
                               aria-pressed={expandedRendDiscussions[rendId]}
                               className={`tw:inline-flex tw:items-center tw:gap-1.5 tw:px-2 tw:py-1 tw:rounded-md tw:border tw:text-xs tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring ${
                                 expandedRendDiscussions[rendId]
