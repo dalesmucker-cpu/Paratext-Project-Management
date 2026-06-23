@@ -1418,8 +1418,12 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     }
 
     // Apply localization override in memory based on requested languageCode (without saving to JSON)
-    const locXmlPath = `${pt9ListsDir}${SEP}${activeLang === 'es' ? 'BiblicalTermsEs.xml' : 'BiblicalTermsEn.xml'}`;
+    const slash = pt9ListsDir.includes('/') ? '/' : '\\';
+    const locXmlPath = pt9ListsDir.endsWith(slash)
+      ? `${pt9ListsDir}${activeLang === 'es' ? 'BiblicalTermsEs.xml' : 'BiblicalTermsEn.xml'}`
+      : `${pt9ListsDir}${slash}${activeLang === 'es' ? 'BiblicalTermsEs.xml' : 'BiblicalTermsEn.xml'}`;
     const locXmlExists = await runFileHelper('exists', locXmlPath);
+    logger.info(`Key Terms Localization: activeLang=${activeLang}, locXmlPath=${locXmlPath}, exists=${locXmlExists}`);
     if (locXmlExists.trim() === 'true') {
       try {
         const locXml = await runFileHelper('read', locXmlPath);
@@ -1434,18 +1438,24 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
             locMap.set(idMatch[1], glossMatch[1]);
           }
         }
+        logger.info(`Key Terms Localization: parsed ${locMap.size} localizations from XML`);
 
         // Override term glosses
+        let overriddenCount = 0;
         store.terms = store.terms.map((term) => {
           const localizedGloss = locMap.get(term.id);
           if (localizedGloss) {
+            overriddenCount++;
             return { ...term, gloss: localizedGloss };
           }
           return term;
         });
+        logger.info(`Key Terms Localization: overrode ${overriddenCount} term glosses in memory`);
       } catch (err) {
         logger.warn(`Failed to localize key terms in memory: ${err}`);
       }
+    } else {
+      logger.warn(`Key Terms Localization: file not found at ${locXmlPath}`);
     }
 
     return store;

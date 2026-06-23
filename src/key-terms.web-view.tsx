@@ -34,7 +34,7 @@ import type {
   MorphologyConfig,
   AffixRule,
 } from './types/key-terms.types';
-import type { ParatextNoteThread } from './types/note.types';
+import type { ParatextNoteThread, ParatextComment } from './types/note.types';
 
 const isSameUser = (userA: string, userB: string) => {
   if (!userA || !userB) return false;
@@ -158,6 +158,104 @@ const InlineEditComment: React.FC<InlineEditCommentProps> = ({ initialText, onSa
           Save
         </button>
       </div>
+    </div>
+  );
+};
+
+interface CommentItemProps {
+  comment: ParatextComment;
+  threadId: string;
+  currentUser: string;
+  lang: string;
+  editingCommentKey: string | null;
+  setEditingCommentKey: (key: string | null) => void;
+  handleSaveComment: (threadId: string, date: string, user: string, text: string) => Promise<void>;
+  handleDeleteComment: (threadId: string, date: string, user: string) => Promise<void>;
+  isCompact?: boolean;
+}
+
+const CommentItem: React.FC<CommentItemProps> = ({
+  comment,
+  threadId,
+  currentUser,
+  lang,
+  editingCommentKey,
+  setEditingCommentKey,
+  handleSaveComment,
+  handleDeleteComment,
+  isCompact = false,
+}) => {
+  const commentKey = `${threadId}-${comment.date}`;
+  const isEditing = editingCommentKey === commentKey;
+  const isMyComment = isSameUser(comment.user, currentUser);
+
+  return (
+    <div
+      className={`tw:p-2 tw:rounded-lg tw:border tw:space-y-1 ${
+        isCompact
+          ? 'tw:bg-secondary/40 tw:border-border/40'
+          : 'tw:bg-card tw:border-border'
+      }`}
+    >
+      <div
+        className={`tw:flex tw:items-center tw:justify-between tw:gap-2 tw:text-muted-foreground ${
+          isCompact ? 'tw:text-[9px]' : 'tw:text-[10px]'
+        }`}
+      >
+        <div className="tw:flex tw:items-center tw:gap-1.5">
+          <span className={`tw:text-foreground ${isCompact ? 'tw:font-bold' : 'tw:font-semibold'}`}>
+            {comment.user}
+          </span>
+          {isMyComment && (
+            <span
+              className={`tw:bg-primary/10 tw:text-primary tw:px-1 tw:rounded tw:font-medium ${
+                isCompact ? 'tw:text-[8px]' : 'tw:text-[9px]'
+              }`}
+            >
+              {lang === 'en' ? 'You' : 'Tú'}
+            </span>
+          )}
+        </div>
+        <div className="tw:flex tw:items-center tw:gap-1.5">
+          <span>
+            {new Date(comment.date).toLocaleString(lang === 'en' ? 'en' : 'es')}
+          </span>
+          {isMyComment && !isEditing && (
+            <div className="tw:flex tw:items-center tw:gap-1">
+              <button
+                type="button"
+                onClick={() => setEditingCommentKey(commentKey)}
+                className="tw:p-0.5 tw:text-muted-foreground hover:tw:text-primary tw:rounded hover:tw:bg-accent tw:transition-colors tw:cursor-pointer"
+                title={lang === 'en' ? 'Edit comment' : 'Editar comentario'}
+              >
+                <Pencil size={isCompact ? 8 : 10} />
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteComment(threadId, comment.date, comment.user)}
+                className="tw:p-0.5 tw:text-muted-foreground hover:tw:text-destructive tw:rounded hover:tw:bg-accent tw:transition-colors tw:cursor-pointer"
+                title={lang === 'en' ? 'Delete comment' : 'Eliminar comentario'}
+              >
+                <Trash2 size={isCompact ? 8 : 10} />
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+      {isEditing ? (
+        <InlineEditComment
+          initialText={comment.plainText || comment.contents}
+          onSave={async (newText) => {
+            await handleSaveComment(threadId, comment.date, comment.user, newText);
+            setEditingCommentKey(null);
+          }}
+          onCancel={() => setEditingCommentKey(null)}
+        />
+      ) : (
+        <p className="tw:text-xs tw:text-foreground tw:whitespace-pre-wrap tw:break-words">
+          {comment.plainText || comment.contents}
+        </p>
+      )}
     </div>
   );
 };
@@ -1600,66 +1698,20 @@ globalThis.webViewComponent = function KeyTermsWebView({
                             {rendThreads.length > 0 ? (
                               <div className="tw:space-y-2.5 tw:max-h-48 tw:overflow-y-auto">
                                 {rendThreads.map((thread) => 
-                                  thread.comments.map((comment) => {
-                                    const commentKey = `${thread.threadId}-${comment.date}`;
-                                    const isEditing = editingCommentKey === commentKey;
-                                    const isMyComment = isSameUser(comment.user, currentUser);
-                                    return (
-                                      <div key={commentKey} className="tw:p-2 tw:bg-secondary/40 tw:rounded-lg tw:border tw:border-border/40 tw:space-y-1">
-                                        <div className="tw:flex tw:items-center tw:justify-between tw:gap-2 tw:text-[9px] tw:text-muted-foreground">
-                                          <div className="tw:flex tw:items-center tw:gap-1.5">
-                                            <span className="tw:font-bold tw:text-foreground">
-                                              {comment.user}
-                                            </span>
-                                            {isMyComment && (
-                                              <span className="tw:text-[8px] tw:bg-primary/10 tw:text-primary tw:px-1 tw:rounded tw:font-medium">
-                                                {lang === 'en' ? 'You' : 'Tú'}
-                                              </span>
-                                            )}
-                                          </div>
-                                          <div className="tw:flex tw:items-center tw:gap-1.5">
-                                            <span>
-                                              {new Date(comment.date).toLocaleString(lang === 'en' ? 'en' : 'es')}
-                                            </span>
-                                            {isMyComment && !isEditing && (
-                                              <div className="tw:flex tw:items-center tw:gap-1">
-                                                <button
-                                                  type="button"
-                                                  onClick={() => setEditingCommentKey(commentKey)}
-                                                  className="tw:p-0.5 tw:text-muted-foreground hover:tw:text-primary tw:rounded hover:tw:bg-accent tw:transition-colors tw:cursor-pointer"
-                                                  title={lang === 'en' ? 'Edit comment' : 'Editar comentario'}
-                                                >
-                                                  <Pencil size={8} />
-                                                </button>
-                                                <button
-                                                  type="button"
-                                                  onClick={() => handleDeleteComment(thread.threadId, comment.date, comment.user)}
-                                                  className="tw:p-0.5 tw:text-muted-foreground hover:tw:text-destructive tw:rounded hover:tw:bg-accent tw:transition-colors tw:cursor-pointer"
-                                                  title={lang === 'en' ? 'Delete comment' : 'Eliminar comentario'}
-                                                >
-                                                  <Trash2 size={8} />
-                                                </button>
-                                              </div>
-                                            )}
-                                          </div>
-                                        </div>
-                                        {isEditing ? (
-                                          <InlineEditComment
-                                            initialText={comment.plainText || comment.contents}
-                                            onSave={async (newText) => {
-                                              await handleSaveComment(thread.threadId, comment.date, comment.user, newText);
-                                              setEditingCommentKey(null);
-                                            }}
-                                            onCancel={() => setEditingCommentKey(null)}
-                                          />
-                                        ) : (
-                                          <p className="tw:text-xs tw:text-foreground tw:whitespace-pre-wrap tw:break-words">
-                                            {comment.plainText || comment.contents}
-                                          </p>
-                                        )}
-                                      </div>
-                                    );
-                                  })
+                                  thread.comments.map((comment) => (
+                                    <CommentItem
+                                      key={`${thread.threadId}-${comment.date}`}
+                                      comment={comment}
+                                      threadId={thread.threadId}
+                                      currentUser={currentUser}
+                                      lang={lang}
+                                      editingCommentKey={editingCommentKey}
+                                      setEditingCommentKey={setEditingCommentKey}
+                                      handleSaveComment={handleSaveComment}
+                                      handleDeleteComment={handleDeleteComment}
+                                      isCompact={true}
+                                    />
+                                  ))
                                 )}
                               </div>
                             ) : (
@@ -1736,66 +1788,20 @@ globalThis.webViewComponent = function KeyTermsWebView({
 
                           {/* Comments list */}
                           <div className="tw:p-3 tw:space-y-2.5 tw:max-h-60 tw:overflow-y-auto">
-                            {thread.comments.map((comment) => {
-                              const commentKey = `${thread.threadId}-${comment.date}`;
-                              const isEditing = editingCommentKey === commentKey;
-                              const isMyComment = isSameUser(comment.user, currentUser);
-                              return (
-                                <div key={commentKey} className="tw:p-2 tw:bg-card tw:rounded-lg tw:border tw:border-border tw:space-y-1">
-                                  <div className="tw:flex tw:items-center tw:justify-between tw:gap-2 tw:text-[10px] tw:text-muted-foreground">
-                                    <div className="tw:flex tw:items-center tw:gap-1.5">
-                                      <span className="tw:font-semibold tw:text-foreground">
-                                        {comment.user}
-                                      </span>
-                                      {isMyComment && (
-                                        <span className="tw:text-[9px] tw:bg-primary/10 tw:text-primary tw:px-1 tw:rounded tw:font-medium">
-                                          {lang === 'en' ? 'You' : 'Tú'}
-                                        </span>
-                                      )}
-                                    </div>
-                                    <div className="tw:flex tw:items-center tw:gap-2">
-                                      <span>
-                                        {new Date(comment.date).toLocaleString(lang === 'en' ? 'en' : 'es')}
-                                      </span>
-                                      {isMyComment && !isEditing && (
-                                        <div className="tw:flex tw:items-center tw:gap-1">
-                                          <button
-                                            type="button"
-                                            onClick={() => setEditingCommentKey(commentKey)}
-                                            className="tw:p-0.5 tw:text-muted-foreground hover:tw:text-primary tw:rounded hover:tw:bg-accent tw:transition-colors tw:cursor-pointer"
-                                            title={lang === 'en' ? 'Edit comment' : 'Editar comentario'}
-                                          >
-                                            <Pencil size={10} />
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={() => handleDeleteComment(thread.threadId, comment.date, comment.user)}
-                                            className="tw:p-0.5 tw:text-muted-foreground hover:tw:text-destructive tw:rounded hover:tw:bg-accent tw:transition-colors tw:cursor-pointer"
-                                            title={lang === 'en' ? 'Delete comment' : 'Eliminar comentario'}
-                                          >
-                                            <Trash2 size={10} />
-                                          </button>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                  {isEditing ? (
-                                    <InlineEditComment
-                                      initialText={comment.plainText || comment.contents}
-                                      onSave={async (newText) => {
-                                        await handleSaveComment(thread.threadId, comment.date, comment.user, newText);
-                                        setEditingCommentKey(null);
-                                      }}
-                                      onCancel={() => setEditingCommentKey(null)}
-                                    />
-                                  ) : (
-                                    <p className="tw:text-xs tw:text-foreground tw:whitespace-pre-wrap tw:break-words">
-                                      {comment.plainText || comment.contents}
-                                    </p>
-                                  )}
-                                </div>
-                              );
-                            })}
+                            {thread.comments.map((comment) => (
+                              <CommentItem
+                                key={`${thread.threadId}-${comment.date}`}
+                                comment={comment}
+                                threadId={thread.threadId}
+                                currentUser={currentUser}
+                                lang={lang}
+                                editingCommentKey={editingCommentKey}
+                                setEditingCommentKey={setEditingCommentKey}
+                                handleSaveComment={handleSaveComment}
+                                handleDeleteComment={handleDeleteComment}
+                                isCompact={false}
+                              />
+                            ))}
                           </div>
 
                           {/* Reply box for this thread */}
