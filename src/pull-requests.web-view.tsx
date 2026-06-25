@@ -501,6 +501,13 @@ globalThis.webViewComponent = function PullRequestsWebView({
 
   const [currentUser, setCurrentUser] = useState('Translator');
   const [selectedId, setSelectedId] = useState<number | undefined>(undefined);
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [isConfirmingRevert, setIsConfirmingRevert] = useState(false);
+
+  useEffect(() => {
+    setIsConfirmingDelete(false);
+    setIsConfirmingRevert(false);
+  }, [selectedId]);
   const [filter, setFilter] = useState<StatusFilter>('all');
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<Tab>('details');
@@ -533,7 +540,14 @@ globalThis.webViewComponent = function PullRequestsWebView({
       setPrKind('verse');
       setShowCreateForm(true);
     }
-  }, [prefillBook, prefillChapter, prefillVerse, prefillOriginalText, prefillProposedText, prefillTimestamp]);
+  }, [
+    prefillBook,
+    prefillChapter,
+    prefillVerse,
+    prefillOriginalText,
+    prefillProposedText,
+    prefillTimestamp,
+  ]);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const isResizingRef = useRef(false);
@@ -993,9 +1007,6 @@ globalThis.webViewComponent = function PullRequestsWebView({
   const revertPr = useCallback(
     async (pr: PullRequest) => {
       if (!projectId) return;
-      // eslint-disable-next-line no-alert
-      const confirmed = window.confirm(tx('revertConfirm'));
-      if (!confirmed) return;
       try {
         const result = await papi.commands.sendCommand(
           'paratextProjectManager.revertPullRequest',
@@ -1021,9 +1032,6 @@ globalThis.webViewComponent = function PullRequestsWebView({
   const deletePr = useCallback(
     async (pr: PullRequest) => {
       if (!projectId) return;
-      // eslint-disable-next-line no-alert
-      const confirmed = window.confirm(tx('deleteConfirm'));
-      if (!confirmed) return;
       try {
         const result = await papi.commands.sendCommand(
           'paratextProjectManager.deletePullRequest',
@@ -1049,24 +1057,25 @@ globalThis.webViewComponent = function PullRequestsWebView({
       if (!store) return;
       const consultant = store.quorum.consultantEmail || '';
       const org = store.quorum.orgEmail || '';
-      
+
       if (!consultant && !org) {
-        // eslint-disable-next-line no-alert
-        alert(tx('emailConfigRequired'));
+        showToast(tx('emailConfigRequired'));
         setShowSettings(true);
         return;
       }
-      
+
       const recipients = [consultant, org].filter(Boolean).join(',');
-      const subject = encodeURIComponent(`[Review Request] PR #${pr.id} (${pr.refLabel}): ${pr.title}`);
-      
+      const subject = encodeURIComponent(
+        `[Review Request] PR #${pr.id} (${pr.refLabel}): ${pr.title}`,
+      );
+
       let bodyText = `Please review this Translation Proposal:\n\n`;
       bodyText += `PR ID: #${pr.id}\n`;
       bodyText += `Title: ${pr.title}\n`;
       bodyText += `Reference: ${pr.refLabel}\n`;
       bodyText += `Author: ${pr.author}\n`;
       bodyText += `Status: ${pr.status}\n\n`;
-      
+
       if (pr.kind === 'general') {
         bodyText += `--- Proposed Decision ---\n`;
         bodyText += `${pr.proposedText}\n\n`;
@@ -1076,18 +1085,24 @@ globalThis.webViewComponent = function PullRequestsWebView({
         bodyText += `--- Proposed USFM ---\n`;
         bodyText += `${pr.proposedText}\n\n`;
       }
-      
+
       if (pr.rationale) {
         bodyText += `--- Rationale ---\n`;
         bodyText += `${pr.rationale}\n\n`;
       }
-      
+
       bodyText += `To vote or comment, please open this PR in Paratext 10.`;
-      
+
       const mailtoUrl = `mailto:${recipients}?subject=${subject}&body=${encodeURIComponent(bodyText)}`;
-      window.location.href = mailtoUrl;
+
+      const link = document.createElement('a');
+      link.href = mailtoUrl;
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     },
-    [store, tx],
+    [store, tx, showToast],
   );
 
   // --- Offline queue: sync queued actions when reconnecting ---
@@ -1352,7 +1367,6 @@ globalThis.webViewComponent = function PullRequestsWebView({
 
   return (
     <div className="tw:flex tw:flex-col tw:h-full tw:bg-slate-100 dark:tw:bg-slate-950 tw:text-slate-900 dark:tw:text-slate-100 tw:overflow-hidden">
-
       {error && (
         <div className="tw:px-4 tw:py-2 tw:bg-rose-50 dark:tw:bg-rose-950/40 tw:text-rose-700 dark:tw:text-rose-300 tw:text-[13px] tw:border-b tw:border-rose-200 dark:tw:border-rose-900">
           {error}
@@ -1529,13 +1543,14 @@ globalThis.webViewComponent = function PullRequestsWebView({
           <div className="tw:bg-white dark:tw:bg-slate-900 tw:border-b tw:border-slate-200 dark:tw:border-slate-800 tw:shrink-0">
             <div className="tw:px-4 lg:tw:px-6 tw:py-3.5">
               <div className="tw:flex tw:items-center tw:justify-between tw:gap-3">
-                
                 {/* Left side: Title */}
                 <div className="tw:flex-1 tw:min-w-0">
                   {selected ? (
                     <div className="tw:flex tw:items-center tw:gap-2 tw:flex-wrap">
                       <h1 className="tw:text-[20px] tw:leading-7 tw:font-semibold tw:tracking-tight font-sans">
-                        PR #{selected.id} - {selected.kind === 'general' ? tx('generalLabel') : selected.refLabel} {selected.title}
+                        PR #{selected.id} -{' '}
+                        {selected.kind === 'general' ? tx('generalLabel') : selected.refLabel}{' '}
+                        {selected.title}
                       </h1>
                       <span
                         className={`tw:inline-flex tw:items-center tw:gap-1 tw:px-2 tw:py-0.5 tw:rounded-full tw:text-[11px] tw:font-medium tw:ring-1 tw:ring-inset ${STATUS_PILL[statusDisplay(selected)] ?? STATUS_PILL.Open}`}
@@ -1621,7 +1636,6 @@ globalThis.webViewComponent = function PullRequestsWebView({
                     {initials(currentUser)}
                   </div>
                 </div>
-
               </div>
 
               {/* PR Header Subtitle (only when PR is selected) */}
@@ -1641,7 +1655,9 @@ globalThis.webViewComponent = function PullRequestsWebView({
                   </span>
                   <span className="tw:hidden sm:tw:block">•</span>
                   <span className="tw:inline-flex tw:items-center tw:gap-1">
-                    <span className={`tw:w-1.5 tw:h-1.5 tw:rounded-full tw:animate-pulse ${selected.kind === 'general' ? 'tw:bg-indigo-500' : 'tw:bg-emerald-500'}`} />
+                    <span
+                      className={`tw:w-1.5 tw:h-1.5 tw:rounded-full tw:animate-pulse ${selected.kind === 'general' ? 'tw:bg-indigo-500' : 'tw:bg-emerald-500'}`}
+                    />
                     <span className="tw:font-medium tw:text-slate-700 dark:tw:text-slate-300">
                       {selected.kind === 'general' ? tx('generalLabel') : selected.refLabel}
                     </span>
@@ -1678,7 +1694,6 @@ globalThis.webViewComponent = function PullRequestsWebView({
                   ))}
                 </div>
               )}
-
             </div>
           </div>
 
@@ -1713,7 +1728,8 @@ globalThis.webViewComponent = function PullRequestsWebView({
                         {selected.rationale && (
                           <div className="tw:px-4 tw:pb-4">
                             <div className="tw:text-[12.5px] tw:text-slate-600 dark:tw:text-slate-400 tw:bg-slate-50 dark:tw:bg-slate-800/50 tw:border tw:border-slate-200 dark:tw:border-slate-700 tw:rounded-lg tw:px-3 tw:py-2">
-                              <span className="tw:font-semibold">{tx('rationale')}:</span> {selected.rationale}
+                              <span className="tw:font-semibold">{tx('rationale')}:</span>{' '}
+                              {selected.rationale}
                             </div>
                           </div>
                         )}
@@ -1925,13 +1941,41 @@ globalThis.webViewComponent = function PullRequestsWebView({
                       <Reply size={14} className="tw:-rotate-90" />
                       {tx('emailReviewers')}
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => deletePr(selected)}
-                      className="tw:px-3.5 tw:py-2 tw:rounded-xl tw:border tw:border-rose-200 dark:tw:border-rose-900/50 tw:text-rose-600 dark:tw:text-rose-400 tw:text-[13px] tw:font-medium hover:tw:bg-rose-50 dark:hover:tw:bg-rose-950/20 tw:mr-2"
-                    >
-                      {tx('deletePr')}
-                    </button>
+                    {isConfirmingDelete ? (
+                      <div className="tw:flex tw:items-center tw:gap-2 tw:mr-2 tw:border tw:border-rose-200 dark:tw:border-rose-900/50 tw:px-3 tw:py-1.5 tw:rounded-xl tw:bg-rose-50/50 dark:tw:bg-rose-950/10">
+                        <span className="tw:text-[12px] tw:text-rose-600 dark:tw:text-rose-400 tw:font-medium">
+                          {tx('deleteConfirm')}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            deletePr(selected);
+                            setIsConfirmingDelete(false);
+                          }}
+                          className="tw:px-2.5 tw:py-1 tw:rounded-lg tw:bg-rose-600 tw:text-white tw:text-[12px] tw:font-semibold hover:tw:bg-rose-700"
+                        >
+                          {tx('yes')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsConfirmingDelete(false)}
+                          className="tw:px-2.5 tw:py-1 tw:rounded-lg tw:border tw:border-slate-300 dark:tw:border-slate-700 tw:text-[12px] tw:font-medium hover:tw:bg-slate-50 dark:hover:tw:bg-slate-800"
+                        >
+                          {tx('cancel')}
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsConfirmingDelete(true);
+                          setIsConfirmingRevert(false);
+                        }}
+                        className="tw:px-3.5 tw:py-2 tw:rounded-xl tw:border tw:border-rose-200 dark:tw:border-rose-900/50 tw:text-rose-600 dark:tw:text-rose-400 tw:text-[13px] tw:font-medium hover:tw:bg-rose-50 dark:hover:tw:bg-rose-950/20 tw:mr-2"
+                      >
+                        {tx('deletePr')}
+                      </button>
+                    )}
                     {selected.status === 'draft' && (
                       <button
                         type="button"
@@ -1961,13 +2005,41 @@ globalThis.webViewComponent = function PullRequestsWebView({
                     )}
                     {selected.status === 'merged' ? (
                       <>
-                        <button
-                          type="button"
-                          onClick={() => revertPr(selected)}
-                          className="tw:px-3.5 tw:py-2 tw:rounded-xl tw:border tw:border-amber-300 tw:text-amber-700 tw:text-[13px] tw:font-medium hover:tw:bg-amber-50 dark:tw:border-amber-700 dark:hover:tw:bg-amber-950/30 tw:inline-flex tw:items-center tw:gap-1.5"
-                        >
-                          <AlertTriangle size={14} /> {tx('revert')}
-                        </button>
+                        {isConfirmingRevert ? (
+                          <div className="tw:flex tw:items-center tw:gap-2 tw:mr-2 tw:border tw:border-amber-300 dark:tw:border-amber-700 tw:px-3 tw:py-1.5 tw:rounded-xl tw:bg-amber-50/50 dark:tw:bg-amber-950/10">
+                            <span className="tw:text-[12px] tw:text-amber-700 dark:tw:text-amber-500 tw:font-medium">
+                              {tx('revertConfirm')}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                revertPr(selected);
+                                setIsConfirmingRevert(false);
+                              }}
+                              className="tw:px-2.5 tw:py-1 tw:rounded-lg tw:bg-amber-600 tw:text-white tw:text-[12px] tw:font-semibold hover:tw:bg-amber-700"
+                            >
+                              {tx('yes')}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setIsConfirmingRevert(false)}
+                              className="tw:px-2.5 tw:py-1 tw:rounded-lg tw:border tw:border-slate-300 dark:tw:border-slate-700 tw:text-[12px] tw:font-medium hover:tw:bg-slate-50 dark:hover:tw:bg-slate-800"
+                            >
+                              {tx('cancel')}
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsConfirmingRevert(true);
+                              setIsConfirmingDelete(false);
+                            }}
+                            className="tw:px-3.5 tw:py-2 tw:rounded-xl tw:border tw:border-amber-300 tw:text-amber-700 tw:text-[13px] tw:font-medium hover:tw:bg-amber-50 dark:tw:border-amber-700 dark:hover:tw:bg-amber-950/30 tw:inline-flex tw:items-center tw:gap-1.5"
+                          >
+                            <AlertTriangle size={14} /> {tx('revert')}
+                          </button>
+                        )}
                         <button
                           type="button"
                           disabled
@@ -1983,7 +2055,8 @@ globalThis.webViewComponent = function PullRequestsWebView({
                         disabled={saving || !canMerge(selected).ok}
                         className="tw:px-4 tw:py-2 tw:rounded-xl tw:bg-emerald-600 tw:text-white tw:text-[13px] tw:font-semibold hover:tw:bg-emerald-700 active:tw:bg-emerald-800 tw:shadow-sm tw:inline-flex tw:items-center tw:gap-1.5 disabled:tw:opacity-50 disabled:tw:cursor-not-allowed"
                       >
-                        <GitMerge size={16} /> {selected.kind === 'general' ? tx('approveAndRecord') : tx('approveMerge')}
+                        <GitMerge size={16} />{' '}
+                        {selected.kind === 'general' ? tx('approveAndRecord') : tx('approveMerge')}
                       </button>
                     )}
                   </div>
@@ -2361,10 +2434,14 @@ globalThis.webViewComponent = function PullRequestsWebView({
                   </div>
                   {/* Email Notifications Configuration */}
                   <div className="tw:border-t tw:border-slate-100 dark:tw:border-slate-800 tw:pt-3 tw:mt-3">
-                    <h5 className="tw:text-[13px] tw:font-semibold tw:mb-2">{tx('emailConfigTitle')}</h5>
+                    <h5 className="tw:text-[13px] tw:font-semibold tw:mb-2">
+                      {tx('emailConfigTitle')}
+                    </h5>
                     <div className="tw:space-y-2">
                       <div className="tw:flex tw:flex-col tw:gap-1">
-                        <span className="tw:text-[12px] tw:text-slate-600 dark:tw:text-slate-400">{tx('consultantEmailLabel')}</span>
+                        <span className="tw:text-[12px] tw:text-slate-600 dark:tw:text-slate-400">
+                          {tx('consultantEmailLabel')}
+                        </span>
                         <input
                           type="email"
                           value={store.quorum.consultantEmail ?? ''}
@@ -2379,7 +2456,9 @@ globalThis.webViewComponent = function PullRequestsWebView({
                         />
                       </div>
                       <div className="tw:flex tw:flex-col tw:gap-1">
-                        <span className="tw:text-[12px] tw:text-slate-600 dark:tw:text-slate-400">{tx('orgEmailLabel')}</span>
+                        <span className="tw:text-[12px] tw:text-slate-600 dark:tw:text-slate-400">
+                          {tx('orgEmailLabel')}
+                        </span>
                         <input
                           type="email"
                           value={store.quorum.orgEmail ?? ''}
