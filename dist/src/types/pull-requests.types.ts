@@ -123,6 +123,9 @@ export interface QuorumConfig {
   adminVeto: boolean;
   /** Auto-close PRs after this many days of inactivity. 0 = never expire. */
   expiryDays: number;
+  /** E-mail addresses to send PRs to. */
+  consultantEmail?: string;
+  orgEmail?: string;
 }
 
 export interface PullRequestsStore {

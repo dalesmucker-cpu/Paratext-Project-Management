@@ -3053,12 +3053,13 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
 
   const deletePullRequestPromise = papi.commands.registerCommand(
     'paratextProjectManager.deletePullRequest',
-    async (projectId: string, prId: number): Promise<string> => {
+    async (projectId: string, prId: number | string): Promise<string> => {
       try {
         const store = await readPrStore(projectId);
         if (!store) return 'error: PR store not found';
+        const prIdNum = typeof prId === 'string' ? parseInt(prId, 10) : prId;
         const initialLen = store.prs.length;
-        store.prs = store.prs.filter((p) => p.id !== prId);
+        store.prs = store.prs.filter((p) => p.id !== prIdNum);
         if (store.prs.length === initialLen) return 'error: PR not found';
         
         await writePrStore(projectId, store);

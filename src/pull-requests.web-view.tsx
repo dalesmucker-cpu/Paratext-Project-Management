@@ -1044,6 +1044,52 @@ globalThis.webViewComponent = function PullRequestsWebView({
     [projectId, loadData, tx, handleCatch, showToast],
   );
 
+  const emailReviewers = useCallback(
+    (pr: PullRequest) => {
+      if (!store) return;
+      const consultant = store.quorum.consultantEmail || '';
+      const org = store.quorum.orgEmail || '';
+      
+      if (!consultant && !org) {
+        // eslint-disable-next-line no-alert
+        alert(tx('emailConfigRequired'));
+        setShowSettings(true);
+        return;
+      }
+      
+      const recipients = [consultant, org].filter(Boolean).join(',');
+      const subject = encodeURIComponent(`[Review Request] PR #${pr.id} (${pr.refLabel}): ${pr.title}`);
+      
+      let bodyText = `Please review this Translation Proposal:\n\n`;
+      bodyText += `PR ID: #${pr.id}\n`;
+      bodyText += `Title: ${pr.title}\n`;
+      bodyText += `Reference: ${pr.refLabel}\n`;
+      bodyText += `Author: ${pr.author}\n`;
+      bodyText += `Status: ${pr.status}\n\n`;
+      
+      if (pr.kind === 'general') {
+        bodyText += `--- Proposed Decision ---\n`;
+        bodyText += `${pr.proposedText}\n\n`;
+      } else {
+        bodyText += `--- Original USFM ---\n`;
+        bodyText += `${pr.originalText}\n\n`;
+        bodyText += `--- Proposed USFM ---\n`;
+        bodyText += `${pr.proposedText}\n\n`;
+      }
+      
+      if (pr.rationale) {
+        bodyText += `--- Rationale ---\n`;
+        bodyText += `${pr.rationale}\n\n`;
+      }
+      
+      bodyText += `To vote or comment, please open this PR in Paratext 10.`;
+      
+      const mailtoUrl = `mailto:${recipients}?subject=${subject}&body=${encodeURIComponent(bodyText)}`;
+      window.location.href = mailtoUrl;
+    },
+    [store, tx],
+  );
+
   // --- Offline queue: sync queued actions when reconnecting ---
 
   const flushOfflineQueue = useCallback(async () => {
@@ -1873,6 +1919,14 @@ globalThis.webViewComponent = function PullRequestsWebView({
                   <div className="tw:flex tw:items-center tw:gap-2 tw:ml-auto">
                     <button
                       type="button"
+                      onClick={() => emailReviewers(selected)}
+                      className="tw:px-3.5 tw:py-2 tw:rounded-xl tw:border tw:border-slate-300 dark:tw:border-slate-700 tw:text-[13px] tw:font-medium hover:tw:bg-slate-50 dark:hover:tw:bg-slate-800 tw:mr-2 tw:inline-flex tw:items-center tw:gap-1.5"
+                    >
+                      <Reply size={14} className="tw:-rotate-90" />
+                      {tx('emailReviewers')}
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => deletePr(selected)}
                       className="tw:px-3.5 tw:py-2 tw:rounded-xl tw:border tw:border-rose-200 dark:tw:border-rose-900/50 tw:text-rose-600 dark:tw:text-rose-400 tw:text-[13px] tw:font-medium hover:tw:bg-rose-50 dark:hover:tw:bg-rose-950/20 tw:mr-2"
                     >
@@ -2304,6 +2358,42 @@ globalThis.webViewComponent = function PullRequestsWebView({
                       }
                       className="tw:w-16 tw:rounded-lg tw:border tw:border-slate-300 dark:tw:border-slate-700 tw:bg-white dark:tw:bg-slate-900 tw:px-2 tw:py-1 tw:text-[13px] tw:text-center"
                     />
+                  </div>
+                  {/* Email Notifications Configuration */}
+                  <div className="tw:border-t tw:border-slate-100 dark:tw:border-slate-800 tw:pt-3 tw:mt-3">
+                    <h5 className="tw:text-[13px] tw:font-semibold tw:mb-2">{tx('emailConfigTitle')}</h5>
+                    <div className="tw:space-y-2">
+                      <div className="tw:flex tw:flex-col tw:gap-1">
+                        <span className="tw:text-[12px] tw:text-slate-600 dark:tw:text-slate-400">{tx('consultantEmailLabel')}</span>
+                        <input
+                          type="email"
+                          value={store.quorum.consultantEmail ?? ''}
+                          onChange={(e) =>
+                            updateQuorum({
+                              ...store.quorum,
+                              consultantEmail: e.target.value.trim(),
+                            })
+                          }
+                          placeholder="consultant@example.com"
+                          className="tw:w-full tw:rounded-lg tw:border tw:border-slate-300 dark:tw:border-slate-700 tw:bg-white dark:tw:bg-slate-900 tw:px-2.5 tw:py-1 tw:text-[13px]"
+                        />
+                      </div>
+                      <div className="tw:flex tw:flex-col tw:gap-1">
+                        <span className="tw:text-[12px] tw:text-slate-600 dark:tw:text-slate-400">{tx('orgEmailLabel')}</span>
+                        <input
+                          type="email"
+                          value={store.quorum.orgEmail ?? ''}
+                          onChange={(e) =>
+                            updateQuorum({
+                              ...store.quorum,
+                              orgEmail: e.target.value.trim(),
+                            })
+                          }
+                          placeholder="review@organization.org"
+                          className="tw:w-full tw:rounded-lg tw:border tw:border-slate-300 dark:tw:border-slate-700 tw:bg-white dark:tw:bg-slate-900 tw:px-2.5 tw:py-1 tw:text-[13px]"
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
