@@ -1280,54 +1280,6 @@ globalThis.webViewComponent = function PullRequestsWebView({
 
   return (
     <div className="tw:flex tw:flex-col tw:h-full tw:bg-slate-100 dark:tw:bg-slate-950 tw:text-slate-900 dark:tw:text-slate-100 tw:overflow-hidden">
-      {/* Top Bar */}
-      <header className="tw:h-14 tw:bg-white dark:tw:bg-slate-900 tw:border-b tw:border-slate-200 dark:tw:border-slate-800 tw:flex tw:items-center tw:px-3 lg:tw:px-4 tw:gap-3 tw:shrink-0 tw:z-40">
-        <div className="tw:flex tw:items-center tw:gap-2.5 tw:min-w-0">
-          <div className="tw:w-8 tw:h-8 tw:rounded-lg tw:bg-gradient-to-br tw:from-indigo-600 tw:to-violet-600 tw:flex tw:items-center tw:justify-center tw:text-white tw:font-bold tw:text-[13px] tw:shadow-sm">
-            <GitPullRequest size={16} />
-          </div>
-          <span className="tw:font-semibold tw:tracking-tight tw:hidden sm:tw:block">
-            {tx('title')}
-          </span>
-        </div>
-        <div className="tw:hidden md:tw:flex tw:items-center tw:gap-2 tw:ml-2 tw:pl-3 tw:border-l tw:border-slate-200 dark:tw:border-slate-800 tw:min-w-0">
-          <span className="tw:text-xs tw:text-slate-500">{tx('project')}</span>
-          <span className="tw:text-sm tw:font-medium tw:truncate tw:max-w-[180px]">
-            {projectId ?? tx('selectProject')}
-          </span>
-        </div>
-        <div className="tw:ml-auto tw:flex tw:items-center tw:gap-2">
-          <button
-            type="button"
-            onClick={() => setShowCreateForm(true)}
-            className="tw:inline-flex tw:items-center tw:gap-1 tw:px-2.5 tw:py-1.5 tw:rounded-lg tw:bg-indigo-600 tw:text-white tw:text-[12px] tw:font-semibold hover:tw:bg-indigo-700 tw:shadow-sm tw:transition-colors"
-          >
-            <Plus size={14} />
-            <span className="tw:hidden sm:tw:inline">{tx('newPr')}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowSettings(true)}
-            className="tw:p-1.5 tw:rounded-lg hover:tw:bg-slate-100 dark:hover:tw:bg-slate-800"
-            title={tx('settings')}
-          >
-            <Settings size={16} className="tw:text-slate-600 dark:tw:text-slate-400" />
-          </button>
-          <button
-            type="button"
-            onClick={toggleLang}
-            className="tw:text-[11px] tw:font-medium tw:px-2.5 tw:py-1 tw:rounded-full tw:bg-slate-100 dark:tw:bg-slate-800 hover:tw:bg-slate-200"
-          >
-            {currentLang === 'en' ? 'ES' : 'EN'}
-          </button>
-          <span className="tw:hidden sm:tw:inline-flex tw:items-center tw:gap-1.5 tw:text-[11px] tw:font-medium tw:px-2.5 tw:py-1 tw:rounded-full tw:bg-indigo-50 tw:text-indigo-700 tw:ring-1 tw:ring-inset tw:ring-indigo-200">
-            {tx('tab')}
-          </span>
-          <div className="tw:w-8 tw:h-8 tw:rounded-full tw:bg-slate-900 dark:tw:bg-slate-700 tw:text-white tw:grid tw:place-items-center tw:text-xs tw:font-medium">
-            {initials(currentUser)}
-          </div>
-        </div>
-      </header>
 
       {error && (
         <div className="tw:px-4 tw:py-2 tw:bg-rose-50 dark:tw:bg-rose-950/40 tw:text-rose-700 dark:tw:text-rose-300 tw:text-[13px] tw:border-b tw:border-rose-200 dark:tw:border-rose-900">
@@ -1503,115 +1455,165 @@ globalThis.webViewComponent = function PullRequestsWebView({
 
         {/* Main */}
         <main className="tw:flex-1 tw:min-w-0 tw:bg-[#f8fafc] dark:tw:bg-slate-900 tw:flex tw:flex-col tw:min-h-0">
-          {selected ? (
-            <>
-              {/* PR Header */}
-              <div className="tw:bg-white dark:tw:bg-slate-900 tw:border-b tw:border-slate-200 dark:tw:border-slate-800 tw:shrink-0">
-                <div className="tw:px-4 lg:tw:px-6 tw:pt-4">
-                  <div className="tw:flex tw:items-start tw:gap-3">
-                    <div className="tw:flex-1 tw:min-w-0">
-                      <div className="tw:flex tw:items-center tw:gap-2 tw:flex-wrap">
-                        <h1 className="tw:text-[22px] tw:leading-7 tw:font-semibold tw:tracking-tight font-sans">
-                          PR #{selected.id} - {selected.kind === 'general' ? tx('generalLabel') : selected.refLabel} {selected.title}
-                        </h1>
-                        <span
-                          className={`tw:inline-flex tw:items-center tw:gap-1 tw:px-2 tw:py-0.5 tw:rounded-full tw:text-[11px] tw:font-medium tw:ring-1 tw:ring-inset ${STATUS_PILL[statusDisplay(selected)] ?? STATUS_PILL.Open}`}
-                        >
-                          {statusDisplay(selected)}
+          {/* Main Area Header */}
+          <div className="tw:bg-white dark:tw:bg-slate-900 tw:border-b tw:border-slate-200 dark:tw:border-slate-800 tw:shrink-0">
+            <div className="tw:px-4 lg:tw:px-6 tw:py-3.5">
+              <div className="tw:flex tw:items-center tw:justify-between tw:gap-3">
+                
+                {/* Left side: Title */}
+                <div className="tw:flex-1 tw:min-w-0">
+                  {selected ? (
+                    <div className="tw:flex tw:items-center tw:gap-2 tw:flex-wrap">
+                      <h1 className="tw:text-[20px] tw:leading-7 tw:font-semibold tw:tracking-tight font-sans">
+                        PR #{selected.id} - {selected.kind === 'general' ? tx('generalLabel') : selected.refLabel} {selected.title}
+                      </h1>
+                      <span
+                        className={`tw:inline-flex tw:items-center tw:gap-1 tw:px-2 tw:py-0.5 tw:rounded-full tw:text-[11px] tw:font-medium tw:ring-1 tw:ring-inset ${STATUS_PILL[statusDisplay(selected)] ?? STATUS_PILL.Open}`}
+                      >
+                        {statusDisplay(selected)}
+                      </span>
+                      {selected.kind === 'general' && (
+                        <span className="tw:inline-flex tw:items-center tw:gap-1 tw:px-2 tw:py-0.5 tw:rounded-md tw:bg-indigo-50 dark:tw:bg-indigo-900/30 tw:text-indigo-700 dark:tw:text-indigo-400 tw:text-[11px] tw:font-semibold tw:ring-1 tw:ring-indigo-200 dark:tw:ring-indigo-800">
+                          {tx('generalDecision')}
                         </span>
-                        {selected.kind === 'general' && (
-                          <span className="tw:inline-flex tw:items-center tw:gap-1 tw:px-2 tw:py-0.5 tw:rounded-md tw:bg-indigo-50 dark:tw:bg-indigo-900/30 tw:text-indigo-700 dark:tw:text-indigo-400 tw:text-[11px] tw:font-semibold tw:ring-1 tw:ring-indigo-200 dark:tw:ring-indigo-800">
-                            {tx('generalDecision')}
-                          </span>
-                        )}
-                        {selected.createdOffline && (
-                          <span className="tw:inline-flex tw:items-center tw:gap-1 tw:text-[11px] tw:text-sky-600">
-                            <Cloud size={12} /> {tx('offline')}
-                          </span>
-                        )}
-                      </div>
-                      <div className="tw:flex tw:items-center tw:gap-2.5 tw:mt-1.5 tw:text-[13px] tw:text-slate-500 tw:flex-wrap">
-                        <span className="tw:inline-flex tw:items-center tw:gap-1.5">
-                          <span className="tw:w-5 tw:h-5 tw:rounded-full tw:bg-slate-800 tw:text-white tw:grid tw:place-items-center tw:text-[10px] tw:font-medium">
-                            {selected.avatar}
-                          </span>
-                          <span className="tw:text-slate-700 dark:tw:text-slate-300">
-                            {selected.author}
-                          </span>
+                      )}
+                      {selected.createdOffline && (
+                        <span className="tw:inline-flex tw:items-center tw:gap-1 tw:text-[11px] tw:text-sky-600">
+                          <Cloud size={12} /> {tx('offline')}
                         </span>
-                        <span className="tw:hidden sm:tw:block">•</span>
-                        <span>
-                          {tx('opened')} {relativeTime(selected.createdAt, currentLang)}
-                        </span>
-                        <span className="tw:hidden sm:tw:block">•</span>
-                        <span className="tw:inline-flex tw:items-center tw:gap-1">
-                          <span className={`tw:w-1.5 tw:h-1.5 tw:rounded-full tw:animate-pulse ${selected.kind === 'general' ? 'tw:bg-indigo-500' : 'tw:bg-emerald-500'}`} />
-                          <span className="tw:font-medium tw:text-slate-700 dark:tw:text-slate-300">
-                            {selected.kind === 'general' ? tx('generalLabel') : selected.refLabel}
-                          </span>
-                        </span>
-                      </div>
+                      )}
                     </div>
-                    <div className="tw:flex tw:items-center tw:gap-2 tw:shrink-0">
-                      <div className="tw:hidden sm:tw:flex tw:items-center tw:gap-1 tw:bg-slate-50 dark:tw:bg-slate-800 tw:border tw:border-slate-200 dark:tw:border-slate-700 tw:rounded-xl tw:p-1 tw:shadow-sm">
-                        <button
-                          type="button"
-                          onClick={() => castVote(selected, 'up')}
-                          className={`group tw:flex tw:items-center tw:gap-1 tw:pl-2 tw:pr-2.5 tw:py-1 tw:rounded-lg tw:text-[13px] tw:font-medium tw:transition ${
-                            userVote(selected) === 'up'
-                              ? 'tw:bg-emerald-50 tw:text-emerald-700 tw:ring-1 tw:ring-emerald-200'
-                              : 'tw:text-slate-600 dark:tw:text-slate-300 hover:tw:bg-white dark:hover:tw:bg-slate-700 hover:tw:text-emerald-700'
-                          }`}
-                        >
-                          <ChevronUp size={14} className="group-active:scale-110 tw:transition" />
-                          {weightedUpCount(selected)}
-                        </button>
-                        <div className="tw:w-px tw:h-5 tw:bg-slate-200 dark:tw:bg-slate-600" />
-                        <button
-                          type="button"
-                          onClick={() => castVote(selected, 'down')}
-                          className={`group tw:flex tw:items-center tw:gap-1 tw:pl-2 tw:pr-2.5 tw:py-1 tw:rounded-lg tw:text-[13px] tw:font-medium tw:transition ${
-                            userVote(selected) === 'down'
-                              ? 'tw:bg-rose-50 tw:text-rose-700 tw:ring-1 tw:ring-rose-200'
-                              : 'tw:text-slate-600 dark:tw:text-slate-300 hover:tw:bg-white dark:hover:tw:bg-slate-700 hover:tw:text-rose-700'
-                          }`}
-                        >
-                          <ChevronDown size={14} className="group-active:scale-110 tw:transition" />
-                          {weightedDownCount(selected)}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                  {/* Tabs */}
-                  <div className="tw:flex tw:items-center tw:gap-5 tw:mt-4 -tw:mb-px tw:overflow-x-auto scrollbar-thin">
-                    {TABS.map((t) => (
+                  ) : (
+                    <h1 className="tw:text-[20px] tw:leading-7 tw:font-semibold tw:tracking-tight font-sans">
+                      {tx('title')}
+                    </h1>
+                  )}
+                </div>
+
+                {/* Right side: Controls */}
+                <div className="tw:flex tw:items-center tw:gap-3 tw:shrink-0">
+                  {/* Vote controls (only when PR is selected) */}
+                  {selected && (
+                    <div className="tw:hidden sm:tw:flex tw:items-center tw:gap-1 tw:bg-slate-50 dark:tw:bg-slate-800 tw:border tw:border-slate-200 dark:tw:border-slate-700 tw:rounded-xl tw:p-1 tw:shadow-sm">
                       <button
-                        key={t}
                         type="button"
-                        onClick={() => setTab(t)}
-                        className={`tw:relative tw:whitespace-nowrap tw:pb-3 tw:pt-1 tw:text-[14px] tw:font-medium tw:border-b-2 tw:transition ${
-                          tab === t
-                            ? 'tw:border-indigo-600 tw:text-slate-900 dark:tw:text-slate-100'
-                            : 'tw:border-transparent tw:text-slate-500 hover:tw:text-slate-800 dark:hover:tw:text-slate-200'
+                        onClick={() => castVote(selected, 'up')}
+                        className={`group tw:flex tw:items-center tw:gap-1 tw:pl-2 tw:pr-2.5 tw:py-1 tw:rounded-lg tw:text-[13px] tw:font-medium tw:transition ${
+                          userVote(selected) === 'up'
+                            ? 'tw:bg-emerald-50 tw:text-emerald-700 tw:ring-1 tw:ring-emerald-200'
+                            : 'tw:text-slate-600 dark:tw:text-slate-300 hover:tw:bg-white dark:hover:tw:bg-slate-700 hover:tw:text-emerald-700'
                         }`}
                       >
-                        {tx(TAB_LABEL_KEYS[t])}
-                        {t === 'checks' && (
-                          <span className="tw:ml-1 tw:text-[11px] tw:px-1.5 tw:py-0.5 tw:rounded-md tw:bg-amber-100 tw:text-amber-800 tw:font-medium">
-                            2
-                          </span>
-                        )}
-                        {t === 'history' && (
-                          <span className="tw:ml-1 tw:text-[11px] tw:px-1.5 tw:py-0.5 tw:rounded-md tw:bg-slate-100 tw:text-slate-700 tw:font-medium">
-                            {selected.history.length}
-                          </span>
-                        )}
+                        <ChevronUp size={14} className="group-active:scale-110 tw:transition" />
+                        {weightedUpCount(selected)}
                       </button>
-                    ))}
+                      <div className="tw:w-px tw:h-5 tw:bg-slate-200 dark:tw:bg-slate-600" />
+                      <button
+                        type="button"
+                        onClick={() => castVote(selected, 'down')}
+                        className={`group tw:flex tw:items-center tw:gap-1 tw:pl-2 tw:pr-2.5 tw:py-1 tw:rounded-lg tw:text-[13px] tw:font-medium tw:transition ${
+                          userVote(selected) === 'down'
+                            ? 'tw:bg-rose-50 tw:text-rose-700 tw:ring-1 tw:ring-rose-200'
+                            : 'tw:text-slate-600 dark:tw:text-slate-300 hover:tw:bg-white dark:hover:tw:bg-slate-700 hover:tw:text-rose-700'
+                        }`}
+                      >
+                        <ChevronDown size={14} className="group-active:scale-110 tw:transition" />
+                        {weightedDownCount(selected)}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Standard Right-side controls (always visible) */}
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateForm(true)}
+                    className="tw:inline-flex tw:items-center tw:gap-1 tw:px-2.5 tw:py-1.5 tw:rounded-lg tw:bg-indigo-600 tw:text-white tw:text-[12px] tw:font-semibold hover:tw:bg-indigo-700 tw:shadow-sm tw:transition-colors"
+                  >
+                    <Plus size={14} />
+                    <span className="tw:hidden sm:tw:inline">{tx('newPr')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowSettings(true)}
+                    className="tw:p-1.5 tw:rounded-lg hover:tw:bg-slate-100 dark:hover:tw:bg-slate-800"
+                    title={tx('settings')}
+                  >
+                    <Settings size={16} className="tw:text-slate-600 dark:tw:text-slate-400" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={toggleLang}
+                    className="tw:text-[11px] tw:font-medium tw:px-2.5 tw:py-1 tw:rounded-full tw:bg-slate-100 dark:tw:bg-slate-800 hover:tw:bg-slate-200"
+                  >
+                    {currentLang === 'en' ? 'ES' : 'EN'}
+                  </button>
+                  <div className="tw:w-8 tw:h-8 tw:rounded-full tw:bg-slate-900 dark:tw:bg-slate-700 tw:text-white tw:grid tw:place-items-center tw:text-xs tw:font-medium">
+                    {initials(currentUser)}
                   </div>
                 </div>
+
               </div>
 
+              {/* PR Header Subtitle (only when PR is selected) */}
+              {selected && (
+                <div className="tw:flex tw:items-center tw:gap-2.5 tw:mt-2.5 tw:text-[13px] tw:text-slate-500 tw:flex-wrap">
+                  <span className="tw:inline-flex tw:items-center tw:gap-1.5">
+                    <span className="tw:w-5 tw:h-5 tw:rounded-full tw:bg-slate-800 tw:text-white tw:grid tw:place-items-center tw:text-[10px] tw:font-medium">
+                      {selected.avatar}
+                    </span>
+                    <span className="tw:text-slate-700 dark:tw:text-slate-300">
+                      {selected.author}
+                    </span>
+                  </span>
+                  <span className="tw:hidden sm:tw:block">•</span>
+                  <span>
+                    {tx('opened')} {relativeTime(selected.createdAt, currentLang)}
+                  </span>
+                  <span className="tw:hidden sm:tw:block">•</span>
+                  <span className="tw:inline-flex tw:items-center tw:gap-1">
+                    <span className={`tw:w-1.5 tw:h-1.5 tw:rounded-full tw:animate-pulse ${selected.kind === 'general' ? 'tw:bg-indigo-500' : 'tw:bg-emerald-500'}`} />
+                    <span className="tw:font-medium tw:text-slate-700 dark:tw:text-slate-300">
+                      {selected.kind === 'general' ? tx('generalLabel') : selected.refLabel}
+                    </span>
+                  </span>
+                </div>
+              )}
+
+              {/* Tabs (only when PR is selected) */}
+              {selected && (
+                <div className="tw:flex tw:items-center tw:gap-5 tw:mt-4 -tw:mb-px tw:overflow-x-auto scrollbar-thin">
+                  {TABS.map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setTab(t)}
+                      className={`tw:relative tw:whitespace-nowrap tw:pb-3 tw:pt-1 tw:text-[14px] tw:font-medium tw:border-b-2 tw:transition ${
+                        tab === t
+                          ? 'tw:border-indigo-600 tw:text-slate-900 dark:tw:text-slate-100'
+                          : 'tw:border-transparent tw:text-slate-500 hover:tw:text-slate-800 dark:hover:tw:text-slate-200'
+                      }`}
+                    >
+                      {tx(TAB_LABEL_KEYS[t])}
+                      {t === 'checks' && (
+                        <span className="tw:ml-1 tw:text-[11px] tw:px-1.5 tw:py-0.5 tw:rounded-md tw:bg-amber-100 tw:text-amber-800 tw:font-medium">
+                          2
+                        </span>
+                      )}
+                      {t === 'history' && (
+                        <span className="tw:ml-1 tw:text-[11px] tw:px-1.5 tw:py-0.5 tw:rounded-md tw:bg-slate-100 tw:text-slate-700 tw:font-medium">
+                          {selected.history.length}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+            </div>
+          </div>
+
+          {selected ? (
+            <>
               <div className="tw:flex-1 tw:min-h-0 tw:overflow-y-auto">
                 {tab === 'details' && (
                   <div className="tw:max-w-[1200px] tw:mx-auto tw:p-4 lg:tw:p-6">
