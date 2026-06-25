@@ -64,6 +64,13 @@
         "group": "paratextProjectManager.projectManagerGroup",
         "order": 7,
         "command": "paratextProjectManager.openKeyTermsAnalytics"
+      },
+      {
+        "label": "%mainMenu_openPullRequests%",
+        "localizeNotes": "Application main menu > Project > Project Manager > Open Pull Requests",
+        "group": "paratextProjectManager.projectManagerGroup",
+        "order": 8,
+        "command": "paratextProjectManager.openPullRequests"
       }
     ]
   },

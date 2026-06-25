@@ -180,6 +180,68 @@ declare module 'papi-shared-types' {
     'paratextProjectManager.openKeyTermsAnalytics': (
       projectId?: string,
     ) => Promise<string | undefined>;
+    /** Opens the Pull Requests web view for a project */
+    'paratextProjectManager.openPullRequests': (projectId?: string) => Promise<string | undefined>;
+    /** Gets all pull requests data for a project (PullRequestsStore JSON) */
+    'paratextProjectManager.getPullRequests': (projectId: string) => Promise<string>;
+    /** Saves pull requests data for a project (PullRequestsStore JSON) */
+    'paratextProjectManager.savePullRequests': (
+      projectId: string,
+      storeJson: string,
+    ) => Promise<string>;
+    /** Approves a PR and merges its proposed verse text into the USFM file */
+    'paratextProjectManager.approveAndMergePullRequest': (
+      projectId: string,
+      prId: number,
+      approverUser: string,
+    ) => Promise<string>;
+    /** Creates a new pull request for a verse change */
+    'paratextProjectManager.createPullRequest': (
+      projectId: string,
+      book: string,
+      chapter: number,
+      verse: number,
+      title: string,
+      originalText: string,
+      proposedText: string,
+      rationale: string,
+      author: string,
+      status?: 'draft' | 'open',
+    ) => Promise<string>;
+    /** Gets team member roles (name -> translator|consultant|admin) */
+    'paratextProjectManager.getTeamRoles': () => Promise<string>;
+    /** Sets team member roles */
+    'paratextProjectManager.setTeamRoles': (rolesJson: string) => Promise<string>;
+    /** Gets quorum config for a project */
+    'paratextProjectManager.getPrQuorumConfig': (projectId: string) => Promise<string>;
+    /** Sets quorum config for a project */
+    'paratextProjectManager.setPrQuorumConfig': (
+      projectId: string,
+      quorumJson: string,
+    ) => Promise<string>;
+    /** Casts a vote on a PR (downvote requires reason) */
+    'paratextProjectManager.castPrVote': (
+      projectId: string,
+      prId: number,
+      user: string,
+      value: 'up' | 'down',
+      reason: string,
+    ) => Promise<string>;
+    /** Changes a PR's status (cannot merge — use approveAndMergePullRequest) */
+    'paratextProjectManager.setPrStatus': (
+      projectId: string,
+      prId: number,
+      newStatus: string,
+      actor: string,
+    ) => Promise<string>;
+    /** Reverts a merged PR by creating a new PR that restores the original text */
+    'paratextProjectManager.revertPullRequest': (
+      projectId: string,
+      prId: number,
+      actor: string,
+    ) => Promise<string>;
+    /** Opens the Pull Requests tab at a specific PR (notification click-through) */
+    'paratextProjectManager.openPullRequestsAt': (notificationId: string | number) => Promise<void>;
     /** Gets team members list */
     'paratextProjectManager.getTeamMembers': () => Promise<string>;
     /** Sets team members list */

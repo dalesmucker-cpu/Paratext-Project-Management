@@ -21,6 +21,7 @@
     "onCommand:paratextProjectManager.openScriptureViewer",
     "onCommand:paratextProjectManager.openNotesViewer",
     "onCommand:paratextProjectManager.openKeyTerms",
-    "onCommand:paratextProjectManager.openKeyTermsAnalytics"
+    "onCommand:paratextProjectManager.openKeyTermsAnalytics",
+    "onCommand:paratextProjectManager.openPullRequests"
   ]
 }

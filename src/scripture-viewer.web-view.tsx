@@ -546,7 +546,8 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   // True when the PAPI JSON-RPC connection to the host has dropped (typically
   // after the program has been idle). When true, the UI offers a "Reconectar"
   // button that reloads the webview.
-  const { ready, disconnected, disconnectedRef, clearDisconnected, handleCatch } = usePapiDisconnect();
+  const { ready, disconnected, disconnectedRef, clearDisconnected, handleCatch } =
+    usePapiDisconnect();
   // Auto-dismiss error after 15 seconds
   useEffect(() => {
     if (!error) return;
@@ -948,7 +949,14 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
         else console.error('Failed to load key terms matches in useEffect:', err);
       });
     }
-  }, [keyTermsOverlayEnabled, selectedBook, selectedChapter, projectId, loadKeyTermsMatches, handleCatch]);
+  }, [
+    keyTermsOverlayEnabled,
+    selectedBook,
+    selectedChapter,
+    projectId,
+    loadKeyTermsMatches,
+    handleCatch,
+  ]);
 
   const loadChapterRequestRef = useRef(0);
 
@@ -1177,6 +1185,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   } | null>(null);
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [contextMenuVerseText, setContextMenuVerseText] = useState('');
 
   useEffect(() => {
     const handleWindowClick = () => {
@@ -2299,6 +2308,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       setContextBefore(before);
       setContextAfter(after);
 
+      setContextMenuVerseText(verseText);
       setContextMenu({
         x: e.clientX,
         y: e.clientY,
@@ -3105,6 +3115,47 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
             className="tw:w-full tw:text-left tw:px-3 tw:py-2 tw:hover:bg-slate-100 tw:text-slate-700 tw:font-semibold tw:flex tw:items-center tw:gap-1.5 tw:cursor-pointer tw:border-none tw:bg-white"
           >
             Agregar nota
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              setContextMenu(null);
+              if (!projectId || !selectedBook || !selectedVerseNum) return;
+              const verseNum = selectedVerseNum;
+              const fullVerse = contextMenuVerseText || selectedText;
+              try {
+                papi.webViews.openWebView(
+                  'paratextProjectManager.pullRequests',
+                  undefined,
+                  // eslint-disable-next-line no-type-assertion/no-type-assertion, @typescript-eslint/no-explicit-any
+                  {
+                    existingId: `pull-requests-${projectId}`,
+                    projectId,
+                    bringToFront: true,
+                    prefillBook: selectedBook,
+                    prefillChapter: selectedChapter,
+                    prefillVerse: verseNum,
+                    prefillOriginalText: fullVerse,
+                    prefillProposedText: fullVerse,
+                    prefillTimestamp: Date.now(),
+                  } as any,
+                );
+                papi.commands.sendCommand(
+                  'paratextProjectManager.requestPrPrefill',
+                  projectId,
+                  selectedBook,
+                  selectedChapter,
+                  verseNum,
+                  fullVerse,
+                  fullVerse,
+                ).catch(() => {});
+              } catch {
+                /* failed to open PR view */
+              }
+            }}
+            className="tw:w-full tw:text-left tw:px-3 tw:py-2 tw:hover:bg-slate-100 tw:text-slate-700 tw:font-semibold tw:flex tw:items-center tw:gap-1.5 tw:cursor-pointer tw:border-none tw:bg-white"
+          >
+            Crear Pull Request
           </button>
         </div>
       )}

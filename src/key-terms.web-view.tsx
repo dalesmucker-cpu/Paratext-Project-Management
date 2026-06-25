@@ -35,6 +35,134 @@ import type {
   AffixRule,
 } from './types/key-terms.types';
 import type { ParatextNoteThread, ParatextComment } from './types/note.types';
+const BIBLE_BOOKS = [
+  'GEN',
+  'EXO',
+  'LEV',
+  'NUM',
+  'DEU',
+  'JOS',
+  'JDG',
+  'RUT',
+  '1SA',
+  '2SA',
+  '1KI',
+  '2KI',
+  '1CH',
+  '2CH',
+  'EZR',
+  'NEH',
+  'EST',
+  'JOB',
+  'PSA',
+  'PRO',
+  'ECC',
+  'SNG',
+  'ISA',
+  'JER',
+  'LAM',
+  'EZK',
+  'DAN',
+  'HOS',
+  'JOL',
+  'AMO',
+  'OBA',
+  'JON',
+  'MIC',
+  'NAM',
+  'HAB',
+  'ZEP',
+  'HAG',
+  'ZEC',
+  'MAL',
+  'MAT',
+  'MRK',
+  'LUK',
+  'JHN',
+  'ACT',
+  'ROM',
+  '1CO',
+  '2CO',
+  'GAL',
+  'EPH',
+  'PHP',
+  'COL',
+  '1TH',
+  '2TH',
+  '1TI',
+  '2TI',
+  'TIT',
+  'PHM',
+  'HEB',
+  'JAS',
+  '1PE',
+  '2PE',
+  '1JN',
+  '2JN',
+  '3JN',
+  'JUD',
+  'REV',
+] as const;
+
+interface ParsedRef {
+  bookIdx: number;
+  chapter: number;
+  verse: number;
+  original: string;
+}
+
+const parseReference = (ref?: string): ParsedRef => {
+  if (!ref) {
+    return { bookIdx: 999, chapter: 999, verse: 999, original: '' };
+  }
+  const trimmed = ref.trim();
+  const spaceIdx = trimmed.indexOf(' ');
+  if (spaceIdx === -1) {
+    const bookIdx = BIBLE_BOOKS.indexOf(trimmed as any);
+    return {
+      bookIdx: bookIdx !== -1 ? bookIdx : 999,
+      chapter: 0,
+      verse: 0,
+      original: trimmed,
+    };
+  }
+  const book = trimmed.slice(0, spaceIdx);
+  const rest = trimmed.slice(spaceIdx + 1);
+  const bookIdx = BIBLE_BOOKS.indexOf(book as any);
+
+  let chapter = 0;
+  let verse = 0;
+  const colonIdx = rest.indexOf(':');
+  if (colonIdx !== -1) {
+    chapter = parseInt(rest.slice(0, colonIdx), 10) || 0;
+    const verseStr = rest.slice(colonIdx + 1);
+    verse = parseInt(verseStr.match(/^\d+/)?.[0] || '0', 10) || 0;
+  } else {
+    chapter = parseInt(rest, 10) || 0;
+  }
+
+  return {
+    bookIdx: bookIdx !== -1 ? bookIdx : 999,
+    chapter,
+    verse,
+    original: trimmed,
+  };
+};
+
+const compareReferences = (refA?: string, refB?: string): number => {
+  const a = parseReference(refA);
+  const b = parseReference(refB);
+  if (a.bookIdx !== b.bookIdx) {
+    return a.bookIdx - b.bookIdx;
+  }
+  if (a.chapter !== b.chapter) {
+    return a.chapter - b.chapter;
+  }
+  if (a.verse !== b.verse) {
+    return a.verse - b.verse;
+  }
+  return a.original.localeCompare(b.original);
+};
 
 const isSameUser = (userA: string, userB: string) => {
   if (!userA || !userB) return false;
@@ -266,6 +394,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
   updateWebViewDefinition,
 }: WebViewProps) {
   const [lang, setLang] = useWebViewState<string>('lang', 'es');
+  const [sortBy, setSortBy] = useWebViewState<'gloss' | 'reference' | 'notes'>('sortBy', 'gloss');
   const { tx, toggleLang } = useLocalizedStrings(lang, setLang, 'verifier');
 
   // Key Terms Store state
@@ -296,6 +425,17 @@ globalThis.webViewComponent = function KeyTermsWebView({
   const [currentUser, setCurrentUser] = useState('Traductor');
   const [projectThreads, setProjectThreads] = useState<ParatextNoteThread[]>([]);
   const [editingCommentKey, setEditingCommentKey] = useState<string | null>(null);
+
+  const getTermNotesCount = useCallback(
+    (termId: string) => {
+      const threads = projectThreads.filter((t) => t.biblicalTermId === termId);
+      return threads.reduce((sum, t) => {
+        const activeComments = t.comments ? t.comments.filter((c) => c.status !== 'deleted') : [];
+        return sum + activeComments.length;
+      }, 0);
+    },
+    [projectThreads],
+  );
 
   const loadProjectNotes = useCallback(async (userOverride?: string) => {
     const activeUser = userOverride || currentUser;
@@ -413,7 +553,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
 
   const loadData = useCallback(async (activeLang?: string) => {
     if (!projectId) return;
-    const langToUse = activeLang || lang;
+    const langToUse = typeof activeLang === 'string' ? activeLang : lang;
     const requestId = ++loadDataRequestRef.current;
     const isCurrentRequest = () => requestId === loadDataRequestRef.current;
     setLoading(true);
@@ -1092,8 +1232,22 @@ globalThis.webViewComponent = function KeyTermsWebView({
         }
         return true;
       })
-      .sort((a, b) => a.gloss.localeCompare(b.gloss));
-  }, [store, searchTerm, filterDomain, filterCompletion, getTermStatus]);
+      .sort((a, b) => {
+        if (sortBy === 'reference') {
+          const refCompare = compareReferences(a.references?.[0], b.references?.[0]);
+          if (refCompare !== 0) return refCompare;
+          return a.gloss.localeCompare(b.gloss);
+        }
+        if (sortBy === 'notes') {
+          const notesA = getTermNotesCount(a.id);
+          const notesB = getTermNotesCount(b.id);
+          if (notesB !== notesA) return notesB - notesA;
+          return a.gloss.localeCompare(b.gloss);
+        }
+        // Default: gloss
+        return a.gloss.localeCompare(b.gloss);
+      });
+  }, [store, searchTerm, filterDomain, filterCompletion, getTermStatus, sortBy, getTermNotesCount]);
 
   const completionStats = useMemo(() => {
     if (!store || store.terms.length === 0)
@@ -1191,7 +1345,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
               </span>
               <button
                 type="button"
-                onClick={loadData}
+                onClick={() => loadData()}
                 title={tx('refresh')}
                 aria-label={tx('refresh')}
                 className="tw:inline-flex tw:items-center tw:gap-1 tw:text-xs tw:text-muted-foreground hover:tw:text-primary tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring tw:rounded"
@@ -1242,6 +1396,22 @@ globalThis.webViewComponent = function KeyTermsWebView({
                     {d}
                   </option>
                 ))}
+              </select>
+            </div>
+
+            {/* Sort By Filter */}
+            <div className="tw:flex tw:flex-col tw:gap-1">
+              <label className="tw:text-[10px] tw:text-muted-foreground tw:font-semibold tw:uppercase">
+                {tx('sortByLabel')}
+              </label>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                className="tw:w-full tw:border tw:border-border tw:rounded-lg tw:px-2 tw:py-1 tw:text-xs tw:bg-background tw:text-foreground tw:focus:outline-none tw:focus:ring-1 tw:focus:ring-primary"
+              >
+                <option value="gloss">{tx('sortGloss')}</option>
+                <option value="reference">{tx('sortReference')}</option>
+                <option value="notes">{tx('sortNotes')}</option>
               </select>
             </div>
 
@@ -1450,7 +1620,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
             ) : (
               <button
                 type="button"
-                onClick={loadData}
+                onClick={() => loadData()}
                 className="tw:text-destructive tw:underline hover:tw:opacity-80 tw:cursor-pointer tw:flex-shrink-0 tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring tw:rounded"
               >
                 ({tx('retry')})

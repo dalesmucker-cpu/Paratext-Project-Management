@@ -25,9 +25,12 @@ import keyTermsWebView from './key-terms.web-view?inline';
 import keyTermsStyles from './key-terms.web-view.scss?inline';
 import keyTermsAnalyticsWebView from './key-terms-analytics.web-view?inline';
 import keyTermsAnalyticsStyles from './key-terms-analytics.web-view.scss?inline';
+import pullRequestsWebView from './pull-requests.web-view?inline';
+import pullRequestsStyles from './pull-requests.web-view.scss?inline';
 
 import type { PendingTimeSyncEntry } from './types/task.types';
 import type { KeyTermsStore, VerseMatchStatus, MatchResult } from './types/key-terms.types';
+import type { PullRequestsStore } from './types/pull-requests.types';
 import { loadLegacyKeyTermsAsync } from './utils/key-terms-parser';
 import { matchRendering } from './utils/key-terms-matcher';
 
@@ -38,8 +41,10 @@ const NOTES_VIEWER_TYPE = 'paratextProjectManager.notesViewer';
 const SCRIPTURE_VIEWER_TYPE = 'paratextProjectManager.scriptureViewer';
 const KEY_TERMS_TYPE = 'paratextProjectManager.keyTerms';
 const KEY_TERMS_ANALYTICS_TYPE = 'paratextProjectManager.keyTermsAnalytics';
+const PULL_REQUESTS_TYPE = 'paratextProjectManager.pullRequests';
 const TASKS_FILENAME = 'project-tasks.json';
 const KEY_TERMS_FILENAME = 'key-terms-data.json';
+const PULL_REQUESTS_FILENAME = 'pull-requests.json';
 
 // Resolve the current user's home directory from the environment.
 // USERPROFILE is set on Windows (e.g. "C:\Users\Dale").
@@ -945,6 +950,45 @@ const keyTermsAnalyticsProvider: IWebViewProvider = {
   },
 };
 
+const pullRequestsProvider: IWebViewProvider = {
+  async getWebView(
+    savedWebView: SavedWebViewDefinition,
+    openWebViewOptions?: any,
+  ): Promise<WebViewDefinition | undefined> {
+    if (savedWebView.webViewType !== PULL_REQUESTS_TYPE)
+      throw new Error(`Wrong webview type: ${savedWebView.webViewType}`);
+    const projectId =
+      savedWebView.projectId ?? openWebViewOptions?.projectId ?? takePendingProjectId(savedWebView);
+    return {
+      ...savedWebView,
+      projectId,
+      title: 'Pull Requests',
+      content: pullRequestsWebView,
+      styles: pullRequestsStyles,
+      // Forward prefill data from openWebViewOptions so the component
+      // receives them as props when opened from the scripture viewer.
+      ...(openWebViewOptions?.prefillBook !== undefined && {
+        prefillBook: openWebViewOptions.prefillBook,
+      }),
+      ...(openWebViewOptions?.prefillChapter !== undefined && {
+        prefillChapter: openWebViewOptions.prefillChapter,
+      }),
+      ...(openWebViewOptions?.prefillVerse !== undefined && {
+        prefillVerse: openWebViewOptions.prefillVerse,
+      }),
+      ...(openWebViewOptions?.prefillOriginalText !== undefined && {
+        prefillOriginalText: openWebViewOptions.prefillOriginalText,
+      }),
+      ...(openWebViewOptions?.prefillProposedText !== undefined && {
+        prefillProposedText: openWebViewOptions.prefillProposedText,
+      }),
+      ...(openWebViewOptions?.prefillTimestamp !== undefined && {
+        prefillTimestamp: openWebViewOptions.prefillTimestamp,
+      }),
+    };
+  },
+};
+
 // --- Extension Lifecycle ---
 
 export async function activate(context: ExecutionActivationContext): Promise<void> {
@@ -1003,6 +1047,10 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
   const keyTermsAnalyticsProviderPromise = papi.webViewProviders.registerWebViewProvider(
     KEY_TERMS_ANALYTICS_TYPE,
     keyTermsAnalyticsProvider,
+  );
+  const pullRequestsProviderPromise = papi.webViewProviders.registerWebViewProvider(
+    PULL_REQUESTS_TYPE,
+    pullRequestsProvider,
   );
 
   // --- Lightweight ping command (no notes-helper IPC) ---
@@ -1114,6 +1162,27 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
       const webViewId = `key-terms-analytics-${pid}`;
       setPendingProjectId(webViewId, pid);
       return papi.webViews.openWebView(KEY_TERMS_ANALYTICS_TYPE, undefined, {
+        existingId: webViewId,
+        projectId: pid,
+      } as any);
+    },
+  );
+
+  const openPullRequestsPromise = papi.commands.registerCommand(
+    'paratextProjectManager.openPullRequests',
+    async (projectId?: string) => {
+      let pid = projectId;
+      if (!pid) {
+        pid = await papi.dialogs.selectProject({
+          title: 'Abrir Pull Requests',
+          prompt: 'Selecciona un proyecto:',
+          includeProjectInterfaces: 'platformScripture.USJ_Chapter',
+        });
+      }
+      if (!pid) return undefined;
+      const webViewId = `pull-requests-${pid}`;
+      setPendingProjectId(webViewId, pid);
+      return papi.webViews.openWebView(PULL_REQUESTS_TYPE, undefined, {
         existingId: webViewId,
         projectId: pid,
       } as any);
@@ -1359,7 +1428,12 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         }
       }
     } else {
-      store = await loadLegacyKeyTermsAsync(pt9ListsDir, projectDir, activeLang as 'en' | 'es', runFileHelper);
+      store = await loadLegacyKeyTermsAsync(
+        pt9ListsDir,
+        projectDir,
+        activeLang as 'en' | 'es',
+        runFileHelper,
+      );
       modified = true;
     }
 
@@ -1423,7 +1497,9 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
       ? `${pt9ListsDir}${activeLang === 'es' ? 'BiblicalTermsEs.xml' : 'BiblicalTermsEn.xml'}`
       : `${pt9ListsDir}${slash}${activeLang === 'es' ? 'BiblicalTermsEs.xml' : 'BiblicalTermsEn.xml'}`;
     const locXmlExists = await runFileHelper('exists', locXmlPath);
-    logger.info(`Key Terms Localization: activeLang=${activeLang}, locXmlPath=${locXmlPath}, exists=${locXmlExists}`);
+    logger.info(
+      `Key Terms Localization: activeLang=${activeLang}, locXmlPath=${locXmlPath}, exists=${locXmlExists}`,
+    );
     if (locXmlExists.trim() === 'true') {
       try {
         const locXml = await runFileHelper('read', locXmlPath);
@@ -2412,6 +2488,739 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
       }
     },
   );
+
+  // --- Pull Requests ---
+
+  const getPullRequestsPromise = papi.commands.registerCommand(
+    'paratextProjectManager.getPullRequests',
+    async (projectId: string): Promise<string> => {
+      const empty = JSON.stringify({
+        schemaVersion: 1,
+        prs: [],
+        nextId: 1,
+        quorum: {
+          minUpvotes: 2,
+          requireNoConsultantDownvotes: true,
+          adminVeto: true,
+          expiryDays: 30,
+        },
+        teamRoles: {},
+      });
+      try {
+        const projectDir = await resolveProjectDir(projectId);
+        const prPath = `${projectDir}${SEP}${PULL_REQUESTS_FILENAME}`;
+        const exists = await runFileHelper('exists', prPath);
+        if (exists.trim() !== 'true') return empty;
+        const content = await runFileHelper('read', prPath);
+        JSON.parse(content); // validate
+        return content;
+      } catch (e) {
+        logger.warn(`getPullRequests failed for "${projectId}": ${e}`);
+        return empty;
+      }
+    },
+  );
+
+  const savePullRequestsPromise = papi.commands.registerCommand(
+    'paratextProjectManager.savePullRequests',
+    async (projectId: string, storeJson: string): Promise<string> => {
+      try {
+        const projectDir = await resolveProjectDir(projectId);
+        const prPath = `${projectDir}${SEP}${PULL_REQUESTS_FILENAME}`;
+        await runFileHelper('write', prPath, storeJson);
+        // Broadcast so other open web views on the same machine refresh
+        if (collabEventEmitter) {
+          collabEventEmitter.emit({ type: 'pull_requests_update', payload: { projectId } });
+        }
+        return 'ok';
+      } catch (e) {
+        logger.warn(`savePullRequests failed for "${projectId}": ${e}`);
+        return `error: ${e}`;
+      }
+    },
+  );
+
+  const approveAndMergePullRequestPromise = papi.commands.registerCommand(
+    'paratextProjectManager.approveAndMergePullRequest',
+    async (projectId: string, prId: number, approverUser: string): Promise<string> => {
+      try {
+        const projectDir = await resolveProjectDir(projectId);
+        await sendToNotesHelper('registerProjectDir', [projectId, projectDir]);
+        const prPath = `${projectDir}${SEP}${PULL_REQUESTS_FILENAME}`;
+        const exists = await runFileHelper('exists', prPath);
+        if (exists.trim() !== 'true') return 'error: PR store not found';
+        const content = await runFileHelper('read', prPath);
+        const store: PullRequestsStore = JSON.parse(content);
+        const pr = store.prs.find((p) => p.id === prId);
+        if (!pr) return 'error: PR not found';
+        if (pr.status === 'merged') return 'error: already merged';
+
+        const isGeneral = pr.kind === 'general' || !pr.ref;
+        if (!isGeneral) {
+          // Write the proposed verse text to the USFM file (reuses the same notes-helper path as
+          // updateVerseText so the file is written exactly as the Scripture Viewer does).
+          const saveResult: { status: string; error?: string } | string = await sendToNotesHelper(
+            'updateVerseText',
+            [projectId, projectDir, pr.ref!.book, pr.ref!.chapter, pr.ref!.verse, pr.proposedText ?? ''],
+          );
+
+          if (typeof saveResult === 'object' && saveResult && saveResult.status === 'error') {
+            logger.warn(`approveAndMerge verse save failed: ${saveResult.error}`);
+            return `error: ${saveResult.error}`;
+          }
+        }
+
+        // Mark merged and append audit entry
+        const now = new Date().toISOString();
+        pr.status = 'merged';
+        pr.updatedAt = now;
+        pr.history = [
+          ...(pr.history || []),
+          {
+            id: `h-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+            actor: approverUser,
+            action: 'merged',
+            detail: isGeneral
+              ? `Recorded decision: ${pr.title}`
+              : `Merged ${pr.refLabel}: applied proposed text to ${pr.refLabel}`,
+            timestamp: now,
+          },
+        ];
+
+        await runFileHelper('write', prPath, JSON.stringify(store, null, 2));
+
+        // Broadcast verse + PR updates
+        if (!isGeneral) {
+          const versePayload = {
+            projectId,
+            book: pr.ref!.book,
+            chapter: pr.ref!.chapter,
+            verse: pr.ref!.verse,
+            newText: pr.proposedText ?? '',
+          };
+          collabEventEmitter.emit({ type: 'verse_update', payload: versePayload });
+          if (localCollabRole !== 'none') {
+            try {
+              await sendToNotesHelper('broadcastCollab', [
+                { type: 'verse_update', payload: versePayload },
+              ]);
+            } catch (helperErr) {
+              logger.warn(`Failed to broadcast verse update: ${helperErr}`);
+            }
+          }
+        }
+
+        collabEventEmitter.emit({ type: 'pull_requests_update', payload: { projectId } });
+        if (localCollabRole !== 'none') {
+          try {
+            await sendToNotesHelper('broadcastCollab', [
+              { type: 'pull_requests_update', payload: { projectId } },
+            ]);
+          } catch (helperErr) {
+            logger.warn(`Failed to broadcast merge: ${helperErr}`);
+          }
+        }
+
+        // Notify the PR author that it was merged
+        sendPrNotification(
+          projectId,
+          pr.id,
+          `PR #${pr.id} merged: ${pr.refLabel} ${pr.title}`,
+          'info',
+        ).catch(() => {
+          /* non-critical */
+        });
+
+        return 'ok';
+      } catch (e) {
+        logger.warn(`approveAndMergePullRequest failed: ${e}`);
+        return `error: ${e}`;
+      }
+    },
+  );
+
+  // --- Pull Requests: creation, roles, quorum, lifecycle, expiry ---
+
+  async function readUserConfig(): Promise<Record<string, unknown>> {
+    try {
+      const exists = await runFileHelper('exists', PM_USER_CONFIG_PATH);
+      if (exists.trim() !== 'true') return {};
+      const content = await runFileHelper('read', PM_USER_CONFIG_PATH);
+      const config: Record<string, unknown> = JSON.parse(content);
+      return config;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  async function writeUserConfig(config: Record<string, unknown>): Promise<void> {
+    await runFileHelper('write', PM_USER_CONFIG_PATH, JSON.stringify(config, undefined, 2));
+  }
+
+  async function readPrStore(projectId: string): Promise<PullRequestsStore | undefined> {
+    try {
+      const projectDir = await resolveProjectDir(projectId);
+      const prPath = `${projectDir}${SEP}${PULL_REQUESTS_FILENAME}`;
+      const exists = await runFileHelper('exists', prPath);
+      if (exists.trim() !== 'true') return undefined;
+      const content = await runFileHelper('read', prPath);
+      const store: PullRequestsStore = JSON.parse(content);
+      return store;
+    } catch (e) {
+      logger.warn(`readPrStore failed for "${projectId}": ${e}`);
+      return undefined;
+    }
+  }
+
+  async function writePrStore(projectId: string, store: PullRequestsStore): Promise<void> {
+    const projectDir = await resolveProjectDir(projectId);
+    const prPath = `${projectDir}${SEP}${PULL_REQUESTS_FILENAME}`;
+    await runFileHelper('write', prPath, JSON.stringify(store, undefined, 2));
+  }
+
+  function makeInitials(name: string): string {
+    if (!name) return '?';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+
+  const createPullRequestPromise = papi.commands.registerCommand(
+    'paratextProjectManager.createPullRequest',
+    async (
+      projectId: string,
+      book: string,
+      chapter: number,
+      verse: number,
+      title: string,
+      originalText: string,
+      proposedText: string,
+      rationale: string,
+      author: string,
+      status: 'draft' | 'open' = 'open',
+    ): Promise<string> => {
+      try {
+        let store = await readPrStore(projectId);
+        if (!store) {
+          store = {
+            schemaVersion: 1,
+            prs: [],
+            nextId: 1,
+            quorum: {
+              minUpvotes: 2,
+              requireNoConsultantDownvotes: true,
+              adminVeto: true,
+              expiryDays: 30,
+            },
+            teamRoles: {},
+          };
+        }
+
+        const now = new Date().toISOString();
+        const id = store.nextId;
+        store.nextId += 1;
+        const isGeneral = !book || chapter === 0 || verse === 0;
+        const refLabel = isGeneral ? 'General' : `${book} ${chapter}:${verse}`;
+        const newPr: PullRequestsStore['prs'][number] = {
+          id,
+          ref: isGeneral ? undefined : { book, chapter, verse },
+          refLabel,
+          title,
+          status,
+          author,
+          avatar: makeInitials(author),
+          createdAt: now,
+          updatedAt: now,
+          originalText: isGeneral ? undefined : originalText,
+          proposedText,
+          rationale,
+          votes: [],
+          alternatives: [],
+          comments: [],
+          history: [
+            {
+              id: `h-${id}-open`,
+              actor: author,
+              action: 'opened',
+              detail: isGeneral ? `Created General PR` : `Created PR for ${refLabel}`,
+              timestamp: now,
+            },
+          ],
+          requestedReviewers: [],
+          kind: isGeneral ? 'general' : 'verse',
+        };
+        store.prs.unshift(newPr);
+        await writePrStore(projectId, store);
+
+        if (collabEventEmitter) {
+          collabEventEmitter.emit({ type: 'pull_requests_update', payload: { projectId } });
+        }
+        return JSON.stringify({ id, storeId: projectId });
+      } catch (e) {
+        logger.warn(`createPullRequest failed: ${e}`);
+        return `error: ${e}`;
+      }
+    },
+  );
+
+  const requestPrPrefillEmitter = papi.network.createNetworkEventEmitter<{
+    projectId: string;
+    book: string;
+    chapter: number;
+    verse: number;
+    originalText: string;
+    proposedText: string;
+    timestamp: number;
+  }>('paratextProjectManager.onRequestPrPrefill');
+
+  const requestPrPrefillPromise = papi.commands.registerCommand(
+    'paratextProjectManager.requestPrPrefill',
+    async (
+      projectId: string,
+      book: string,
+      chapter: number,
+      verse: number,
+      originalText: string,
+      proposedText: string,
+    ): Promise<string> => {
+      requestPrPrefillEmitter.emit({
+        projectId,
+        book,
+        chapter,
+        verse,
+        originalText,
+        proposedText,
+        timestamp: Date.now(),
+      });
+      return 'ok';
+    },
+  );
+
+  const getTeamRolesPromise = papi.commands.registerCommand(
+    'paratextProjectManager.getTeamRoles',
+    async (): Promise<string> => {
+      try {
+        const config = await readUserConfig();
+        // eslint-disable-next-line no-type-assertion/no-type-assertion
+        const roles = (config.teamRoles ?? {}) as Record<string, string>;
+        return JSON.stringify(roles);
+      } catch (e) {
+        logger.warn(`getTeamRoles failed: ${e}`);
+        return '{}';
+      }
+    },
+  );
+
+  const setTeamRolesPromise = papi.commands.registerCommand(
+    'paratextProjectManager.setTeamRoles',
+    async (rolesJson: string): Promise<string> => {
+      try {
+        const roles: Record<string, string> = JSON.parse(rolesJson);
+        const config = await readUserConfig();
+        config.teamRoles = roles;
+        await writeUserConfig(config);
+        return 'ok';
+      } catch (e) {
+        logger.warn(`setTeamRoles failed: ${e}`);
+        return `error: ${e}`;
+      }
+    },
+  );
+
+  const getPrQuorumConfigPromise = papi.commands.registerCommand(
+    'paratextProjectManager.getPrQuorumConfig',
+    async (projectId: string): Promise<string> => {
+      try {
+        const store = await readPrStore(projectId);
+        if (!store) {
+          return JSON.stringify({
+            minUpvotes: 2,
+            requireNoConsultantDownvotes: true,
+            adminVeto: true,
+            expiryDays: 30,
+          });
+        }
+        return JSON.stringify(store.quorum);
+      } catch (e) {
+        logger.warn(`getPrQuorumConfig failed: ${e}`);
+        return '{}';
+      }
+    },
+  );
+
+  const setPrQuorumConfigPromise = papi.commands.registerCommand(
+    'paratextProjectManager.setPrQuorumConfig',
+    async (projectId: string, quorumJson: string): Promise<string> => {
+      try {
+        const quorum = JSON.parse(quorumJson);
+        let store = await readPrStore(projectId);
+        if (!store) {
+          store = {
+            schemaVersion: 1,
+            prs: [],
+            nextId: 1,
+            quorum,
+            teamRoles: {},
+          };
+        } else {
+          store.quorum = quorum;
+        }
+        await writePrStore(projectId, store);
+        return 'ok';
+      } catch (e) {
+        logger.warn(`setPrQuorumConfig failed: ${e}`);
+        return `error: ${e}`;
+      }
+    },
+  );
+
+  /**
+   * Role weights: translator=1, consultant=2, admin uses veto (weight 0 for tally, veto is
+   * separate).
+   */
+  function roleWeight(role: string): number {
+    if (role === 'consultant') return 2;
+    if (role === 'admin') return 0;
+    return 1;
+  }
+
+  function toReviewerRole(r: string): 'translator' | 'consultant' | 'admin' {
+    if (r === 'consultant') return 'consultant';
+    if (r === 'admin') return 'admin';
+    return 'translator';
+  }
+
+  function toPrStatus(s: string): PullRequestsStore['prs'][number]['status'] {
+    if (s === 'draft') return 'draft';
+    if (s === 'open') return 'open';
+    if (s === 'needs-review') return 'needs-review';
+    if (s === 'approved') return 'approved';
+    if (s === 'merged') return 'merged';
+    if (s === 'closed') return 'closed';
+    if (s === 'expired') return 'expired';
+    return 'open';
+  }
+
+  const castPrVotePromise = papi.commands.registerCommand(
+    'paratextProjectManager.castPrVote',
+    async (
+      projectId: string,
+      prId: number,
+      user: string,
+      value: 'up' | 'down',
+      reason: string,
+    ): Promise<string> => {
+      try {
+        // Downvote requires a reason — enforced server-side so drive-by no's are blocked everywhere
+        if (value === 'down' && (!reason || !reason.trim())) {
+          return 'error: A reason is required for downvotes';
+        }
+
+        const store = await readPrStore(projectId);
+        if (!store) return 'error: PR store not found';
+        const pr = store.prs.find((p) => p.id === prId);
+        if (!pr) return 'error: PR not found';
+        if (pr.status === 'merged' || pr.status === 'closed' || pr.status === 'expired') {
+          return `error: PR is ${pr.status} and cannot be voted on`;
+        }
+
+        const userRole = toReviewerRole(store.teamRoles[user] ?? 'translator');
+        const weight = roleWeight(userRole);
+        const now = new Date().toISOString();
+
+        // Admin veto: a downvote from an admin forces needs-review
+        const previousVote = pr.votes.find((v) => v.user === user);
+        const wasDownvoted = previousVote?.value === 'down';
+
+        // Remove existing vote from this user
+        pr.votes = pr.votes.filter((v) => v.user !== user);
+
+        // If toggling off (same value), just remove. Otherwise add the new vote.
+        if (!previousVote || previousVote.value !== value) {
+          pr.votes.push({
+            user,
+            value,
+            reason: reason || undefined,
+            role: userRole,
+            weight,
+            timestamp: now,
+          });
+        }
+
+        pr.updatedAt = now;
+        pr.history.push({
+          id: `h-${prId}-${Date.now()}`,
+          actor: user,
+          action: value === 'up' ? 'upvoted' : 'downvoted',
+          detail: value === 'down' && reason ? reason : undefined,
+          timestamp: now,
+        });
+
+        // Lifecycle gate: admin downvote or consultant downvote forces needs-review
+        if (value === 'down') {
+          if (userRole === 'admin' && store.quorum.adminVeto) {
+            pr.status = 'needs-review';
+            pr.history.push({
+              id: `h-${prId}-veto-${Date.now()}`,
+              actor: user,
+              action: 'admin veto',
+              detail: 'Admin downvote triggered needs-review',
+              timestamp: now,
+            });
+          } else if (userRole === 'consultant' && store.quorum.requireNoConsultantDownvotes) {
+            pr.status = 'needs-review';
+          }
+        } else if (value === 'up' && pr.status === 'needs-review' && !wasDownvoted) {
+          // If a consultant/admin upvotes and the PR was in needs-review due to their previous
+          // downvote, allow it to return to open
+          const consultantDownvotes = pr.votes.filter(
+            (v) => v.value === 'down' && v.role === 'consultant',
+          ).length;
+          if (store.quorum.requireNoConsultantDownvotes && consultantDownvotes === 0) {
+            pr.status = 'open';
+          }
+        }
+
+        await writePrStore(projectId, store);
+        if (collabEventEmitter) {
+          collabEventEmitter.emit({ type: 'pull_requests_update', payload: { projectId } });
+        }
+
+        // Notify on downvote (author should know someone opposed their PR)
+        if (value === 'down' && pr.author !== user) {
+          sendPrNotification(
+            projectId,
+            pr.id,
+            `${user} downvoted PR #${pr.id}: ${pr.refLabel} ${pr.title}`,
+            'warning',
+          ).catch(() => {
+            /* non-critical */
+          });
+        }
+        // Notify on needs-review transition
+        if (pr.status === 'needs-review' && pr.author !== user) {
+          sendPrNotification(
+            projectId,
+            pr.id,
+            `PR #${pr.id} needs review: ${pr.refLabel}`,
+            'warning',
+          ).catch(() => {
+            /* non-critical */
+          });
+        }
+
+        return 'ok';
+      } catch (e) {
+        logger.warn(`castPrVote failed: ${e}`);
+        return `error: ${e}`;
+      }
+    },
+  );
+
+  const setPrStatusPromise = papi.commands.registerCommand(
+    'paratextProjectManager.setPrStatus',
+    async (projectId: string, prId: number, newStatus: string, actor: string): Promise<string> => {
+      try {
+        const store = await readPrStore(projectId);
+        if (!store) return 'error: PR store not found';
+        const pr = store.prs.find((p) => p.id === prId);
+        if (!pr) return 'error: PR not found';
+
+        // Lifecycle gate: cannot merge from here — merging must go through approveAndMergePullRequest
+        if (newStatus === 'merged') {
+          return 'error: Use approveAndMergePullRequest to merge';
+        }
+
+        pr.status = toPrStatus(newStatus);
+        pr.updatedAt = new Date().toISOString();
+        pr.history.push({
+          id: `h-${prId}-status-${Date.now()}`,
+          actor,
+          action: `status → ${newStatus}`,
+          timestamp: new Date().toISOString(),
+        });
+        await writePrStore(projectId, store);
+        if (collabEventEmitter) {
+          collabEventEmitter.emit({ type: 'pull_requests_update', payload: { projectId } });
+        }
+        return 'ok';
+      } catch (e) {
+        logger.warn(`setPrStatus failed: ${e}`);
+        return `error: ${e}`;
+      }
+    },
+  );
+
+  // --- Pull Requests: revert, notifications ---
+
+  const revertPullRequestPromise = papi.commands.registerCommand(
+    'paratextProjectManager.revertPullRequest',
+    async (projectId: string, prId: number, actor: string): Promise<string> => {
+      try {
+        const store = await readPrStore(projectId);
+        if (!store) return 'error: PR store not found';
+        const originalPr = store.prs.find((p) => p.id === prId);
+        if (!originalPr) return 'error: PR not found';
+        if (originalPr.status !== 'merged') return 'error: Only merged PRs can be reverted';
+
+        const now = new Date().toISOString();
+        const newId = store.nextId;
+        store.nextId += 1;
+        const revertPr: PullRequestsStore['prs'][number] = {
+          id: newId,
+          ref: { ...originalPr.ref },
+          refLabel: originalPr.refLabel,
+          title: `Revert #${prId}: ${originalPr.title}`,
+          status: 'open',
+          author: actor,
+          avatar: makeInitials(actor),
+          createdAt: now,
+          updatedAt: now,
+          originalText: originalPr.proposedText,
+          proposedText: originalPr.originalText,
+          rationale: `Revert of PR #${prId} — restores original text`,
+          votes: [],
+          alternatives: [],
+          comments: [],
+          history: [
+            {
+              id: `h-${newId}-revert`,
+              actor,
+              action: 'opened',
+              detail: `Revert of PR #${prId} (merged ${originalPr.history.find((h) => h.action === 'merged')?.timestamp ?? 'unknown'})`,
+              timestamp: now,
+            },
+          ],
+          requestedReviewers: [],
+        };
+        store.prs.unshift(revertPr);
+        originalPr.history.push({
+          id: `h-${prId}-reverted-${Date.now()}`,
+          actor,
+          action: 'reverted',
+          detail: `Reverted by creating PR #${newId}`,
+          timestamp: now,
+        });
+        await writePrStore(projectId, store);
+        if (collabEventEmitter) {
+          collabEventEmitter.emit({ type: 'pull_requests_update', payload: { projectId } });
+        }
+        return JSON.stringify({ id: newId });
+      } catch (e) {
+        logger.warn(`revertPullRequest failed: ${e}`);
+        return `error: ${e}`;
+      }
+    },
+  );
+
+  /** Opens the Pull Requests tab and selects a specific PR. Used as a notification click command. */
+  const openPullRequestsAtPromise = papi.commands.registerCommand(
+    'paratextProjectManager.openPullRequestsAt',
+    async (notificationId: string | number): Promise<void> => {
+      try {
+        const idStr = String(notificationId);
+        const parts = idStr.split(':');
+        const projectId = parts[0] || '';
+        const prId = parts.length > 1 ? parseInt(parts[1], 10) : undefined;
+        if (projectId) {
+          const webViewId = `pull-requests-${projectId}`;
+          setPendingProjectId(webViewId, projectId);
+          await papi.webViews.openWebView(PULL_REQUESTS_TYPE, undefined, {
+            existingId: webViewId,
+            projectId,
+            bringToFront: true,
+          } as any);
+        }
+      } catch (e) {
+        logger.warn(`openPullRequestsAt failed: ${e}`);
+      }
+    },
+  );
+
+  /** Send a Platform.Bible UI notification with a click-through to open the PR. */
+  async function sendPrNotification(
+    projectId: string,
+    prId: number,
+    message: string,
+    severity: 'info' | 'warning' | 'error' = 'info',
+    clickLabel?: string,
+  ): Promise<void> {
+    try {
+      if (papi.notifications && typeof papi.notifications.send === 'function') {
+        await papi.notifications.send({
+          message,
+          severity,
+          clickCommandLabel: clickLabel || 'Open Pull Request',
+          clickCommand: 'paratextProjectManager.openPullRequestsAt',
+          notificationId: `${projectId}:${prId}`,
+        });
+      }
+    } catch (e) {
+      logger.warn(`sendPrNotification failed (non-critical): ${e}`);
+    }
+  }
+  async function sweepProjectForExpiredPrs(dir: string): Promise<void> {
+    const prPath = `${dir}${SEP}${PULL_REQUESTS_FILENAME}`;
+    const exists = await runFileHelper('exists', prPath);
+    if (exists.trim() !== 'true') return;
+    const content = await runFileHelper('read', prPath);
+    const store: PullRequestsStore = JSON.parse(content);
+    if (!store.quorum.expiryDays || store.quorum.expiryDays <= 0) return;
+    const cutoff = Date.now() - store.quorum.expiryDays * 24 * 60 * 60 * 1000;
+    let changed = false;
+    store.prs.forEach((pr) => {
+      if (pr.status === 'open' || pr.status === 'needs-review') {
+        const updatedMs = new Date(pr.updatedAt).getTime();
+        if (updatedMs < cutoff) {
+          pr.status = 'expired';
+          pr.history.push({
+            id: `h-${pr.id}-expire-${Date.now()}`,
+            actor: 'System',
+            action: 'expired',
+            detail: `Auto-closed after ${store.quorum.expiryDays} days of inactivity`,
+            timestamp: new Date().toISOString(),
+          });
+          changed = true;
+        }
+      }
+    });
+    if (changed) {
+      await runFileHelper('write', prPath, JSON.stringify(store, undefined, 2));
+      logger.info('Project Manager: expired stale pull requests');
+    }
+  }
+
+  async function sweepBaseForExpiredPrs(base: string): Promise<void> {
+    const scanRaw = await runFileHelper('scanprojects', base);
+    // eslint-disable-next-line no-type-assertion/no-type-assertion
+    const projects = JSON.parse(scanRaw) as { dir: string }[];
+    await Promise.all(
+      projects.map((proj) =>
+        sweepProjectForExpiredPrs(proj.dir).catch(() => {
+          /* skip this project on error */
+        }),
+      ),
+    );
+  }
+
+  async function sweepExpiredPrs(): Promise<void> {
+    try {
+      const candidates = [DEFAULT_PROJECTS_BASE, `C:${SEP}My Paratext 9 Projects`];
+      await Promise.all(
+        candidates.map((base) =>
+          sweepBaseForExpiredPrs(base).catch((e) => {
+            logger.warn(`sweepExpiredPrs base "${base}" failed: ${e}`);
+          }),
+        ),
+      );
+    } catch (e) {
+      logger.warn(`sweepExpiredPrs failed: ${e}`);
+    }
+  }
+
+  // Run the expiry sweep on startup and every 6 hours
+  sweepExpiredPrs();
+  const expiryInterval = setInterval(sweepExpiredPrs, 6 * 60 * 60 * 1000);
 
   const getNotesSettingsPromise = papi.commands.registerCommand(
     'paratextProjectManager.getNotesSettings',
@@ -3492,11 +4301,28 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     await scanBookRenderingsPromise,
     await keyTermsProviderPromise,
     await keyTermsAnalyticsProviderPromise,
+    await pullRequestsProviderPromise,
     await openKeyTermsPromise,
     await openKeyTermsAnalyticsPromise,
+    await openPullRequestsPromise,
     await selectKeyTermPromise,
     selectKeyTermEmitter,
     collabEventEmitter,
+    await getPullRequestsPromise,
+    await savePullRequestsPromise,
+    await approveAndMergePullRequestPromise,
+    await createPullRequestPromise,
+    await requestPrPrefillPromise,
+    requestPrPrefillEmitter,
+    await getTeamRolesPromise,
+    await setTeamRolesPromise,
+    await getPrQuorumConfigPromise,
+    await setPrQuorumConfigPromise,
+    await castPrVotePromise,
+    await setPrStatusPromise,
+    await revertPullRequestPromise,
+    await openPullRequestsAtPromise,
+    expiryInterval,
   );
 
   // Start check for updates in the background on startup
