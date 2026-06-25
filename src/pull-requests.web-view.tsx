@@ -18,6 +18,8 @@ import {
   Plus,
   Settings,
   X,
+  Edit3,
+  Trash2,
 } from 'lucide-react';
 import { papiRetry, isPapiDisconnectedError } from './utils/papi-retry';
 import { usePapiDisconnect } from './utils/use-papi-disconnect';
@@ -350,6 +352,8 @@ interface CommentThreadProps {
   onReply: (parentId: string, text: string) => Promise<boolean> | boolean;
   replyingTo: string | undefined;
   setReplyingTo: (id: string | undefined) => void;
+  onEditComment: (commentId: string, newText: string) => void;
+  onDeleteComment: (commentId: string) => void;
 }
 
 function CommentNode({
@@ -361,11 +365,20 @@ function CommentNode({
   onReply,
   replyingTo,
   setReplyingTo,
+  onEditComment,
+  onDeleteComment,
 }: CommentThreadProps) {
   const [text, setText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const isReplying = replyingTo === comment.id;
   const isMe = comment.author === currentUser;
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText] = useState(comment.text);
+
+  useEffect(() => {
+    setEditText(comment.text);
+  }, [comment.text]);
 
   const submit = async () => {
     if (!text.trim() || submitting) return;
@@ -379,6 +392,12 @@ function CommentNode({
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleSaveEdit = () => {
+    if (!editText.trim() || editText.trim() === comment.text) return;
+    onEditComment(comment.id, editText.trim());
+    setIsEditing(false);
   };
 
   return (
@@ -405,10 +424,41 @@ function CommentNode({
             </span>
           )}
         </div>
-        <p className="tw:text-[14px] tw:leading-snug tw:text-slate-700 dark:tw:text-slate-300 tw:mt-1 tw:break-words">
-          {renderTextWithMentions(comment.text)}
-        </p>
-        <div className="tw:flex tw:gap-4 tw:mt-2">
+        {isEditing ? (
+          <div className="tw:mt-1.5 tw:space-y-2">
+            <textarea
+              rows={2}
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              className="tw:w-full tw:resize-none tw:rounded-xl tw:border tw:border-slate-300 dark:tw:border-slate-700 tw:bg-white dark:tw:bg-slate-900 tw:px-3 tw:py-2 tw:text-[13px] focus:tw:outline-none focus:tw:ring-2 focus:tw:ring-indigo-500/30 focus:tw:border-indigo-500"
+            />
+            <div className="tw:flex tw:justify-end tw:gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEditing(false);
+                  setEditText(comment.text);
+                }}
+                className="tw:px-3 tw:py-1 tw:rounded-lg tw:text-[12px] tw:font-medium tw:text-slate-600 hover:tw:bg-slate-200/70"
+              >
+                {lang === 'en' ? 'Cancel' : 'Cancelar'}
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEdit}
+                disabled={!editText.trim() || editText.trim() === comment.text}
+                className="tw:px-3 tw:py-1 tw:rounded-lg tw:bg-indigo-600 tw:text-white tw:text-[12px] tw:font-semibold hover:tw:bg-indigo-700 disabled:tw:opacity-50"
+              >
+                {lang === 'en' ? 'Save' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="tw:text-[14px] tw:leading-snug tw:text-slate-700 dark:tw:text-slate-300 tw:mt-1 tw:break-words">
+            {renderTextWithMentions(comment.text)}
+          </p>
+        )}
+        <div className="tw:flex tw:items-center tw:gap-4 tw:mt-2">
           <button
             type="button"
             onClick={() => setReplyingTo(isReplying ? undefined : comment.id)}
@@ -416,6 +466,27 @@ function CommentNode({
           >
             <Reply size={12} /> {lang === 'en' ? 'Reply' : 'Responder'}
           </button>
+          {isMe && !isEditing && (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEditing(true);
+                  setEditText(comment.text);
+                }}
+                className="tw:inline-flex tw:items-center tw:gap-1 tw:text-[12px] tw:text-slate-500 hover:tw:text-slate-800 dark:hover:tw:text-slate-200"
+              >
+                <Edit3 size={12} /> {lang === 'en' ? 'Edit' : 'Editar'}
+              </button>
+              <button
+                type="button"
+                onClick={() => onDeleteComment(comment.id)}
+                className="tw:inline-flex tw:items-center tw:gap-1 tw:text-[12px] tw:text-rose-500 hover:tw:text-rose-700"
+              >
+                <Trash2 size={12} /> {lang === 'en' ? 'Delete' : 'Eliminar'}
+              </button>
+            </>
+          )}
         </div>
         {isReplying && (
           <div className="tw:mt-2 tw:space-y-2">
@@ -463,6 +534,8 @@ function CommentNode({
                 onReply={onReply}
                 replyingTo={replyingTo}
                 setReplyingTo={setReplyingTo}
+                onEditComment={onEditComment}
+                onDeleteComment={onDeleteComment}
               />
             ))}
           </div>
@@ -501,12 +574,21 @@ globalThis.webViewComponent = function PullRequestsWebView({
 
   const [currentUser, setCurrentUser] = useState('Translator');
   const [selectedId, setSelectedId] = useState<number | undefined>(undefined);
-  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
-  const [isConfirmingRevert, setIsConfirmingRevert] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showRevertModal, setShowRevertModal] = useState(false);
+  const [showEditForm, setShowEditForm] = useState(false);
+  const [editForm, setEditForm] = useState({
+    title: '',
+    proposedText: '',
+    rationale: '',
+  });
+  const [commentToDeleteId, setCommentToDeleteId] = useState<string | undefined>(undefined);
 
   useEffect(() => {
-    setIsConfirmingDelete(false);
-    setIsConfirmingRevert(false);
+    setShowDeleteModal(false);
+    setShowRevertModal(false);
+    setShowEditForm(false);
+    setCommentToDeleteId(undefined);
   }, [selectedId]);
   const [filter, setFilter] = useState<StatusFilter>('all');
   const [search, setSearch] = useState('');
@@ -1105,6 +1187,96 @@ globalThis.webViewComponent = function PullRequestsWebView({
     [store, tx, showToast],
   );
 
+  const savePrEdit = useCallback(async () => {
+    if (!store || !selected || !editForm.title.trim() || !editForm.proposedText.trim()) return;
+    const updated: PullRequestsStore = {
+      ...store,
+      prs: store.prs.map((p) =>
+        p.id === selected.id
+          ? {
+              ...p,
+              title: editForm.title.trim(),
+              proposedText: editForm.proposedText.trim(),
+              rationale: editForm.rationale.trim(),
+              updatedAt: new Date().toISOString(),
+              history: [
+                ...p.history,
+                {
+                  id: generateId(),
+                  actor: currentUser,
+                  action: 'edited',
+                  timestamp: new Date().toISOString(),
+                },
+              ],
+            }
+          : p,
+      ),
+    };
+    await persist(updated);
+    setShowEditForm(false);
+    showToast(tx('prUpdated'));
+  }, [store, selected, editForm, currentUser, persist, tx, showToast]);
+
+  const editComment = useCallback(
+    (commentId: string, newText: string) => {
+      if (!store || !selected || !newText.trim()) return;
+      const updated: PullRequestsStore = {
+        ...store,
+        prs: store.prs.map((p) =>
+          p.id === selected.id
+            ? {
+                ...p,
+                comments: p.comments.map((c) =>
+                  c.id === commentId
+                    ? {
+                        ...c,
+                        text: newText.trim(),
+                        mentions: extractMentions(newText),
+                      }
+                    : c,
+                ),
+              }
+            : p,
+        ),
+      };
+      persist(updated);
+    },
+    [store, selected, persist],
+  );
+
+  const deleteComment = useCallback(
+    (commentId: string) => {
+      if (!store || !selected) return;
+      const idsToDelete = new Set([commentId]);
+
+      let checkLength = 0;
+      while (idsToDelete.size !== checkLength) {
+        checkLength = idsToDelete.size;
+        selected.comments.forEach((c) => {
+          if (c.parentId && idsToDelete.has(c.parentId)) {
+            idsToDelete.add(c.id);
+          }
+        });
+      }
+
+      const updated: PullRequestsStore = {
+        ...store,
+        prs: store.prs.map((p) =>
+          p.id === selected.id
+            ? {
+                ...p,
+                comments: p.comments.filter((c) => !idsToDelete.has(c.id)),
+                updatedAt: new Date().toISOString(),
+              }
+            : p,
+        ),
+      };
+      persist(updated);
+      showToast(lang === 'en' ? 'Comment deleted' : 'Comentario eliminado');
+    },
+    [store, selected, persist, lang, showToast],
+  );
+
   // --- Offline queue: sync queued actions when reconnecting ---
 
   const flushOfflineQueue = useCallback(async () => {
@@ -1517,10 +1689,12 @@ globalThis.webViewComponent = function PullRequestsWebView({
 
         {/* Resize Handler & Toggle Button */}
         <div
-          className={`tw:flex tw:relative tw:w-1.5 hover:tw:bg-indigo-600/30 active:tw:bg-indigo-600/50 tw:cursor-col-resize tw:shrink-0 tw:z-20 tw:h-full tw:items-center tw:justify-center tw:select-none tw:border-r tw:border-slate-900 ${
-            !sidebarVisible ? 'tw:w-0 tw:border-0 tw:bg-transparent' : 'tw:bg-slate-950'
+          className={`tw:flex tw:relative hover:tw:bg-indigo-600/30 active:tw:bg-indigo-600/50 tw:cursor-col-resize tw:shrink-0 tw:z-20 tw:h-full tw:items-center tw:justify-center tw:select-none ${
+            sidebarVisible
+              ? 'tw:w-1.5 tw:bg-slate-950 tw:border-r tw:border-slate-900'
+              : 'tw:w-0 tw:border-0 tw:bg-transparent'
           }`}
-          onPointerDown={handlePointerDown}
+          onPointerDown={sidebarVisible ? handlePointerDown : undefined}
         >
           {/* Toggle Button Tab */}
           <button
@@ -1843,6 +2017,8 @@ globalThis.webViewComponent = function PullRequestsWebView({
                               onReply={handleReply}
                               replyingTo={replyingTo}
                               setReplyingTo={setReplyingTo}
+                              onEditComment={editComment}
+                              onDeleteComment={setCommentToDeleteId}
                             />
                           ))
                         )}
@@ -1941,41 +2117,30 @@ globalThis.webViewComponent = function PullRequestsWebView({
                       <Reply size={14} className="tw:-rotate-90" />
                       {tx('emailReviewers')}
                     </button>
-                    {isConfirmingDelete ? (
-                      <div className="tw:flex tw:items-center tw:gap-2 tw:mr-2 tw:border tw:border-rose-200 dark:tw:border-rose-900/50 tw:px-3 tw:py-1.5 tw:rounded-xl tw:bg-rose-50/50 dark:tw:bg-rose-950/10">
-                        <span className="tw:text-[12px] tw:text-rose-600 dark:tw:text-rose-400 tw:font-medium">
-                          {tx('deleteConfirm')}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            deletePr(selected);
-                            setIsConfirmingDelete(false);
-                          }}
-                          className="tw:px-2.5 tw:py-1 tw:rounded-lg tw:bg-rose-600 tw:text-white tw:text-[12px] tw:font-semibold hover:tw:bg-rose-700"
-                        >
-                          {tx('yes')}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setIsConfirmingDelete(false)}
-                          className="tw:px-2.5 tw:py-1 tw:rounded-lg tw:border tw:border-slate-300 dark:tw:border-slate-700 tw:text-[12px] tw:font-medium hover:tw:bg-slate-50 dark:hover:tw:bg-slate-800"
-                        >
-                          {tx('cancel')}
-                        </button>
-                      </div>
-                    ) : (
+                    {selected.status !== 'merged' && selected.status !== 'closed' && (
                       <button
                         type="button"
                         onClick={() => {
-                          setIsConfirmingDelete(true);
-                          setIsConfirmingRevert(false);
+                          setEditForm({
+                            title: selected.title,
+                            proposedText: selected.proposedText ?? '',
+                            rationale: selected.rationale ?? '',
+                          });
+                          setShowEditForm(true);
                         }}
-                        className="tw:px-3.5 tw:py-2 tw:rounded-xl tw:border tw:border-rose-200 dark:tw:border-rose-900/50 tw:text-rose-600 dark:tw:text-rose-400 tw:text-[13px] tw:font-medium hover:tw:bg-rose-50 dark:hover:tw:bg-rose-950/20 tw:mr-2"
+                        className="tw:px-3.5 tw:py-2 tw:rounded-xl tw:border tw:border-indigo-200 dark:tw:border-indigo-900/50 tw:text-indigo-600 dark:tw:text-indigo-400 tw:text-[13px] tw:font-medium hover:tw:bg-indigo-50 dark:hover:tw:bg-indigo-950/20 tw:mr-2 tw:inline-flex tw:items-center tw:gap-1.5"
                       >
-                        {tx('deletePr')}
+                        <Edit3 size={14} />
+                        {tx('editPr')}
                       </button>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => setShowDeleteModal(true)}
+                      className="tw:px-3.5 tw:py-2 tw:rounded-xl tw:border tw:border-rose-200 dark:tw:border-rose-900/50 tw:text-rose-600 dark:tw:text-rose-400 tw:text-[13px] tw:font-medium hover:tw:bg-rose-50 dark:hover:tw:bg-rose-950/20 tw:mr-2"
+                    >
+                      {tx('deletePr')}
+                    </button>
                     {selected.status === 'draft' && (
                       <button
                         type="button"
@@ -2005,41 +2170,13 @@ globalThis.webViewComponent = function PullRequestsWebView({
                     )}
                     {selected.status === 'merged' ? (
                       <>
-                        {isConfirmingRevert ? (
-                          <div className="tw:flex tw:items-center tw:gap-2 tw:mr-2 tw:border tw:border-amber-300 dark:tw:border-amber-700 tw:px-3 tw:py-1.5 tw:rounded-xl tw:bg-amber-50/50 dark:tw:bg-amber-950/10">
-                            <span className="tw:text-[12px] tw:text-amber-700 dark:tw:text-amber-500 tw:font-medium">
-                              {tx('revertConfirm')}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                revertPr(selected);
-                                setIsConfirmingRevert(false);
-                              }}
-                              className="tw:px-2.5 tw:py-1 tw:rounded-lg tw:bg-amber-600 tw:text-white tw:text-[12px] tw:font-semibold hover:tw:bg-amber-700"
-                            >
-                              {tx('yes')}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setIsConfirmingRevert(false)}
-                              className="tw:px-2.5 tw:py-1 tw:rounded-lg tw:border tw:border-slate-300 dark:tw:border-slate-700 tw:text-[12px] tw:font-medium hover:tw:bg-slate-50 dark:hover:tw:bg-slate-800"
-                            >
-                              {tx('cancel')}
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setIsConfirmingRevert(true);
-                              setIsConfirmingDelete(false);
-                            }}
-                            className="tw:px-3.5 tw:py-2 tw:rounded-xl tw:border tw:border-amber-300 tw:text-amber-700 tw:text-[13px] tw:font-medium hover:tw:bg-amber-50 dark:tw:border-amber-700 dark:hover:tw:bg-amber-950/30 tw:inline-flex tw:items-center tw:gap-1.5"
-                          >
-                            <AlertTriangle size={14} /> {tx('revert')}
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => setShowRevertModal(true)}
+                          className="tw:px-3.5 tw:py-2 tw:rounded-xl tw:border tw:border-amber-300 tw:text-amber-700 tw:text-[13px] tw:font-medium hover:tw:bg-amber-50 dark:tw:border-amber-700 dark:hover:tw:bg-amber-950/30 tw:inline-flex tw:items-center tw:gap-1.5 tw:mr-2"
+                        >
+                          <AlertTriangle size={14} /> {tx('revert')}
+                        </button>
                         <button
                           type="button"
                           disabled
@@ -2477,6 +2614,222 @@ globalThis.webViewComponent = function PullRequestsWebView({
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Delete PR Confirmation Modal */}
+      {showDeleteModal && selected && (
+        // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
+        <div
+          className="tw:fixed tw:inset-0 tw:z-[10000] tw:flex tw:items-center tw:justify-center tw:bg-slate-900/40 tw:backdrop-blur-sm"
+          onClick={() => setShowDeleteModal(false)}
+        >
+          {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+          <div
+            className="tw:bg-white dark:tw:bg-slate-900 tw:rounded-xl tw:shadow-2xl tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:w-[440px] tw:max-w-[90vw] tw:p-6 tw:space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="tw:flex tw:items-center tw:gap-3 tw:text-rose-600 dark:tw:text-rose-400">
+              <AlertTriangle size={24} />
+              <h3 className="tw:text-[16px] tw:font-semibold tw:text-slate-900 dark:tw:text-slate-100">
+                {tx('deletePr')}
+              </h3>
+            </div>
+            <p className="tw:text-[14px] tw:leading-relaxed tw:text-slate-600 dark:tw:text-slate-400">
+              {tx('deleteConfirm')}
+            </p>
+            <div className="tw:flex tw:justify-end tw:gap-2 tw:pt-2">
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(false)}
+                className="tw:px-3.5 tw:py-2 tw:rounded-xl tw:border tw:border-slate-300 dark:tw:border-slate-700 tw:text-[13px] tw:font-medium hover:tw:bg-slate-50 dark:hover:tw:bg-slate-800"
+              >
+                {tx('cancel')}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  deletePr(selected);
+                  setShowDeleteModal(false);
+                }}
+                className="tw:px-3.5 tw:py-2 tw:rounded-xl tw:bg-rose-600 tw:text-white tw:text-[13px] tw:font-semibold hover:tw:bg-rose-700"
+              >
+                {tx('yes')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Revert PR Confirmation Modal */}
+      {showRevertModal && selected && (
+        // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
+        <div
+          className="tw:fixed tw:inset-0 tw:z-[10000] tw:flex tw:items-center tw:justify-center tw:bg-slate-900/40 tw:backdrop-blur-sm"
+          onClick={() => setShowRevertModal(false)}
+        >
+          {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+          <div
+            className="tw:bg-white dark:tw:bg-slate-900 tw:rounded-xl tw:shadow-2xl tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:w-[440px] tw:max-w-[90vw] tw:p-6 tw:space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="tw:flex tw:items-center tw:gap-3 tw:text-amber-600 dark:tw:text-amber-400">
+              <AlertTriangle size={24} />
+              <h3 className="tw:text-[16px] tw:font-semibold tw:text-slate-900 dark:tw:text-slate-100">
+                {tx('revert')}
+              </h3>
+            </div>
+            <p className="tw:text-[14px] tw:leading-relaxed tw:text-slate-600 dark:tw:text-slate-400">
+              {tx('revertConfirm')}
+            </p>
+            <div className="tw:flex tw:justify-end tw:gap-2 tw:pt-2">
+              <button
+                type="button"
+                onClick={() => setShowRevertModal(false)}
+                className="tw:px-3.5 tw:py-2 tw:rounded-xl tw:border tw:border-slate-300 dark:tw:border-slate-700 tw:text-[13px] tw:font-medium hover:tw:bg-slate-50 dark:hover:tw:bg-slate-800"
+              >
+                {tx('cancel')}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  revertPr(selected);
+                  setShowRevertModal(false);
+                }}
+                className="tw:px-3.5 tw:py-2 tw:rounded-xl tw:bg-amber-600 tw:text-white tw:text-[13px] tw:font-semibold hover:tw:bg-amber-700"
+              >
+                {tx('yes')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Comment Confirmation Modal */}
+      {commentToDeleteId && (
+        // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
+        <div
+          className="tw:fixed tw:inset-0 tw:z-[10000] tw:flex tw:items-center tw:justify-center tw:bg-slate-900/40 tw:backdrop-blur-sm"
+          onClick={() => setCommentToDeleteId(undefined)}
+        >
+          {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+          <div
+            className="tw:bg-white dark:tw:bg-slate-900 tw:rounded-xl tw:shadow-2xl tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:w-[400px] tw:max-w-[90vw] tw:p-5 tw:space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="tw:flex tw:items-center tw:gap-3 tw:text-rose-600 dark:tw:text-rose-400">
+              <Trash2 size={20} />
+              <h3 className="tw:font-semibold tw:text-slate-900 dark:tw:text-slate-100">
+                {tx('deleteCommentTitle')}
+              </h3>
+            </div>
+            <p className="tw:text-[13.5px] tw:text-slate-600 dark:tw:text-slate-400">
+              {tx('deleteCommentConfirm')}
+            </p>
+            <div className="tw:flex tw:justify-end tw:gap-2 tw:pt-1">
+              <button
+                type="button"
+                onClick={() => setCommentToDeleteId(undefined)}
+                className="tw:px-3 tw:py-1.5 tw:rounded-lg tw:text-[13px] tw:font-medium tw:text-slate-600 hover:tw:bg-slate-100 dark:hover:tw:bg-slate-800"
+              >
+                {tx('cancel')}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  deleteComment(commentToDeleteId);
+                  setCommentToDeleteId(undefined);
+                }}
+                className="tw:px-4 tw:py-1.5 tw:rounded-lg tw:bg-rose-600 tw:text-white tw:text-[13px] tw:font-semibold hover:tw:bg-rose-700"
+              >
+                {tx('yes')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit PR Proposal Modal */}
+      {showEditForm && selected && (
+        // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
+        <div
+          className="tw:fixed tw:inset-0 tw:z-[10000] tw:flex tw:items-center tw:justify-center tw:bg-slate-900/40 tw:backdrop-blur-sm"
+          onClick={() => setShowEditForm(false)}
+        >
+          {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+          <div
+            className="tw:bg-white dark:tw:bg-slate-900 tw:rounded-xl tw:shadow-2xl tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:w-[560px] tw:max-w-[90vw] tw:max-h-[85vh] tw:overflow-y-auto scrollbar-thin tw:p-5 tw:space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="tw:flex tw:items-center tw:justify-between">
+              <h3 className="tw:font-semibold tw:text-slate-900 dark:tw:text-slate-100">
+                {tx('editTitle')}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowEditForm(false)}
+                className="tw:text-slate-400 hover:tw:text-slate-600"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div>
+              <label className="tw:text-[12px] tw:font-medium tw:text-slate-600 dark:tw:text-slate-400 tw:block tw:mb-1">
+                {tx('createTitleLabel')}
+              </label>
+              <input
+                value={editForm.title}
+                onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                placeholder={tx('createTitlePlaceholder')}
+                className="tw:w-full tw:rounded-lg tw:border tw:border-slate-300 dark:tw:border-slate-700 tw:bg-white dark:tw:bg-slate-900 tw:px-3 tw:py-1.5 tw:text-[14px] tw:placeholder-slate-400"
+              />
+            </div>
+
+            <div>
+              <label className="tw:text-[12px] tw:font-medium tw:text-slate-600 dark:tw:text-slate-400 tw:block tw:mb-1">
+                {selected.kind === 'general' ? tx('createDescription') : tx('createProposed')}
+              </label>
+              <textarea
+                rows={selected.kind === 'general' ? 6 : 3}
+                value={editForm.proposedText}
+                onChange={(e) => setEditForm({ ...editForm, proposedText: e.target.value })}
+                placeholder={selected.kind === 'general' ? tx('createDescriptionPlaceholder') : ''}
+                className="tw:w-full tw:resize-none tw:rounded-lg tw:border tw:border-slate-300 dark:tw:border-slate-700 tw:bg-white dark:tw:bg-slate-900 tw:px-3 tw:py-2 tw:text-[13px] tw:font-mono focus:tw:outline-none focus:tw:ring-2 focus:tw:ring-indigo-500/30"
+              />
+            </div>
+
+            <div>
+              <label className="tw:text-[12px] tw:font-medium tw:text-slate-600 dark:tw:text-slate-400 tw:block tw:mb-1">
+                {tx('createRationale')}
+              </label>
+              <textarea
+                rows={2}
+                value={editForm.rationale}
+                onChange={(e) => setEditForm({ ...editForm, rationale: e.target.value })}
+                placeholder={tx('createRationalePlaceholder')}
+                className="tw:w-full tw:resize-none tw:rounded-lg tw:border tw:border-slate-300 dark:tw:border-slate-700 tw:bg-white dark:tw:bg-slate-900 tw:px-3 tw:py-2 tw:text-[13px] tw:placeholder-slate-400"
+              />
+            </div>
+
+            <div className="tw:flex tw:justify-end tw:gap-2 tw:pt-1">
+              <button
+                type="button"
+                onClick={() => setShowEditForm(false)}
+                className="tw:px-3 tw:py-1.5 tw:rounded-lg tw:text-[13px] tw:font-medium tw:text-slate-600 hover:tw:bg-slate-200/70"
+              >
+                {tx('createCancel')}
+              </button>
+              <button
+                type="button"
+                onClick={savePrEdit}
+                disabled={!editForm.title.trim() || !editForm.proposedText.trim()}
+                className="tw:px-4 tw:py-1.5 tw:rounded-lg tw:bg-indigo-600 tw:text-white tw:text-[13px] tw:font-semibold hover:tw:bg-indigo-700 disabled:tw:opacity-50"
+              >
+                {tx('saveChanges')}
+              </button>
+            </div>
           </div>
         </div>
       )}
