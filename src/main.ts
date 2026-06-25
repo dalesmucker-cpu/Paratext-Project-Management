@@ -3051,6 +3051,28 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     },
   );
 
+  const deletePullRequestPromise = papi.commands.registerCommand(
+    'paratextProjectManager.deletePullRequest',
+    async (projectId: string, prId: number): Promise<string> => {
+      try {
+        const store = await readPrStore(projectId);
+        if (!store) return 'error: PR store not found';
+        const initialLen = store.prs.length;
+        store.prs = store.prs.filter((p) => p.id !== prId);
+        if (store.prs.length === initialLen) return 'error: PR not found';
+        
+        await writePrStore(projectId, store);
+        if (collabEventEmitter) {
+          collabEventEmitter.emit({ type: 'pull_requests_update', payload: { projectId } });
+        }
+        return 'ok';
+      } catch (e) {
+        logger.warn(`deletePullRequest failed: ${e}`);
+        return `error: ${e}`;
+      }
+    },
+  );
+
   // --- Pull Requests: revert, notifications ---
 
   const revertPullRequestPromise = papi.commands.registerCommand(
@@ -4320,6 +4342,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     await setPrQuorumConfigPromise,
     await castPrVotePromise,
     await setPrStatusPromise,
+    await deletePullRequestPromise,
     await revertPullRequestPromise,
     await openPullRequestsAtPromise,
     expiryInterval,

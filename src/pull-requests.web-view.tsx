@@ -1018,6 +1018,32 @@ globalThis.webViewComponent = function PullRequestsWebView({
     [projectId, currentUser, loadData, tx, handleCatch, showToast],
   );
 
+  const deletePr = useCallback(
+    async (pr: PullRequest) => {
+      if (!projectId) return;
+      // eslint-disable-next-line no-alert
+      const confirmed = window.confirm(tx('deleteConfirm'));
+      if (!confirmed) return;
+      try {
+        const result = await papi.commands.sendCommand(
+          'paratextProjectManager.deletePullRequest',
+          projectId,
+          pr.id,
+        );
+        if (typeof result === 'string' && result.startsWith('error')) {
+          setError(tx('deleteError', result));
+          return;
+        }
+        await loadData();
+        setSelectedId(undefined);
+        showToast(tx('deleteSuccess', pr.id));
+      } catch (e: unknown) {
+        setError(handleCatch(e, tx('deleteError', '')));
+      }
+    },
+    [projectId, loadData, tx, handleCatch, showToast],
+  );
+
   // --- Offline queue: sync queued actions when reconnecting ---
 
   const flushOfflineQueue = useCallback(async () => {
@@ -1431,8 +1457,8 @@ globalThis.webViewComponent = function PullRequestsWebView({
 
         {/* Resize Handler & Toggle Button */}
         <div
-          className={`tw:flex tw:relative tw:w-1.5 tw:bg-slate-950 hover:tw:bg-indigo-600/30 active:tw:bg-indigo-600/50 tw:cursor-col-resize tw:shrink-0 tw:z-20 tw:h-full tw:items-center tw:justify-center tw:select-none tw:border-r tw:border-slate-900 ${
-            !sidebarVisible ? 'tw:w-0 tw:border-0' : ''
+          className={`tw:flex tw:relative tw:w-1.5 hover:tw:bg-indigo-600/30 active:tw:bg-indigo-600/50 tw:cursor-col-resize tw:shrink-0 tw:z-20 tw:h-full tw:items-center tw:justify-center tw:select-none tw:border-r tw:border-slate-900 ${
+            !sidebarVisible ? 'tw:w-0 tw:border-0 tw:bg-transparent' : 'tw:bg-slate-950'
           }`}
           onPointerDown={handlePointerDown}
         >
@@ -1445,9 +1471,7 @@ globalThis.webViewComponent = function PullRequestsWebView({
             }}
             title={sidebarVisible ? tx('toggleSidebarHide') : tx('toggleSidebarShow')}
             aria-label={sidebarVisible ? tx('toggleSidebarHide') : tx('toggleSidebarShow')}
-            className={`tw:absolute tw:left-1/2 tw:-translate-x-1/2 tw:top-1/2 tw:-translate-y-1/2 tw:z-30 tw:w-4 tw:h-12 tw:bg-slate-900 tw:border tw:border-slate-800 hover:tw:bg-indigo-600 hover:tw:text-white tw:text-slate-400 tw:flex tw:items-center tw:justify-center tw:cursor-pointer tw:transition-colors ${
-              sidebarVisible ? 'tw:rounded-md' : 'tw:rounded-r-md tw:rounded-l-none'
-            }`}
+            className="tw:absolute tw:left-1/2 tw:-translate-x-1/2 tw:top-1/2 tw:-translate-y-1/2 tw:z-30 tw:w-6 tw:h-6 tw:bg-slate-900 tw:border tw:border-slate-800 hover:tw:bg-indigo-600 hover:tw:text-white tw:text-slate-400 tw:flex tw:items-center tw:justify-center tw:cursor-pointer tw:transition-colors tw:rounded-full"
           >
             {sidebarVisible ? <ChevronLeft size={12} /> : <ChevronRight size={12} />}
           </button>
@@ -1847,6 +1871,13 @@ globalThis.webViewComponent = function PullRequestsWebView({
                     </span>
                   </div>
                   <div className="tw:flex tw:items-center tw:gap-2 tw:ml-auto">
+                    <button
+                      type="button"
+                      onClick={() => deletePr(selected)}
+                      className="tw:px-3.5 tw:py-2 tw:rounded-xl tw:border tw:border-rose-200 dark:tw:border-rose-900/50 tw:text-rose-600 dark:tw:text-rose-400 tw:text-[13px] tw:font-medium hover:tw:bg-rose-50 dark:hover:tw:bg-rose-950/20 tw:mr-2"
+                    >
+                      {tx('deletePr')}
+                    </button>
                     {selected.status === 'draft' && (
                       <button
                         type="button"
