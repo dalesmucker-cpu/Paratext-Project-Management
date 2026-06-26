@@ -246,8 +246,9 @@ export default function App() {
     setError(null);
     try {
       // Search Drive for tasks and prs files
+      const query = "trashed = false and (name contains 'paratext-tasks-' or name contains 'paratext-prs-')";
       const response = await fetch(
-        `https://www.googleapis.com/drive/v3/files?q=name contains 'paratext-tasks-' or name contains 'paratext-prs-'&fields=files(id, name)`,
+        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id, name)`,
         {
           headers: { Authorization: `Bearer ${accessToken}` }
         }

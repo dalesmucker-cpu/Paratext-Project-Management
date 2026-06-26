@@ -1386,6 +1386,26 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
                     }
                   }
                 }
+              } else if (localContent) {
+                // Initialize Drive tasks file with local tasks
+                const safeName = projectId.replace(/[^a-zA-Z0-9-]/g, '_');
+                const fileName = `paratext-tasks-${safeName}.json`;
+                try {
+                  const result = await runGcalHelper(
+                    'drive-write',
+                    [token, '', fileName],
+                    localContent,
+                    30_000,
+                  );
+                  const { fileId: newFileId } = JSON.parse(result) as { fileId: string };
+                  if (newFileId) {
+                    const updatedIds = { ...driveConfig.fileIds, [projectId]: newFileId };
+                    await writeTasksDriveConfig({ fileIds: updatedIds });
+                    logger.info(`Project Manager: Initialized Drive task file ${newFileId} for "${projectId}"`);
+                  }
+                } catch (writeErr) {
+                  logger.warn(`Failed to initialize task file on Drive in background: ${writeErr}`);
+                }
               }
             }
           } catch (driveErr) {
@@ -2732,6 +2752,26 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
                       collabEventEmitter.emit({ type: 'pull_requests_update', payload: { projectId } });
                     }
                   }
+                }
+              } else if (localContent) {
+                // No file on Drive, but we have local content: initialize Drive file!
+                const safeName = projectId.replace(/[^a-zA-Z0-9-]/g, '_');
+                const fileName = `paratext-prs-${safeName}.json`;
+                try {
+                  const result = await runGcalHelper(
+                    'drive-write',
+                    [token, '', fileName],
+                    localContent,
+                    30_000,
+                  );
+                  const { fileId: newFileId } = JSON.parse(result) as { fileId: string };
+                  if (newFileId) {
+                    const updatedPrIds = { ...(driveConfig.prFileIds ?? {}), [projectId]: newFileId };
+                    await writeTasksDriveConfig({ prFileIds: updatedPrIds });
+                    logger.info(`Project Manager: Initialized Drive PR file ${newFileId} for "${projectId}"`);
+                  }
+                } catch (writeErr) {
+                  logger.warn(`Failed to initialize PR file on Drive in background: ${writeErr}`);
                 }
               }
             }
