@@ -974,38 +974,12 @@ globalThis.webViewComponent = function NotesViewerWebView({ projectId }: WebView
           {!loading && <div className="tw:h-4 tw:w-px tw:bg-gray-300 tw:hidden sm:tw:block" />}
           {!loading && (
             <div className="tw:text-xs">
-              {currentUser && !showUserPicker ? (
-                <div className="tw:flex tw:items-center tw:gap-1.5">
-                  <span className="tw:text-gray-505">Usuario actual:</span>
-                  <strong className="tw:text-slate-700 tw:bg-slate-100 tw:border tw:px-2 tw:py-0.5 tw:rounded tw:font-semibold">
-                    {currentUser}
-                  </strong>
-                  <button
-                    onClick={() => setShowUserPicker(true)}
-                    className="tw:text-indigo-600 tw:hover:text-indigo-850 tw:hover:underline tw:text-xs tw:ml-1 tw:cursor-pointer"
-                  >
-                    Cambiar
-                  </button>
-                </div>
-              ) : (
-                <div className="tw:flex tw:items-center tw:gap-2 tw:bg-amber-50 tw:border tw:border-amber-200 tw:px-2 tw:py-1 tw:rounded">
-                  <span className="tw:text-amber-800 tw:font-medium">¿Quién eres?</span>
-                  <select
-                    onChange={(e) => handleSetUser(e.target.value)}
-                    className="tw:border tw:rounded tw:px-1.5 tw:py-0.5 tw:bg-white tw:text-xs tw:text-slate-700 tw:focus:outline-none tw:focus:border-indigo-500"
-                    defaultValue=""
-                  >
-                    <option value="" disabled>
-                      Selecciona tu nombre...
-                    </option>
-                    {teamMembers.map((m) => (
-                      <option key={m} value={m}>
-                        {m}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              <div className="tw:flex tw:items-center tw:gap-1.5">
+                <span className="tw:text-gray-505">Usuario actual:</span>
+                <strong className="tw:text-slate-700 tw:bg-slate-100 tw:border tw:px-2 tw:py-0.5 tw:rounded tw:font-semibold">
+                  {currentUser || 'Desconocido'}
+                </strong>
+              </div>
             </div>
           )}
         </div>

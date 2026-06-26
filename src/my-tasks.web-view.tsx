@@ -671,45 +671,11 @@ globalThis.webViewComponent = function MyTasksWebView({
         {/* User identity row */}
         {sidebarVisible && !loading && (
           <div className="tw:mt-1.5">
-            {currentUser && !showUserPicker ? (
-              <div className="tw:flex tw:items-center tw:gap-2 tw:text-xs">
-                <span className="tw:text-gray-600">
-                  Usuario: <strong>{currentUser}</strong>
-                </span>
-                <button
-                  className="tw:text-slate-500 tw:hover:underline tw:text-xs"
-                  onClick={() => setShowUserPicker(true)}
-                >
-                  Cambiar
-                </button>
-              </div>
-            ) : (
-              <div className="tw:bg-yellow-50 tw:border tw:border-yellow-200 tw:rounded tw:px-2 tw:py-1.5 tw:flex tw:items-center tw:gap-2">
-                <span className="tw:text-yellow-800 tw:text-xs tw:flex-shrink-0">¿Quién eres?</span>
-                <select
-                  className="tw:flex-1 tw:border tw:rounded tw:px-2 tw:py-0.5 tw:text-xs"
-                  defaultValue=""
-                  onChange={(e) => setUser(e.target.value)}
-                >
-                  <option value="" disabled>
-                    Selecciona tu nombre…
-                  </option>
-                  {teamMembers.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
-                {showUserPicker && (
-                  <button
-                    className="tw:text-xs tw:text-gray-500 tw:hover:text-gray-700 tw:flex-shrink-0"
-                    onClick={() => setShowUserPicker(false)}
-                  >
-                    ✕
-                  </button>
-                )}
-              </div>
-            )}
+            <div className="tw:flex tw:items-center tw:gap-2 tw:text-xs">
+              <span className="tw:text-gray-600">
+                Usuario: <strong>{currentUser || 'Desconocido'}</strong>
+              </span>
+            </div>
           </div>
         )}
 

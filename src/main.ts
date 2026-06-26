@@ -1782,13 +1782,43 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     'paratextProjectManager.getCurrentUser',
     async (): Promise<string> => {
       try {
-        const exists = await runFileHelper('exists', PM_USER_CONFIG_PATH);
-        if (exists.trim() !== 'true') return '';
-        const content = await runFileHelper('read', PM_USER_CONFIG_PATH);
-        const config = JSON.parse(content) as { currentUser?: string };
-        return config.currentUser || '';
+        const osUser = process.env.USERNAME || process.env.USER || USER_HOME_DIR.split(SEP).filter(Boolean).pop() || 'Usuario';
+        
+        let teamMembers = DEFAULT_TEAM_MEMBERS;
+        try {
+          const exists = await runFileHelper('exists', PM_USER_CONFIG_PATH);
+          if (exists.trim() === 'true') {
+            const content = await runFileHelper('read', PM_USER_CONFIG_PATH);
+            const config = JSON.parse(content) as { teamMembers?: string[] };
+            if (Array.isArray(config.teamMembers) && config.teamMembers.length > 0) {
+              teamMembers = config.teamMembers;
+            }
+          }
+        } catch (_) {}
+
+        const matched = teamMembers.find((m) => m.toLowerCase() === osUser.toLowerCase());
+        const detectedUser = matched || (osUser.charAt(0).toUpperCase() + osUser.slice(1));
+
+        // Persist back to user config if changed so other integrations can read it
+        try {
+          let config: Record<string, unknown> = {};
+          const exists = await runFileHelper('exists', PM_USER_CONFIG_PATH);
+          if (exists.trim() === 'true') {
+            const content = await runFileHelper('read', PM_USER_CONFIG_PATH);
+            config = JSON.parse(content) as Record<string, unknown>;
+          }
+          if (config.currentUser !== detectedUser) {
+            config.currentUser = detectedUser;
+            await runFileHelper('write', PM_USER_CONFIG_PATH, JSON.stringify(config, null, 2));
+            if (collabEventEmitter) {
+              collabEventEmitter.emit({ type: 'user_changed', payload: { username: detectedUser } });
+            }
+          }
+        } catch (_) {}
+
+        return detectedUser;
       } catch (_) {
-        return '';
+        return 'Usuario';
       }
     },
   );

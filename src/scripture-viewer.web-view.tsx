@@ -2551,50 +2551,12 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                       </button>
                       <div className="tw:flex tw:items-center tw:gap-2.5 tw:px-2.5 tw:py-2">
                         <span className="tw:text-base">👤</span>
-                        {currentUser ? (
-                          <button
-                            type="button"
-                            onClick={() => setCurrentUser('')}
-                            className="tw:flex-1 tw:flex tw:items-center tw:justify-between tw:text-left tw:font-medium tw:text-slate-700 tw:cursor-pointer"
-                            title="Haga clic para cambiar de usuario"
-                          >
-                            <span>Usuario</span>
-                            <span className="tw:px-2 tw:py-0.5 tw:bg-slate-100 tw:rounded tw:text-xs tw:font-semibold tw:text-slate-700">
-                              {currentUser}
-                            </span>
-                          </button>
-                        ) : (
-                          <div className="tw:flex-1 tw:flex tw:items-center tw:justify-between tw:gap-2">
-                            <span className="tw:font-medium tw:text-amber-700 tw:text-xs">
-                              ¿Quién eres?
-                            </span>
-                            <select
-                              className="tw:border tw:border-amber-200 tw:bg-amber-50 tw:rounded tw:px-1.5 tw:py-0.5 tw:text-xs focus:tw:outline-none tw:cursor-pointer"
-                              value={currentUser}
-                              onChange={async (e) => {
-                                const val = e.target.value;
-                                if (val) {
-                                  setCurrentUser(val);
-                                  try {
-                                    await papi.commands.sendCommand(
-                                      'paratextProjectManager.setCurrentUser',
-                                      val,
-                                    );
-                                  } catch (e) {
-                                    if (isPapiDisconnectedError(e)) handleCatch(e);
-                                  }
-                                }
-                              }}
-                            >
-                              <option value="">Seleccionar...</option>
-                              {teamMembers.map((m) => (
-                                <option key={m} value={m}>
-                                  {m}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        )}
+                        <div className="tw:flex-1 tw:flex tw:items-center tw:justify-between tw:text-left tw:font-medium tw:text-slate-700">
+                          <span>Usuario</span>
+                          <span className="tw:px-2 tw:py-0.5 tw:bg-slate-100 tw:rounded tw:text-xs tw:font-semibold tw:text-slate-700">
+                            {currentUser || 'Desconocido'}
+                          </span>
+                        </div>
                       </div>
                     </div>
 
