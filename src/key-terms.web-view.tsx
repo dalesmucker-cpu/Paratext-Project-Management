@@ -220,14 +220,14 @@ const CommentBox: React.FC<CommentBoxProps> = ({
         onChange={(e) => setText(e.target.value)}
         disabled={isSubmitting}
         rows={rows}
-        className="tw:w-full tw:border tw:border-border tw:rounded-lg tw:px-2.5 tw:py-1.5 tw:text-xs tw:bg-background tw:text-foreground tw:placeholder:tw:text-muted-foreground tw:focus:outline-none tw:focus:ring-1 tw:focus:ring-primary tw:resize-y disabled:tw:opacity-50"
+        className="tw:w-full tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:rounded-xl tw:px-2.5 tw:py-1.5 tw:text-xs tw:bg-white dark:tw:bg-slate-900 tw:text-slate-900 dark:tw:text-slate-100 tw:placeholder:tw:text-slate-500 dark:tw:text-slate-400 tw:focus:outline-none tw:focus:ring-2 tw:focus:ring-indigo-500/30 tw:resize-y disabled:tw:opacity-50"
       />
       <div className="tw:flex tw:justify-end">
         <button
           type="button"
           onClick={handleSubmit}
           disabled={!text.trim() || isSubmitting}
-          className="tw:inline-flex tw:items-center tw:gap-1.5 tw:px-2.5 tw:py-1 tw:bg-primary tw:text-primary-foreground tw:rounded-md tw:text-[11px] tw:font-medium hover:tw:opacity-90 tw:cursor-pointer disabled:tw:opacity-50 disabled:tw:cursor-not-allowed"
+          className="tw:inline-flex tw:items-center tw:gap-1.5 tw:px-2.5 tw:py-1 tw:bg-indigo-600 tw:text-white tw:rounded-lg tw:text-[11px] tw:font-medium hover:tw:bg-indigo-700 tw:cursor-pointer disabled:tw:opacity-50 disabled:tw:cursor-not-allowed"
         >
           {icon}
           {buttonText}
@@ -266,14 +266,14 @@ const InlineEditComment: React.FC<InlineEditCommentProps> = ({ initialText, onSa
         onChange={(e) => setText(e.target.value)}
         disabled={isSaving}
         rows={2}
-        className="tw:w-full tw:border tw:border-border tw:rounded-lg tw:px-2.5 tw:py-1.5 tw:text-xs tw:bg-background tw:text-foreground tw:focus:outline-none tw:focus:ring-1 tw:focus:ring-primary tw:resize-y disabled:tw:opacity-50"
+        className="tw:w-full tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:rounded-xl tw:px-2.5 tw:py-1.5 tw:text-xs tw:bg-white dark:tw:bg-slate-900 tw:text-slate-900 dark:tw:text-slate-100 tw:focus:outline-none tw:focus:ring-2 tw:focus:ring-indigo-500/30 tw:resize-y disabled:tw:opacity-50"
       />
       <div className="tw:flex tw:justify-end tw:gap-2">
         <button
           type="button"
           onClick={onCancel}
           disabled={isSaving}
-          className="tw:px-2 tw:py-1 tw:bg-secondary tw:text-secondary-foreground tw:rounded tw:text-[11px] tw:font-medium hover:tw:opacity-90 tw:cursor-pointer disabled:tw:opacity-50"
+          className="tw:px-2 tw:py-1 tw:bg-slate-100 dark:tw:bg-slate-800 tw:text-slate-700 dark:tw:text-slate-300 tw:rounded tw:text-[11px] tw:font-medium hover:tw:opacity-90 tw:cursor-pointer disabled:tw:opacity-50"
         >
           Cancel
         </button>
@@ -281,7 +281,7 @@ const InlineEditComment: React.FC<InlineEditCommentProps> = ({ initialText, onSa
           type="button"
           onClick={handleSave}
           disabled={!text.trim() || isSaving}
-          className="tw:px-2.5 tw:py-1 tw:bg-primary tw:text-primary-foreground tw:rounded tw:text-[11px] tw:font-medium hover:tw:opacity-90 tw:cursor-pointer disabled:tw:opacity-50"
+          className="tw:px-2.5 tw:py-1 tw:bg-indigo-600 tw:text-white tw:rounded tw:text-[11px] tw:font-medium hover:tw:bg-indigo-700 tw:cursor-pointer disabled:tw:opacity-50"
         >
           Save
         </button>
@@ -319,41 +319,33 @@ const CommentItem: React.FC<CommentItemProps> = ({
 
   return (
     <div
-      className={`tw:p-2 tw:rounded-lg tw:border tw:space-y-1 ${
-        isCompact
-          ? 'tw:bg-secondary/40 tw:border-border/40'
-          : 'tw:bg-card tw:border-border'
-      }`}
+      className={`tw:p-2 tw:rounded-xl tw:border tw:space-y-1 ${isCompact ? 'tw:bg-slate-200/40 dark:tw:bg-slate-700/40 tw:border-slate-200/40 dark:tw:border-slate-800/40' : 'tw:bg-white dark:tw:bg-slate-900 tw:border-slate-200 dark:tw:border-slate-800'}`}
     >
       <div
-        className={`tw:flex tw:items-center tw:justify-between tw:gap-2 tw:text-muted-foreground ${
-          isCompact ? 'tw:text-[9px]' : 'tw:text-[10px]'
-        }`}
+        className={`tw:flex tw:items-center tw:justify-between tw:gap-2 tw:text-slate-500 dark:tw:text-slate-400 ${isCompact ? 'tw:text-[9px]' : 'tw:text-[10px]'}`}
       >
         <div className="tw:flex tw:items-center tw:gap-1.5">
-          <span className={`tw:text-foreground ${isCompact ? 'tw:font-bold' : 'tw:font-semibold'}`}>
+          <span
+            className={`tw:text-slate-900 dark:tw:text-slate-100 ${isCompact ? 'tw:font-bold' : 'tw:font-semibold'}`}
+          >
             {comment.user}
           </span>
           {isMyComment && (
             <span
-              className={`tw:bg-primary/10 tw:text-primary tw:px-1 tw:rounded tw:font-medium ${
-                isCompact ? 'tw:text-[8px]' : 'tw:text-[9px]'
-              }`}
+              className={`tw:bg-indigo-50 dark:tw:bg-indigo-900/30 tw:text-indigo-600 dark:tw:text-indigo-400 tw:px-1 tw:rounded tw:font-medium ${isCompact ? 'tw:text-[8px]' : 'tw:text-[9px]'}`}
             >
               {lang === 'en' ? 'You' : 'Tú'}
             </span>
           )}
         </div>
         <div className="tw:flex tw:items-center tw:gap-1.5">
-          <span>
-            {new Date(comment.date).toLocaleString(lang === 'en' ? 'en' : 'es')}
-          </span>
+          <span>{new Date(comment.date).toLocaleString(lang === 'en' ? 'en' : 'es')}</span>
           {isMyComment && !isEditing && (
             <div className="tw:flex tw:items-center tw:gap-1">
               <button
                 type="button"
                 onClick={() => setEditingCommentKey(commentKey)}
-                className="tw:p-0.5 tw:text-muted-foreground hover:tw:text-primary tw:rounded hover:tw:bg-accent tw:transition-colors tw:cursor-pointer"
+                className="tw:p-0.5 tw:text-slate-500 dark:tw:text-slate-400 hover:tw:text-indigo-600 dark:tw:text-indigo-400 tw:rounded hover:tw:bg-slate-50 dark:hover:tw:bg-slate-800 tw:transition-colors tw:cursor-pointer"
                 title={lang === 'en' ? 'Edit comment' : 'Editar comentario'}
               >
                 <Pencil size={isCompact ? 8 : 10} />
@@ -361,7 +353,7 @@ const CommentItem: React.FC<CommentItemProps> = ({
               <button
                 type="button"
                 onClick={() => handleDeleteComment(threadId, comment.date, comment.user)}
-                className="tw:p-0.5 tw:text-muted-foreground hover:tw:text-destructive tw:rounded hover:tw:bg-accent tw:transition-colors tw:cursor-pointer"
+                className="tw:p-0.5 tw:text-slate-500 dark:tw:text-slate-400 hover:tw:text-rose-600 dark:tw:text-rose-400 tw:rounded hover:tw:bg-slate-50 dark:hover:tw:bg-slate-800 tw:transition-colors tw:cursor-pointer"
                 title={lang === 'en' ? 'Delete comment' : 'Eliminar comentario'}
               >
                 <Trash2 size={isCompact ? 8 : 10} />
@@ -380,7 +372,7 @@ const CommentItem: React.FC<CommentItemProps> = ({
           onCancel={() => setEditingCommentKey(null)}
         />
       ) : (
-        <p className="tw:text-xs tw:text-foreground tw:whitespace-pre-wrap tw:break-words">
+        <p className="tw:text-xs tw:text-slate-900 dark:tw:text-slate-100 tw:whitespace-pre-wrap tw:break-words">
           {comment.plainText || comment.contents}
         </p>
       )}
@@ -421,7 +413,9 @@ globalThis.webViewComponent = function KeyTermsWebView({
   const [newRenderingText, setNewRenderingText] = useState('');
   const [newContextTags, setNewContextTags] = useState<Record<string, string>>({});
   const [newNoteVerseRef, setNewNoteVerseRef] = useState('GEN 1:1');
-  const [expandedRendDiscussions, setExpandedRendDiscussions] = useState<Record<string, boolean>>({});
+  const [expandedRendDiscussions, setExpandedRendDiscussions] = useState<Record<string, boolean>>(
+    {},
+  );
   const [currentUser, setCurrentUser] = useState('Traductor');
   const [projectThreads, setProjectThreads] = useState<ParatextNoteThread[]>([]);
   const [editingCommentKey, setEditingCommentKey] = useState<string | null>(null);
@@ -437,21 +431,24 @@ globalThis.webViewComponent = function KeyTermsWebView({
     [projectThreads],
   );
 
-  const loadProjectNotes = useCallback(async (userOverride?: string) => {
-    const activeUser = userOverride || currentUser;
-    if (!projectId || !activeUser) return;
-    try {
-      const notesStr = await papi.commands.sendCommand(
-        'paratextProjectManager.getProjectNotes',
-        projectId,
-        activeUser,
-      );
-      const parsed = JSON.parse(notesStr) as { threads: ParatextNoteThread[] };
-      setProjectThreads(parsed.threads || []);
-    } catch (err) {
-      console.error('Failed to load project notes:', err);
-    }
-  }, [projectId, currentUser]);
+  const loadProjectNotes = useCallback(
+    async (userOverride?: string) => {
+      const activeUser = userOverride || currentUser;
+      if (!projectId || !activeUser) return;
+      try {
+        const notesStr = await papi.commands.sendCommand(
+          'paratextProjectManager.getProjectNotes',
+          projectId,
+          activeUser,
+        );
+        const parsed = JSON.parse(notesStr) as { threads: ParatextNoteThread[] };
+        setProjectThreads(parsed.threads || []);
+      } catch (err) {
+        console.error('Failed to load project notes:', err);
+      }
+    },
+    [projectId, currentUser],
+  );
 
   const rightPanelRef = useRef<HTMLDivElement | null>(null);
   const isExternalSelectionRef = useRef(false);
@@ -551,46 +548,54 @@ globalThis.webViewComponent = function KeyTermsWebView({
 
   const loadDataRequestRef = useRef(0);
 
-  const loadData = useCallback(async (activeLang?: string) => {
-    if (!projectId) return;
-    const langToUse = typeof activeLang === 'string' ? activeLang : lang;
-    const requestId = ++loadDataRequestRef.current;
-    const isCurrentRequest = () => requestId === loadDataRequestRef.current;
-    setLoading(true);
-    setError('');
-    clearDisconnected();
-    try {
-      const dataStr = await papiRetry(
-        () => papi.commands.sendCommand('paratextProjectManager.getKeyTermsData', projectId, langToUse),
-        { isCancelled: () => !isCurrentRequest() },
-      );
-      if (!isCurrentRequest()) return;
-      const parsed = JSON.parse(dataStr) as KeyTermsStore;
-      setStore(parsed);
+  const loadData = useCallback(
+    async (activeLang?: string) => {
+      if (!projectId) return;
+      const langToUse = typeof activeLang === 'string' ? activeLang : lang;
+      const requestId = ++loadDataRequestRef.current;
+      const isCurrentRequest = () => requestId === loadDataRequestRef.current;
+      setLoading(true);
+      setError('');
+      clearDisconnected();
+      try {
+        const dataStr = await papiRetry(
+          () =>
+            papi.commands.sendCommand(
+              'paratextProjectManager.getKeyTermsData',
+              projectId,
+              langToUse,
+            ),
+          { isCancelled: () => !isCurrentRequest() },
+        );
+        if (!isCurrentRequest()) return;
+        const parsed = JSON.parse(dataStr) as KeyTermsStore;
+        setStore(parsed);
 
-      const user = await papiRetry(
-        () => papi.commands.sendCommand('paratextProjectManager.getCurrentUser'),
-        { isCancelled: () => !isCurrentRequest() },
-      );
-      if (!isCurrentRequest()) return;
-      if (user) {
-        setCurrentUser(user);
-        await loadProjectNotes(user);
-      } else {
-        await loadProjectNotes();
-      }
-    } catch (e: any) {
-      if (isCurrentRequest()) {
-        if (isPapiDisconnectedError(e)) {
-          setError(handleCatch(e));
+        const user = await papiRetry(
+          () => papi.commands.sendCommand('paratextProjectManager.getCurrentUser'),
+          { isCancelled: () => !isCurrentRequest() },
+        );
+        if (!isCurrentRequest()) return;
+        if (user) {
+          setCurrentUser(user);
+          await loadProjectNotes(user);
         } else {
-          setError(tx('errorLoading', e.message || String(e)));
+          await loadProjectNotes();
         }
+      } catch (e: any) {
+        if (isCurrentRequest()) {
+          if (isPapiDisconnectedError(e)) {
+            setError(handleCatch(e));
+          } else {
+            setError(tx('errorLoading', e.message || String(e)));
+          }
+        }
+      } finally {
+        if (isCurrentRequest()) setLoading(false);
       }
-    } finally {
-      if (isCurrentRequest()) setLoading(false);
-    }
-  }, [projectId, tx, clearDisconnected, handleCatch, loadProjectNotes]);
+    },
+    [projectId, tx, clearDisconnected, handleCatch, loadProjectNotes],
+  );
 
   useEffect(() => {
     if (ready) loadData(lang);
@@ -894,9 +899,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
 
   const termThreads = useMemo(() => {
     if (!selectedTermId) return [];
-    return projectThreads.filter(
-      (t) => t.biblicalTermId === selectedTermId && !t.renderingId,
-    );
+    return projectThreads.filter((t) => t.biblicalTermId === selectedTermId && !t.renderingId);
   }, [projectThreads, selectedTermId]);
 
   const getRenderingThreads = useCallback(
@@ -1268,14 +1271,14 @@ globalThis.webViewComponent = function KeyTermsWebView({
   // Render: empty / loading states
   if (!projectId) {
     return (
-      <div className="tw:flex tw:flex-col tw:items-center tw:justify-center tw:h-full tw:p-8 tw:text-center tw:gap-4 tw:text-sm tw:bg-background tw:text-foreground">
-        <div className="tw:p-4 tw:bg-card tw:rounded-full tw:border tw:border-border tw:text-muted-foreground">
+      <div className="tw:flex tw:flex-col tw:items-center tw:justify-center tw:h-full tw:p-8 tw:text-center tw:gap-4 tw:text-sm tw:bg-slate-100 dark:tw:bg-slate-950 tw:text-slate-900 dark:tw:text-slate-100">
+        <div className="tw:p-4 tw:bg-white dark:tw:bg-slate-900 tw:rounded-full tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:text-slate-500 dark:tw:text-slate-400">
           <BookOpen size={36} />
         </div>
-        <p className="tw:text-muted-foreground">{tx('selectProjectEmpty')}</p>
+        <p className="tw:text-slate-500 dark:tw:text-slate-400">{tx('selectProjectEmpty')}</p>
         <button
           type="button"
-          className="tw:inline-flex tw:items-center tw:gap-2 tw:px-4 tw:py-2 tw:bg-primary tw:text-primary-foreground tw:rounded-lg hover:tw:opacity-90 tw:cursor-pointer tw:font-semibold tw:shadow-sm tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring tw:focus-visible:ring-offset-2 tw:focus-visible:ring-offset-background"
+          className="tw:inline-flex tw:items-center tw:gap-2 tw:px-4 tw:py-2 tw:bg-indigo-600 tw:text-white tw:rounded-xl hover:tw:bg-indigo-700 tw:cursor-pointer tw:font-semibold tw:shadow-sm tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30 tw:focus-visible:ring-offset-2 tw:focus-visible:ring-offset-white dark:tw:focus-visible:ring-offset-slate-900"
           onClick={() => selectProject()}
         >
           {tx('selectProject')}
@@ -1289,14 +1292,16 @@ globalThis.webViewComponent = function KeyTermsWebView({
       <div
         role="status"
         aria-live="polite"
-        className="tw:flex tw:flex-col tw:items-center tw:justify-center tw:h-full tw:gap-4 tw:bg-background tw:text-foreground"
+        className="tw:flex tw:flex-col tw:items-center tw:justify-center tw:h-full tw:gap-4 tw:bg-slate-100 dark:tw:bg-slate-950 tw:text-slate-900 dark:tw:text-slate-100"
       >
         <div className="tw:flex tw:items-center tw:gap-3">
-          <div className="tw:w-2 tw:h-2 tw:bg-primary tw:rounded-full tw:animate-ping" />
-          <div className="tw:w-2 tw:h-2 tw:bg-primary tw:rounded-full tw:animate-pulse" />
-          <div className="tw:w-2 tw:h-2 tw:bg-primary tw:rounded-full tw:animate-pulse tw:[animation-delay:0.2s]" />
+          <div className="tw:w-2 tw:h-2 tw:bg-indigo-600 tw:rounded-full tw:animate-ping" />
+          <div className="tw:w-2 tw:h-2 tw:bg-indigo-600 tw:rounded-full tw:animate-pulse" />
+          <div className="tw:w-2 tw:h-2 tw:bg-indigo-600 tw:rounded-full tw:animate-pulse tw:[animation-delay:0.2s]" />
         </div>
-        <span className="tw:text-sm tw:text-muted-foreground tw:font-medium">{tx('loading')}</span>
+        <span className="tw:text-sm tw:text-slate-500 dark:tw:text-slate-400 tw:font-medium">
+          {tx('loading')}
+        </span>
       </div>
     );
   }
@@ -1324,23 +1329,23 @@ globalThis.webViewComponent = function KeyTermsWebView({
       };
     }
     return {
-      cls: 'tw:bg-destructive/15 tw:text-destructive tw:border tw:border-destructive/30',
+      cls: 'tw:bg-rose-500/15 tw:text-rose-600 dark:tw:text-rose-400 tw:border tw:border-rose-200 dark:tw:border-rose-900',
       text: tx('statusMissing'),
     };
   };
 
   return (
-    <div className="tw:flex tw:h-full tw:overflow-hidden tw:bg-background tw:text-foreground tw:font-sans">
+    <div className="tw:flex tw:h-full tw:overflow-hidden tw:bg-slate-100 dark:tw:bg-slate-950 tw:text-slate-900 dark:tw:text-slate-100 tw:font-sans">
       {/* Sidebar - Terms list */}
       {sidebarVisible && (
         <aside
           aria-label="Key terms list"
           style={{ width: `${sidebarWidth}px` }}
-          className="tw:bg-card tw:border-r tw:border-border tw:flex tw:flex-col tw:h-full tw:flex-shrink-0"
+          className="tw:bg-slate-950 tw:text-slate-100 tw:border-r tw:border-slate-900 tw:flex tw:flex-col tw:h-full tw:flex-shrink-0"
         >
-          <div className="tw:p-3 tw:border-b tw:border-border tw:space-y-2.5">
+          <div className="tw:p-3 tw:border-b tw:border-slate-800/80 tw:space-y-2.5">
             <div className="tw:flex tw:items-center tw:justify-between tw:gap-2">
-              <span className="tw:font-bold tw:text-sm tw:text-foreground tw:truncate">
+              <span className="tw:font-bold tw:text-sm tw:text-white tw:truncate">
                 {tx('title')}
               </span>
               <button
@@ -1348,7 +1353,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
                 onClick={() => loadData()}
                 title={tx('refresh')}
                 aria-label={tx('refresh')}
-                className="tw:inline-flex tw:items-center tw:gap-1 tw:text-xs tw:text-muted-foreground hover:tw:text-primary tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring tw:rounded"
+                className="tw:inline-flex tw:items-center tw:gap-1 tw:text-xs tw:text-slate-400 hover:tw:text-white tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30 tw:rounded"
               >
                 <RefreshCw size={12} />
               </button>
@@ -1358,7 +1363,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
             <div className="tw:relative">
               <Search
                 size={12}
-                className="tw:absolute tw:left-2.5 tw:top-1/2 tw:-translate-y-1/2 tw:text-muted-foreground tw:pointer-events-none"
+                className="tw:absolute tw:left-2.5 tw:top-1/2 tw:-translate-y-1/2 tw:text-slate-500 tw:pointer-events-none"
                 aria-hidden="true"
               />
               <input
@@ -1366,14 +1371,14 @@ globalThis.webViewComponent = function KeyTermsWebView({
                 placeholder={tx('searchPlaceholder')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="tw:w-full tw:border tw:border-border tw:rounded-lg tw:pl-7 tw:pr-7 tw:py-1.5 tw:text-xs tw:bg-background tw:text-foreground tw:placeholder:tw:text-muted-foreground tw:focus:outline-none tw:focus:border-primary tw:focus:ring-1 tw:focus:ring-primary"
+                className="tw:w-full tw:border tw:border-slate-800 tw:rounded-xl tw:pl-7 tw:pr-7 tw:py-1.5 tw:text-xs tw:bg-slate-900 tw:text-slate-100 tw:placeholder:tw:text-slate-500 tw:focus:outline-none tw:focus:ring-2 tw:focus:ring-indigo-500/50 tw:focus:border-indigo-500"
               />
               {searchTerm && (
                 <button
                   type="button"
                   onClick={() => setSearchTerm('')}
                   aria-label="Clear search"
-                  className="tw:absolute tw:right-2 tw:top-1/2 tw:-translate-y-1/2 tw:text-muted-foreground hover:tw:text-foreground tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring tw:rounded"
+                  className="tw:absolute tw:right-2 tw:top-1/2 tw:-translate-y-1/2 tw:text-slate-500 hover:tw:text-white tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30 tw:rounded"
                 >
                   <X size={12} />
                 </button>
@@ -1382,13 +1387,13 @@ globalThis.webViewComponent = function KeyTermsWebView({
 
             {/* Semantic Domain Filter */}
             <div className="tw:flex tw:flex-col tw:gap-1">
-              <label className="tw:text-[10px] tw:text-muted-foreground tw:font-semibold tw:uppercase">
+              <label className="tw:text-[10px] tw:text-slate-400 tw:font-semibold tw:uppercase">
                 {tx('semanticDomain')}
               </label>
               <select
                 value={filterDomain}
                 onChange={(e) => setFilterDomain(e.target.value)}
-                className="tw:w-full tw:border tw:border-border tw:rounded-lg tw:px-2 tw:py-1 tw:text-xs tw:bg-background tw:text-foreground tw:focus:outline-none tw:focus:ring-1 tw:focus:ring-primary"
+                className="tw:w-full tw:border tw:border-slate-800 tw:rounded-xl tw:px-2 tw:py-1 tw:text-xs tw:bg-slate-900 tw:text-slate-100 tw:focus:outline-none tw:focus:ring-2 tw:focus:ring-indigo-500/50 tw:focus:border-indigo-500"
               >
                 <option value="all">{tx('allDomains')}</option>
                 {allDomains.map((d) => (
@@ -1401,13 +1406,13 @@ globalThis.webViewComponent = function KeyTermsWebView({
 
             {/* Sort By Filter */}
             <div className="tw:flex tw:flex-col tw:gap-1">
-              <label className="tw:text-[10px] tw:text-muted-foreground tw:font-semibold tw:uppercase">
+              <label className="tw:text-[10px] tw:text-slate-400 tw:font-semibold tw:uppercase">
                 {tx('sortByLabel')}
               </label>
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as any)}
-                className="tw:w-full tw:border tw:border-border tw:rounded-lg tw:px-2 tw:py-1 tw:text-xs tw:bg-background tw:text-foreground tw:focus:outline-none tw:focus:ring-1 tw:focus:ring-primary"
+                className="tw:w-full tw:border tw:border-slate-800 tw:rounded-xl tw:px-2 tw:py-1 tw:text-xs tw:bg-slate-900 tw:text-slate-100 tw:focus:outline-none tw:focus:ring-2 tw:focus:ring-indigo-500/50 tw:focus:border-indigo-500"
               >
                 <option value="gloss">{tx('sortGloss')}</option>
                 <option value="reference">{tx('sortReference')}</option>
@@ -1423,11 +1428,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
                   key={opt.key}
                   onClick={() => setFilterCompletion(opt.key)}
                   aria-pressed={filterCompletion === opt.key}
-                  className={`tw:flex-1 tw:min-w-[60px] tw:py-0.5 tw:px-1.5 tw:text-[10px] tw:rounded-md tw:border tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring ${
-                    filterCompletion === opt.key
-                      ? 'tw:bg-primary/15 tw:text-primary tw:border-primary/30 tw:font-medium'
-                      : 'tw:bg-card tw:text-muted-foreground tw:border-border hover:tw:bg-accent'
-                  }`}
+                  className={`tw:flex-1 tw:min-w-[60px] tw:py-0.5 tw:px-1.5 tw:text-[10px] tw:rounded-lg tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30 ${filterCompletion === opt.key ? 'tw:bg-slate-800 tw:text-white tw:font-medium' : 'tw:text-slate-400 tw:border-transparent hover:tw:bg-slate-800/70'}`}
                 >
                   {opt.label}
                 </button>
@@ -1437,7 +1438,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
             {/* Status legend (always visible) */}
             <div
               aria-label="Status legend"
-              className="tw:flex tw:items-center tw:gap-2 tw:flex-wrap tw:pt-1 tw:text-[9px] tw:text-muted-foreground"
+              className="tw:flex tw:items-center tw:gap-2 tw:flex-wrap tw:pt-1 tw:text-[9px] tw:text-slate-400"
             >
               <span className="tw:inline-flex tw:items-center tw:gap-1">
                 <span className="tw:w-1.5 tw:h-1.5 tw:rounded-full tw:bg-emerald-500" />
@@ -1448,13 +1449,13 @@ globalThis.webViewComponent = function KeyTermsWebView({
                 {tx('statusPartial')}
               </span>
               <span className="tw:inline-flex tw:items-center tw:gap-1">
-                <span className="tw:w-1.5 tw:h-1.5 tw:rounded-full tw:bg-destructive" />
+                <span className="tw:w-1.5 tw:h-1.5 tw:rounded-full tw:bg-rose-600" />
                 {tx('statusMissing')}
               </span>
             </div>
 
             {/* Micro stats bar */}
-            <div className="tw:pt-1 tw:text-[10px] tw:text-muted-foreground tw:flex tw:justify-between tw:flex-wrap tw:gap-1">
+            <div className="tw:pt-1 tw:text-[10px] tw:text-slate-400 tw:flex tw:justify-between tw:flex-wrap tw:gap-1">
               <span>{tx('completed', String(completionStats.percent))}</span>
               <span>
                 {tx('termsCount', String(filteredTerms.length), String(store?.terms.length || 0))}
@@ -1465,7 +1466,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
           {/* List area */}
           <div
             ref={sidebarListRef}
-            className="tw:flex-1 tw:overflow-y-auto tw:divide-y tw:divide-border"
+            className="tw:flex-1 tw:overflow-y-auto tw:divide-y tw:divide-slate-800 scrollbar-thin tw:p-2 tw:space-y-1.5"
           >
             {filteredTerms.map((term) => {
               const status = getTermStatus(term);
@@ -1478,12 +1479,12 @@ globalThis.webViewComponent = function KeyTermsWebView({
                   ref={isSelected ? selectedButtonRef : null}
                   onClick={() => selectTerm(term.id, false)}
                   aria-current={isSelected ? 'true' : undefined}
-                  className={`tw:w-full tw:text-left tw:p-3 tw:flex tw:flex-col tw:gap-1.5 tw:transition-colors tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring ${
-                    isSelected ? 'tw:bg-primary/10' : 'hover:tw:bg-accent'
-                  }`}
+                  className={`tw:w-full tw:text-left tw:p-3 tw:rounded-xl tw:border tw:flex tw:flex-col tw:gap-1.5 tw:transition-colors tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30 ${isSelected ? 'tw:bg-slate-800 tw:border-slate-700 tw:shadow-inner' : 'tw:border-transparent hover:tw:bg-slate-800/60'}`}
                 >
                   <div className="tw:flex tw:items-start tw:justify-between tw:gap-2 tw:min-w-0">
-                    <span className="tw:font-semibold tw:text-sm tw:text-foreground tw:truncate">
+                    <span
+                      className={`tw:font-semibold tw:text-sm tw:truncate ${isSelected ? 'tw:text-white' : 'tw:text-slate-200 group-hover:tw:text-white'}`}
+                    >
                       {term.gloss}
                     </span>
                     <span
@@ -1492,7 +1493,9 @@ globalThis.webViewComponent = function KeyTermsWebView({
                       {badge.text}
                     </span>
                   </div>
-                  <div className="tw:flex tw:items-center tw:justify-between tw:gap-2 tw:text-xs tw:text-muted-foreground tw:min-w-0">
+                  <div
+                    className={`tw:flex tw:items-center tw:justify-between tw:gap-2 tw:text-xs tw:min-w-0 ${isSelected ? 'tw:text-slate-400' : 'tw:text-slate-500'}`}
+                  >
                     <span className="tw:font-serif tw:truncate">{term.lemma}</span>
                     {term.strongs && (
                       <span className="tw:font-mono tw:text-[10px] tw:flex-shrink-0">
@@ -1505,7 +1508,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
             })}
 
             {filteredTerms.length === 0 && (
-              <div className="tw:p-4 tw:text-center tw:text-xs tw:text-muted-foreground">
+              <div className="tw:p-4 tw:text-center tw:text-xs tw:text-slate-500">
                 {tx('emptyList')}
               </div>
             )}
@@ -1521,7 +1524,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
           aria-orientation="vertical"
           aria-label="Resize sidebar"
           tabIndex={0}
-          className="tw:w-1 tw:cursor-col-resize tw:bg-border hover:tw:bg-primary/50 tw:transition-colors tw:h-full tw:flex-shrink-0 tw:focus-visible:outline-none tw:focus-visible:ring-1 tw:focus-visible:ring-primary"
+          className="tw:w-1 tw:cursor-col-resize tw:bg-slate-950 tw:border-r tw:border-slate-900 hover:tw:bg-indigo-500/30 tw:transition-colors tw:h-full tw:flex-shrink-0 tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30"
           onMouseDown={(e) => {
             e.preventDefault();
             const startX = e.clientX;
@@ -1550,20 +1553,20 @@ globalThis.webViewComponent = function KeyTermsWebView({
       )}
 
       {/* Main panel - Detail view */}
-      <div className="tw:flex-1 tw:flex tw:flex-col tw:h-full tw:overflow-hidden tw:min-w-0">
+      <div className="tw:flex-1 tw:flex tw:flex-col tw:h-full tw:overflow-hidden tw:min-w-0 tw:bg-[#f8fafc] dark:tw:bg-slate-900">
         {/* Top toolbar */}
-        <div className="tw:px-3 sm:tw:px-4 tw:py-3 tw:bg-card tw:border-b tw:border-border tw:flex tw:items-center tw:justify-between tw:gap-2 tw:flex-wrap">
+        <div className="tw:px-3 sm:tw:px-4 tw:py-3 tw:bg-white dark:tw:bg-slate-900 tw:border-b tw:border-slate-200 dark:tw:border-slate-800 tw:flex tw:items-center tw:justify-between tw:gap-2 tw:flex-wrap">
           <div className="tw:flex tw:items-center tw:gap-2 sm:tw:gap-3 tw:min-w-0 tw:flex-1">
             <button
               type="button"
               onClick={() => setSidebarVisible((v) => !v)}
               title={sidebarVisible ? tx('toggleSidebarHide') : tx('toggleSidebarShow')}
               aria-label={sidebarVisible ? tx('toggleSidebarHide') : tx('toggleSidebarShow')}
-              className="tw:p-1.5 tw:rounded-md tw:text-muted-foreground hover:tw:bg-accent tw:cursor-pointer tw:flex-shrink-0 tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring"
+              className="tw:p-1.5 tw:rounded-lg tw:text-slate-500 dark:tw:text-slate-400 hover:tw:bg-slate-50 dark:hover:tw:bg-slate-800 tw:cursor-pointer tw:flex-shrink-0 tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30"
             >
               <Menu size={18} />
             </button>
-            <span className="tw:font-bold tw:text-foreground tw:truncate tw:text-sm sm:tw:text-base">
+            <span className="tw:font-bold tw:text-slate-900 dark:tw:text-slate-100 tw:truncate tw:text-sm sm:tw:text-base">
               {tx('title')}
             </span>
           </div>
@@ -1573,9 +1576,9 @@ globalThis.webViewComponent = function KeyTermsWebView({
               <span
                 role="status"
                 aria-live="polite"
-                className="tw:inline-flex tw:items-center tw:gap-1.5 tw:text-xs tw:text-muted-foreground"
+                className="tw:inline-flex tw:items-center tw:gap-1.5 tw:text-xs tw:text-slate-500 dark:tw:text-slate-400"
               >
-                <span className="tw:w-1.5 tw:h-1.5 tw:bg-primary tw:rounded-full tw:animate-pulse" />
+                <span className="tw:w-1.5 tw:h-1.5 tw:bg-indigo-600 tw:rounded-full tw:animate-pulse" />
                 <span className="tw:hidden sm:tw:inline">{tx('saving')}</span>
               </span>
             )}
@@ -1584,14 +1587,14 @@ globalThis.webViewComponent = function KeyTermsWebView({
               onClick={toggleLang}
               title={tx('toggleLanguage')}
               aria-label={tx('toggleLanguage')}
-              className="tw:inline-flex tw:items-center tw:gap-1 tw:px-2 tw:py-1.5 tw:bg-card tw:border tw:border-border tw:rounded-md tw:text-xs tw:font-semibold tw:text-muted-foreground hover:tw:bg-accent tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring"
+              className="tw:inline-flex tw:items-center tw:gap-1 tw:px-2 tw:py-1.5 tw:bg-white dark:tw:bg-slate-900 tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:rounded-lg tw:text-xs tw:font-semibold tw:text-slate-500 dark:tw:text-slate-400 hover:tw:bg-slate-50 dark:hover:tw:bg-slate-800 tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30"
             >
               <Languages size={12} />
               <span className="tw:uppercase">{lang}</span>
             </button>
             <button
               type="button"
-              className="tw:inline-flex tw:items-center tw:gap-1.5 tw:px-2.5 sm:tw:px-3 tw:py-1.5 tw:bg-primary/10 tw:text-primary tw:border tw:border-primary/20 tw:rounded-lg tw:text-xs tw:font-medium hover:tw:bg-primary/20 tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring"
+              className="tw:inline-flex tw:items-center tw:gap-1.5 tw:px-2.5 sm:tw:px-3 tw:py-1.5 tw:bg-indigo-50 dark:tw:bg-indigo-900/30 tw:text-indigo-600 dark:tw:text-indigo-400 tw:border tw:border-indigo-200 dark:tw:border-indigo-800 tw:rounded-xl tw:text-xs tw:font-medium hover:tw:bg-indigo-100 dark:tw:bg-indigo-900/40 tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30"
               onClick={() => selectProject()}
             >
               {tx('changeProject')}
@@ -1602,7 +1605,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
         {error && (
           <div
             role="alert"
-            className="tw:bg-destructive/10 tw:border-b tw:border-destructive/30 tw:px-3 sm:tw:px-4 tw:py-2 tw:text-destructive tw:text-xs tw:font-medium tw:flex tw:justify-between tw:items-center tw:gap-2"
+            className="tw:bg-rose-50 dark:tw:bg-rose-950/40 tw:border-b tw:border-rose-200 dark:tw:border-rose-900 tw:px-3 sm:tw:px-4 tw:py-2 tw:text-rose-600 dark:tw:text-rose-400 tw:text-xs tw:font-medium tw:flex tw:justify-between tw:items-center tw:gap-2"
           >
             <span className="tw:flex tw:items-center tw:gap-2 tw:min-w-0 tw:truncate">
               <AlertTriangle size={14} className="tw:flex-shrink-0" />
@@ -1612,7 +1615,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
               <button
                 type="button"
                 onClick={() => window.location.reload()}
-                className="tw:bg-destructive tw:hover:opacity-90 tw:text-white tw:px-3 tw:py-1 tw:rounded tw:font-semibold tw:cursor-pointer tw:transition-opacity tw:flex-shrink-0"
+                className="tw:bg-rose-600 hover:tw:bg-rose-700 tw:text-white tw:px-3 tw:py-1 tw:rounded tw:font-semibold tw:cursor-pointer tw:transition-opacity tw:flex-shrink-0"
                 title="Recargar la vista para reestablecer la conexión con Paratext"
               >
                 Reconectar
@@ -1621,7 +1624,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
               <button
                 type="button"
                 onClick={() => loadData()}
-                className="tw:text-destructive tw:underline hover:tw:opacity-80 tw:cursor-pointer tw:flex-shrink-0 tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring tw:rounded"
+                className="tw:text-rose-600 dark:tw:text-rose-400 tw:underline hover:tw:opacity-80 tw:cursor-pointer tw:flex-shrink-0 tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30 tw:rounded"
               >
                 ({tx('retry')})
               </button>
@@ -1636,25 +1639,25 @@ globalThis.webViewComponent = function KeyTermsWebView({
             className="tw:flex-1 tw:overflow-y-auto tw:p-3 sm:tw:p-4 tw:space-y-4 tw:min-w-0"
           >
             {/* Term Summary Card */}
-            <div className="tw:bg-card tw:p-4 tw:rounded-xl tw:border tw:border-border tw:shadow-sm tw:space-y-3">
+            <div className="tw:bg-white dark:tw:bg-slate-900 tw:p-4 tw:rounded-2xl tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:shadow-sm tw:space-y-3">
               <div className="tw:flex tw:items-start tw:justify-between tw:gap-3 tw:min-w-0">
                 <div className="tw:min-w-0 tw:flex-1">
-                  <h2 className="tw:text-xl tw:font-bold tw:text-foreground tw:break-words">
+                  <h2 className="tw:text-xl tw:font-bold tw:text-slate-900 dark:tw:text-slate-100 tw:break-words">
                     {selectedTerm.gloss}
                   </h2>
                   <div className="tw:flex tw:items-center tw:gap-2 tw:mt-1 tw:flex-wrap">
-                    <span className="tw:font-serif tw:text-lg tw:text-primary tw:break-all">
+                    <span className="tw:font-serif tw:text-lg tw:text-indigo-600 dark:tw:text-indigo-400 tw:break-all">
                       {selectedTerm.lemma}
                     </span>
                     {selectedTerm.transliteration && (
-                      <span className="tw:text-sm tw:text-muted-foreground tw:italic tw:break-words">
+                      <span className="tw:text-sm tw:text-slate-500 dark:tw:text-slate-400 tw:italic tw:break-words">
                         ({selectedTerm.transliteration})
                       </span>
                     )}
                   </div>
                 </div>
                 {selectedTerm.strongs && (
-                  <span className="tw:px-2.5 tw:py-1 tw:bg-secondary tw:text-secondary-foreground tw:rounded-md tw:text-xs tw:font-mono tw:flex-shrink-0">
+                  <span className="tw:px-2.5 tw:py-1 tw:bg-slate-100 dark:tw:bg-slate-800 tw:text-slate-700 dark:tw:text-slate-300 tw:rounded-lg tw:text-xs tw:font-mono tw:flex-shrink-0">
                     {selectedTerm.strongs}
                   </span>
                 )}
@@ -1665,7 +1668,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
                   {selectedTerm.domains.map((dom) => (
                     <span
                       key={dom}
-                      className="tw:text-[10px] tw:px-2 tw:py-0.5 tw:bg-primary/10 tw:text-primary tw:rounded-md tw:font-semibold tw:uppercase"
+                      className="tw:text-[10px] tw:px-2 tw:py-0.5 tw:bg-indigo-50 dark:tw:bg-indigo-900/30 tw:text-indigo-600 dark:tw:text-indigo-400 tw:rounded-lg tw:font-semibold tw:uppercase"
                     >
                       {dom}
                     </span>
@@ -1675,8 +1678,8 @@ globalThis.webViewComponent = function KeyTermsWebView({
             </div>
 
             {/* Renderings Card */}
-            <div className="tw:bg-card tw:p-4 tw:rounded-xl tw:border tw:border-border tw:shadow-sm tw:space-y-4">
-              <h3 className="tw:font-bold tw:text-sm tw:text-foreground tw:uppercase tw:tracking-wider">
+            <div className="tw:bg-white dark:tw:bg-slate-900 tw:p-4 tw:rounded-2xl tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:shadow-sm tw:space-y-4">
+              <h3 className="tw:font-bold tw:text-sm tw:text-slate-900 dark:tw:text-slate-100 tw:uppercase tw:tracking-wider">
                 {tx('renderingsTitle')}
               </h3>
 
@@ -1687,12 +1690,12 @@ globalThis.webViewComponent = function KeyTermsWebView({
                   value={newRenderingText}
                   onChange={(e) => setNewRenderingText(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && addRendering()}
-                  className="tw:flex-1 tw:min-w-0 tw:border tw:border-border tw:rounded-lg tw:px-3 tw:py-2 tw:text-xs tw:bg-background tw:text-foreground tw:placeholder:tw:text-muted-foreground tw:focus:outline-none tw:focus:ring-1 tw:focus:ring-primary"
+                  className="tw:flex-1 tw:min-w-0 tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:rounded-xl tw:px-3 tw:py-2 tw:text-xs tw:bg-white dark:tw:bg-slate-900 tw:text-slate-900 dark:tw:text-slate-100 tw:placeholder:tw:text-slate-500 dark:tw:text-slate-400 tw:focus:outline-none tw:focus:ring-2 tw:focus:ring-indigo-500/30"
                 />
                 <button
                   type="button"
                   onClick={addRendering}
-                  className="tw:inline-flex tw:items-center tw:gap-1 tw:px-4 tw:py-2 tw:bg-primary tw:text-primary-foreground tw:rounded-lg tw:text-xs tw:font-medium hover:tw:opacity-90 tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring"
+                  className="tw:inline-flex tw:items-center tw:gap-1 tw:px-4 tw:py-2 tw:bg-indigo-600 tw:text-white tw:rounded-xl tw:text-xs tw:font-medium hover:tw:bg-indigo-700 tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30"
                 >
                   <Plus size={12} />
                   {tx('add')}
@@ -1721,15 +1724,15 @@ globalThis.webViewComponent = function KeyTermsWebView({
                     return (
                       <div
                         key={rendId}
-                        className="tw:p-3 tw:bg-secondary tw:rounded-lg tw:border tw:border-border tw:space-y-2"
+                        className="tw:p-3 tw:bg-slate-100 dark:tw:bg-slate-800 tw:rounded-xl tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:space-y-2"
                       >
                         <div className="tw:flex tw:items-start tw:justify-between tw:gap-3 tw:min-w-0">
                           <div className="tw:space-y-1 tw:min-w-0 tw:flex-1">
-                            <span className="tw:font-bold tw:text-sm tw:text-foreground tw:break-words tw:block">
+                            <span className="tw:font-bold tw:text-sm tw:text-slate-900 dark:tw:text-slate-100 tw:break-words tw:block">
                               {rend.text}
                             </span>
                             <div className="tw:flex tw:items-center tw:gap-1.5 tw:flex-wrap">
-                              <span className="tw:text-[10px] tw:text-muted-foreground">
+                              <span className="tw:text-[10px] tw:text-slate-500 dark:tw:text-slate-400">
                                 {tx('proposedBy', rend.proposedBy)}
                               </span>
                             </div>
@@ -1741,15 +1744,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
                               updateRenderingStatus(rendId, e.target.value as RenderingStatus)
                             }
                             aria-label="Rendering status"
-                            className={`tw:flex-shrink-0 tw:text-xs tw:px-2 tw:py-1 tw:rounded-md tw:border tw:font-medium tw:focus:outline-none tw:focus:ring-1 tw:focus:ring-primary ${
-                              rend.status === 'approved'
-                                ? 'tw:bg-emerald-500/15 tw:text-emerald-700 dark:tw:text-emerald-400 tw:border-emerald-500/30'
-                                : rend.status === 'disputed'
-                                  ? 'tw:bg-destructive/15 tw:text-destructive tw:border-destructive/30'
-                                  : rend.status === 'proposed'
-                                    ? 'tw:bg-amber-500/15 tw:text-amber-700 dark:tw:text-amber-400 tw:border-amber-500/30'
-                                    : 'tw:bg-secondary tw:text-secondary-foreground tw:border-border'
-                            }`}
+                            className={`tw:flex-shrink-0 tw:text-xs tw:px-2 tw:py-1 tw:rounded-lg tw:border tw:font-medium tw:focus:outline-none tw:focus:ring-2 tw:focus:ring-indigo-500/30 ${rend.status === 'approved' ? 'tw:bg-emerald-500/15 tw:text-emerald-700 dark:tw:text-emerald-400 tw:border-emerald-500/30' : rend.status === 'disputed' ? 'tw:bg-rose-500/15 tw:text-rose-600 dark:tw:text-rose-400 tw:border-rose-200 dark:tw:border-rose-900' : rend.status === 'proposed' ? 'tw:bg-amber-500/15 tw:text-amber-700 dark:tw:text-amber-400 tw:border-amber-500/30' : 'tw:bg-slate-100 dark:tw:bg-slate-800 tw:text-slate-700 dark:tw:text-slate-300 tw:border-slate-200 dark:tw:border-slate-800'}`}
                           >
                             <option value="draft">{tx('statusDraft')}</option>
                             <option value="proposed">{tx('statusProposed')}</option>
@@ -1765,11 +1760,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
                               onClick={() => voteRendering(rendId, 'up')}
                               aria-label="Up vote"
                               aria-pressed={hasUpvoted}
-                              className={`tw:inline-flex tw:items-center tw:gap-1 tw:px-2 tw:py-1 tw:rounded-md tw:border tw:text-xs tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring ${
-                                hasUpvoted
-                                  ? 'tw:bg-primary/10 tw:text-primary tw:border-primary/30'
-                                  : 'tw:bg-card tw:text-muted-foreground tw:border-border hover:tw:bg-accent'
-                              }`}
+                              className={`tw:inline-flex tw:items-center tw:gap-1 tw:px-2 tw:py-1 tw:rounded-lg tw:border tw:text-xs tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30 ${hasUpvoted ? 'tw:bg-indigo-50 dark:tw:bg-indigo-900/30 tw:text-indigo-600 dark:tw:text-indigo-400 tw:border-indigo-200 dark:tw:border-indigo-800' : 'tw:bg-white dark:tw:bg-slate-900 tw:text-slate-500 dark:tw:text-slate-400 tw:border-slate-200 dark:tw:border-slate-800 hover:tw:bg-slate-50 dark:hover:tw:bg-slate-800'}`}
                             >
                               <ThumbsUp size={12} />
                               <span className="tw:font-semibold">{upVotes}</span>
@@ -1779,11 +1770,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
                               onClick={() => voteRendering(rendId, 'down')}
                               aria-label="Down vote"
                               aria-pressed={hasDownvoted}
-                              className={`tw:inline-flex tw:items-center tw:gap-1 tw:px-2 tw:py-1 tw:rounded-md tw:border tw:text-xs tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring ${
-                                hasDownvoted
-                                  ? 'tw:bg-destructive/10 tw:text-destructive tw:border-destructive/30'
-                                  : 'tw:bg-card tw:text-muted-foreground tw:border-border hover:tw:bg-accent'
-                              }`}
+                              className={`tw:inline-flex tw:items-center tw:gap-1 tw:px-2 tw:py-1 tw:rounded-lg tw:border tw:text-xs tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30 ${hasDownvoted ? 'tw:bg-rose-50 dark:tw:bg-rose-950/40 tw:text-rose-600 dark:tw:text-rose-400 tw:border-rose-200 dark:tw:border-rose-900' : 'tw:bg-white dark:tw:bg-slate-900 tw:text-slate-500 dark:tw:text-slate-400 tw:border-slate-200 dark:tw:border-slate-800 hover:tw:bg-slate-50 dark:hover:tw:bg-slate-800'}`}
                             >
                               <ThumbsDown size={12} />
                               <span className="tw:font-semibold">{downVotes}</span>
@@ -1797,11 +1784,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
                                 }))
                               }
                               aria-pressed={expandedRendDiscussions[rendId]}
-                              className={`tw:inline-flex tw:items-center tw:gap-1.5 tw:px-2 tw:py-1 tw:rounded-md tw:border tw:text-xs tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring ${
-                                expandedRendDiscussions[rendId]
-                                  ? 'tw:bg-indigo-100/40 tw:text-indigo-600 tw:border-indigo-200'
-                                  : 'tw:bg-card tw:text-muted-foreground tw:border-border hover:tw:bg-accent'
-                              }`}
+                              className={`tw:inline-flex tw:items-center tw:gap-1.5 tw:px-2 tw:py-1 tw:rounded-lg tw:border tw:text-xs tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30 ${expandedRendDiscussions[rendId] ? 'tw:bg-indigo-100/40 tw:text-indigo-600 tw:border-indigo-200' : 'tw:bg-white dark:tw:bg-slate-900 tw:text-slate-500 dark:tw:text-slate-400 tw:border-slate-200 dark:tw:border-slate-800 hover:tw:bg-slate-50 dark:hover:tw:bg-slate-800'}`}
                               title="Discuss this rendering"
                             >
                               <span>💬 Discuss</span>
@@ -1818,14 +1801,14 @@ globalThis.webViewComponent = function KeyTermsWebView({
                               rend.contextTags.map((tag) => (
                                 <span
                                   key={tag}
-                                  className="tw:inline-flex tw:items-center tw:gap-1 tw:text-[10px] tw:bg-secondary tw:text-secondary-foreground tw:rounded tw:px-1.5 tw:py-0.5 tw:font-medium"
+                                  className="tw:inline-flex tw:items-center tw:gap-1 tw:text-[10px] tw:bg-slate-100 dark:tw:bg-slate-800 tw:text-slate-700 dark:tw:text-slate-300 tw:rounded tw:px-1.5 tw:py-0.5 tw:font-medium"
                                 >
                                   #{tag}
                                   <button
                                     type="button"
                                     onClick={() => removeContextTag(rendId, tag)}
                                     aria-label={`Remove tag ${tag}`}
-                                    className="tw:text-muted-foreground hover:tw:text-foreground tw:font-bold tw:focus-visible:outline-none tw:focus-visible:ring-1 tw:focus-visible:ring-ring tw:rounded"
+                                    className="tw:text-slate-500 dark:tw:text-slate-400 hover:tw:text-slate-900 dark:tw:text-slate-100 tw:font-bold tw:focus-visible:outline-none tw:focus-visible:ring-1 tw:focus-visible:ring-indigo-500/30 tw:rounded"
                                   >
                                     <X size={10} />
                                   </button>
@@ -1844,13 +1827,13 @@ globalThis.webViewComponent = function KeyTermsWebView({
                                 }
                                 onKeyDown={(e) => e.key === 'Enter' && addContextTag(rendId)}
                                 aria-label="Add context tag"
-                                className="tw:border tw:border-border tw:rounded tw:px-1 tw:py-0.5 tw:text-[10px] tw:w-16 tw:bg-background tw:text-foreground tw:focus:outline-none tw:focus:ring-1 tw:focus:ring-primary"
+                                className="tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:rounded tw:px-1 tw:py-0.5 tw:text-[10px] tw:w-16 tw:bg-white dark:tw:bg-slate-900 tw:text-slate-900 dark:tw:text-slate-100 tw:focus:outline-none tw:focus:ring-2 tw:focus:ring-indigo-500/30"
                               />
                               <button
                                 type="button"
                                 onClick={() => addContextTag(rendId)}
                                 aria-label="Add tag"
-                                className="tw:inline-flex tw:items-center tw:justify-center tw:px-1.5 tw:bg-secondary tw:rounded tw:text-[10px] tw:hover:tw:bg-accent tw:focus-visible:outline-none tw:focus-visible:ring-1 tw:focus-visible:ring-ring"
+                                className="tw:inline-flex tw:items-center tw:justify-center tw:px-1.5 tw:bg-slate-100 dark:tw:bg-slate-800 tw:rounded tw:text-[10px] hover:tw:bg-slate-50 dark:hover:tw:bg-slate-800 tw:focus-visible:outline-none tw:focus-visible:ring-1 tw:focus-visible:ring-indigo-500/30"
                               >
                                 <Plus size={10} />
                               </button>
@@ -1859,15 +1842,15 @@ globalThis.webViewComponent = function KeyTermsWebView({
                         </div>
 
                         {expandedRendDiscussions[rendId] && (
-                          <div className="tw:mt-3 tw:pt-3 tw:border-t tw:border-border/60 tw:space-y-3">
-                            <div className="tw:text-[11px] tw:font-semibold tw:text-muted-foreground tw:uppercase">
+                          <div className="tw:mt-3 tw:pt-3 tw:border-t tw:border-slate-200 dark:tw:border-slate-800/60 tw:space-y-3">
+                            <div className="tw:text-[11px] tw:font-semibold tw:text-slate-500 dark:tw:text-slate-400 tw:uppercase">
                               Discussion on "{rend.text}"
                             </div>
-                            
+
                             {/* Render active comments for this rendering */}
                             {rendThreads.length > 0 ? (
                               <div className="tw:space-y-2.5 tw:max-h-48 tw:overflow-y-auto">
-                                {rendThreads.map((thread) => 
+                                {rendThreads.map((thread) =>
                                   thread.comments.map((comment) => (
                                     <CommentItem
                                       key={`${thread.threadId}-${comment.date}`}
@@ -1881,11 +1864,11 @@ globalThis.webViewComponent = function KeyTermsWebView({
                                       handleDeleteComment={handleDeleteComment}
                                       isCompact={true}
                                     />
-                                  ))
+                                  )),
                                 )}
                               </div>
                             ) : (
-                              <div className="tw:text-xs tw:text-muted-foreground tw:italic tw:py-1">
+                              <div className="tw:text-xs tw:text-slate-500 dark:tw:text-slate-400 tw:italic tw:py-1">
                                 No discussion on this rendering yet. Start one below.
                               </div>
                             )}
@@ -1898,7 +1881,12 @@ globalThis.webViewComponent = function KeyTermsWebView({
                                 const existingThread = rendThreads[0];
                                 const verseRef = selectedTerm.references[0] || 'GEN 1:1';
                                 if (existingThread) {
-                                  return await handleReplyToThread(existingThread.threadId, txt, existingThread.verseRef, rendId);
+                                  return await handleReplyToThread(
+                                    existingThread.threadId,
+                                    txt,
+                                    existingThread.verseRef,
+                                    rendId,
+                                  );
                                 } else {
                                   return await handleStartThread(txt, verseRef, rendId);
                                 }
@@ -1911,7 +1899,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
                   })}
 
                 {(!selectedTerm.renderings || selectedTerm.renderings.length === 0) && (
-                  <div className="tw:text-xs tw:text-muted-foreground tw:text-center tw:py-4 tw:italic">
+                  <div className="tw:text-xs tw:text-slate-500 dark:tw:text-slate-400 tw:text-center tw:py-4 tw:italic">
                     {tx('noRenderings')}
                   </div>
                 )}
@@ -1919,19 +1907,19 @@ globalThis.webViewComponent = function KeyTermsWebView({
             </div>
 
             {/* Collaborative notes panel */}
-            <div className="tw:bg-card tw:rounded-xl tw:border tw:border-border tw:shadow-sm tw:overflow-hidden">
+            <div className="tw:bg-white dark:tw:bg-slate-900 tw:rounded-xl tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:shadow-sm tw:overflow-hidden">
               <button
                 type="button"
                 onClick={() => setCollabPanelOpen((o) => !o)}
                 aria-expanded={collabPanelOpen}
-                className="tw:w-full tw:px-4 tw:py-3 tw:bg-secondary tw:flex tw:items-center tw:justify-between tw:cursor-pointer tw:border-b tw:border-border hover:tw:bg-accent tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring"
+                className="tw:w-full tw:px-4 tw:py-3 tw:bg-slate-100 dark:tw:bg-slate-800 tw:flex tw:items-center tw:justify-between tw:cursor-pointer tw:border-b tw:border-slate-200 dark:tw:border-slate-800 hover:tw:bg-slate-50 dark:hover:tw:bg-slate-800 tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30"
               >
-                <span className="tw:font-bold tw:text-xs tw:text-muted-foreground tw:uppercase tw:tracking-wider">
+                <span className="tw:font-bold tw:text-xs tw:text-slate-500 dark:tw:text-slate-400 tw:uppercase tw:tracking-wider">
                   {tx('collabNotesTitle')}
                 </span>
                 <span className="tw:flex tw:items-center tw:gap-2">
                   {termThreads.length > 0 && (
-                    <span className="tw:px-1.5 tw:py-0.5 tw:bg-primary/10 tw:text-primary tw:rounded tw:text-[10px] tw:font-semibold">
+                    <span className="tw:px-1.5 tw:py-0.5 tw:bg-indigo-50 dark:tw:bg-indigo-900/30 tw:text-indigo-600 dark:tw:text-indigo-400 tw:rounded tw:text-[10px] tw:font-semibold">
                       {termThreads.length} {termThreads.length === 1 ? 'thread' : 'threads'}
                     </span>
                   )}
@@ -1945,14 +1933,18 @@ globalThis.webViewComponent = function KeyTermsWebView({
                   {termThreads.length > 0 && (
                     <div className="tw:space-y-4">
                       {termThreads.map((thread) => (
-                        <div key={thread.threadId} className="tw:border tw:border-border tw:rounded-xl tw:overflow-hidden tw:bg-secondary/20">
+                        <div
+                          key={thread.threadId}
+                          className="tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:rounded-xl tw:overflow-hidden tw:bg-slate-100 dark:tw:bg-slate-800/20"
+                        >
                           {/* Thread Header */}
-                          <div className="tw:px-3 tw:py-2 tw:bg-secondary/60 tw:border-b tw:border-border tw:flex tw:items-center tw:justify-between tw:gap-2">
-                            <span className="tw:text-xs tw:font-bold tw:text-foreground">
+                          <div className="tw:px-3 tw:py-2 tw:bg-slate-100 dark:tw:bg-slate-800/60 tw:border-b tw:border-slate-200 dark:tw:border-slate-800 tw:flex tw:items-center tw:justify-between tw:gap-2">
+                            <span className="tw:text-xs tw:font-bold tw:text-slate-900 dark:tw:text-slate-100">
                               Reference: {thread.verseRef}
                             </span>
-                            <span className="tw:text-[10px] tw:text-muted-foreground">
-                              {thread.comments.length} {thread.comments.length === 1 ? 'comment' : 'comments'}
+                            <span className="tw:text-[10px] tw:text-slate-500 dark:tw:text-slate-400">
+                              {thread.comments.length}{' '}
+                              {thread.comments.length === 1 ? 'comment' : 'comments'}
                             </span>
                           </div>
 
@@ -1975,12 +1967,16 @@ globalThis.webViewComponent = function KeyTermsWebView({
                           </div>
 
                           {/* Reply box for this thread */}
-                          <div className="tw:p-3 tw:bg-secondary/10 tw:border-t tw:border-border">
+                          <div className="tw:p-3 tw:bg-slate-100 dark:tw:bg-slate-800/10 tw:border-t tw:border-slate-200 dark:tw:border-slate-800">
                             <CommentBox
                               placeholder="Write a reply..."
                               buttonText="Reply"
                               onSubmit={async (txt) => {
-                                return await handleReplyToThread(thread.threadId, txt, thread.verseRef);
+                                return await handleReplyToThread(
+                                  thread.threadId,
+                                  txt,
+                                  thread.verseRef,
+                                );
                               }}
                             />
                           </div>
@@ -1990,22 +1986,24 @@ globalThis.webViewComponent = function KeyTermsWebView({
                   )}
 
                   {termThreads.length === 0 && (
-                    <div className="tw:text-xs tw:text-muted-foreground tw:text-center tw:py-4 tw:italic">
+                    <div className="tw:text-xs tw:text-slate-500 dark:tw:text-slate-400 tw:text-center tw:py-4 tw:italic">
                       {tx('noNotes')}
                     </div>
                   )}
 
                   {/* Start new thread section */}
-                  <div className="tw:border-t tw:border-border tw:pt-4 tw:space-y-3">
-                    <h4 className="tw:text-xs tw:font-bold tw:text-foreground">
+                  <div className="tw:border-t tw:border-slate-200 dark:tw:border-slate-800 tw:pt-4 tw:space-y-3">
+                    <h4 className="tw:text-xs tw:font-bold tw:text-slate-900 dark:tw:text-slate-100">
                       Start a New Discussion Thread
                     </h4>
                     <div className="tw:flex tw:items-center tw:gap-2">
-                      <label className="tw:text-xs tw:text-muted-foreground">Associate with reference:</label>
+                      <label className="tw:text-xs tw:text-slate-500 dark:tw:text-slate-400">
+                        Associate with reference:
+                      </label>
                       <select
                         value={newNoteVerseRef}
                         onChange={(e) => setNewNoteVerseRef(e.target.value)}
-                        className="tw:border tw:border-border tw:rounded-md tw:px-2 tw:py-1 tw:text-xs tw:bg-background tw:text-foreground"
+                        className="tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:rounded-lg tw:px-2 tw:py-1 tw:text-xs tw:bg-white dark:tw:bg-slate-900 tw:text-slate-900 dark:tw:text-slate-100"
                       >
                         {selectedTerm.references && selectedTerm.references.length > 0 ? (
                           selectedTerm.references.map((ref) => (
@@ -2034,9 +2032,9 @@ globalThis.webViewComponent = function KeyTermsWebView({
             </div>
 
             {/* Expected Verse References List */}
-            <div className="tw:bg-card tw:p-4 tw:rounded-xl tw:border tw:border-border tw:shadow-sm tw:space-y-3">
+            <div className="tw:bg-white dark:tw:bg-slate-900 tw:p-4 tw:rounded-2xl tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:shadow-sm tw:space-y-3">
               <div className="tw:flex tw:items-center tw:justify-between tw:flex-wrap tw:gap-2">
-                <h3 className="tw:font-bold tw:text-sm tw:text-foreground tw:uppercase tw:tracking-wider">
+                <h3 className="tw:font-bold tw:text-sm tw:text-slate-900 dark:tw:text-slate-100 tw:uppercase tw:tracking-wider">
                   {tx('expectedPassages')}
                 </h3>
                 <div className="tw:flex tw:items-center tw:gap-2 tw:flex-wrap">
@@ -2044,7 +2042,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
                     <span
                       role="status"
                       aria-live="polite"
-                      className="tw:inline-flex tw:items-center tw:gap-1.5 tw:text-xs tw:text-muted-foreground"
+                      className="tw:inline-flex tw:items-center tw:gap-1.5 tw:text-xs tw:text-slate-500 dark:tw:text-slate-400"
                     >
                       <RefreshCw size={12} className="tw:animate-spin" />
                       {tx('scanning')}
@@ -2054,7 +2052,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
                     type="button"
                     onClick={() => scanChapter({ forceRescan: true })}
                     disabled={scanning}
-                    className="tw:inline-flex tw:items-center tw:gap-1 tw:px-2.5 tw:py-1 tw:bg-primary/10 tw:text-primary tw:border tw:border-primary/20 tw:rounded-lg tw:text-xs tw:font-medium hover:tw:bg-primary/20 tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring disabled:tw:opacity-50 disabled:tw:cursor-not-allowed"
+                    className="tw:inline-flex tw:items-center tw:gap-1 tw:px-2.5 tw:py-1 tw:bg-indigo-50 dark:tw:bg-indigo-900/30 tw:text-indigo-600 dark:tw:text-indigo-400 tw:border tw:border-indigo-200 dark:tw:border-indigo-800 tw:rounded-xl tw:text-xs tw:font-medium hover:tw:bg-indigo-100 dark:tw:bg-indigo-900/40 tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30 disabled:tw:opacity-50 disabled:tw:cursor-not-allowed"
                   >
                     <RefreshCw size={12} className={scanning ? 'tw:animate-spin' : ''} />
                     {allReferencesScanned ? tx('rescanPassages') : tx('scanPassages')}
@@ -2063,33 +2061,33 @@ globalThis.webViewComponent = function KeyTermsWebView({
               </div>
 
               {!allReferencesScanned && !scanning && (
-                <p className="tw:text-[11px] tw:text-muted-foreground tw:italic">
+                <p className="tw:text-[11px] tw:text-slate-500 dark:tw:text-slate-400 tw:italic">
                   {tx('scanPrompt')}
                 </p>
               )}
 
-              <div className="tw:divide-y tw:divide-border tw:max-h-72 tw:overflow-y-auto">
+              <div className="tw:divide-y tw:divide-slate-200 dark:tw:divide-slate-800 tw:max-h-72 tw:overflow-y-auto">
                 {selectedTerm.references &&
                   selectedTerm.references.map((ref) => {
                     const match = verseMatches[`${selectedTerm.id}-${ref}`];
                     let badge: React.ReactElement;
                     if (match?.matchResult.found) {
                       badge = (
-                        <span className="tw:inline-flex tw:items-center tw:gap-1 tw:px-2 tw:py-0.5 tw:bg-emerald-500/15 tw:text-emerald-700 dark:tw:text-emerald-400 tw:border tw:border-emerald-500/30 tw:rounded-md tw:text-[10px] tw:font-semibold">
+                        <span className="tw:inline-flex tw:items-center tw:gap-1 tw:px-2 tw:py-0.5 tw:bg-emerald-500/15 tw:text-emerald-700 dark:tw:text-emerald-400 tw:border tw:border-emerald-500/30 tw:rounded-lg tw:text-[10px] tw:font-semibold">
                           <Check size={10} />
                           {tx('found', match.matchResult.matchedText || '')}
                         </span>
                       );
                     } else if (match) {
                       badge = (
-                        <span className="tw:inline-flex tw:items-center tw:gap-1 tw:px-2 tw:py-0.5 tw:bg-destructive/15 tw:text-destructive tw:border tw:border-destructive/30 tw:rounded-md tw:text-[10px] tw:font-semibold">
+                        <span className="tw:inline-flex tw:items-center tw:gap-1 tw:px-2 tw:py-0.5 tw:bg-rose-500/15 tw:text-rose-600 dark:tw:text-rose-400 tw:border tw:border-rose-200 dark:tw:border-rose-900 tw:rounded-lg tw:text-[10px] tw:font-semibold">
                           <CircleX size={10} />
                           {tx('missing')}
                         </span>
                       );
                     } else {
                       badge = (
-                        <span className="tw:px-2 tw:py-0.5 tw:bg-secondary tw:text-muted-foreground tw:rounded-md tw:text-[10px]">
+                        <span className="tw:px-2 tw:py-0.5 tw:bg-slate-100 dark:tw:bg-slate-800 tw:text-slate-500 dark:tw:text-slate-400 tw:rounded-lg tw:text-[10px]">
                           {tx('notScanned')}
                         </span>
                       );
@@ -2102,7 +2100,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
                         <button
                           type="button"
                           onClick={() => handleVerseClick(ref)}
-                          className="tw:inline-flex tw:items-center tw:gap-1 tw:text-xs tw:text-primary tw:font-semibold hover:tw:underline tw:cursor-pointer tw:text-left tw:focus-visible:outline-none tw:focus-visible:ring-1 tw:focus-visible:ring-ring tw:rounded"
+                          className="tw:inline-flex tw:items-center tw:gap-1 tw:text-xs tw:text-indigo-600 dark:tw:text-indigo-400 tw:font-semibold hover:tw:underline tw:cursor-pointer tw:text-left tw:focus-visible:outline-none tw:focus-visible:ring-1 tw:focus-visible:ring-indigo-500/30 tw:rounded"
                         >
                           <ChevronRight size={12} />
                           {ref}
@@ -2115,14 +2113,14 @@ globalThis.webViewComponent = function KeyTermsWebView({
             </div>
 
             {/* Morphology Configuration Panel */}
-            <div className="tw:bg-card tw:rounded-xl tw:border tw:border-border tw:shadow-sm tw:overflow-hidden">
+            <div className="tw:bg-white dark:tw:bg-slate-900 tw:rounded-xl tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:shadow-sm tw:overflow-hidden">
               <button
                 type="button"
                 onClick={() => setMorphPanelOpen((o) => !o)}
                 aria-expanded={morphPanelOpen}
-                className="tw:w-full tw:px-4 tw:py-3 tw:bg-secondary tw:flex tw:items-center tw:justify-between tw:cursor-pointer tw:border-b tw:border-border hover:tw:bg-accent tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring"
+                className="tw:w-full tw:px-4 tw:py-3 tw:bg-slate-100 dark:tw:bg-slate-800 tw:flex tw:items-center tw:justify-between tw:cursor-pointer tw:border-b tw:border-slate-200 dark:tw:border-slate-800 hover:tw:bg-slate-50 dark:hover:tw:bg-slate-800 tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30"
               >
-                <span className="tw:font-bold tw:text-xs tw:text-muted-foreground tw:uppercase tw:tracking-wider">
+                <span className="tw:font-bold tw:text-xs tw:text-slate-500 dark:tw:text-slate-400 tw:uppercase tw:tracking-wider">
                   {tx('morphologyTitle')}
                 </span>
                 {morphPanelOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -2132,19 +2130,19 @@ globalThis.webViewComponent = function KeyTermsWebView({
                 <div className="tw:p-4 tw:space-y-4">
                   <div className="tw:grid tw:grid-cols-1 md:tw:grid-cols-2 tw:gap-4">
                     <div className="tw:space-y-1">
-                      <label className="tw:text-xs tw:font-semibold tw:text-muted-foreground">
+                      <label className="tw:text-xs tw:font-semibold tw:text-slate-500 dark:tw:text-slate-400">
                         {tx('languageName')}
                       </label>
                       <input
                         type="text"
                         value={store.morphologyConfig.languageName || ''}
                         onChange={(e) => handleMorphologyChange({ languageName: e.target.value })}
-                        className="tw:w-full tw:border tw:border-border tw:rounded-lg tw:px-2.5 tw:py-1.5 tw:text-xs tw:bg-background tw:text-foreground tw:focus:outline-none tw:focus:ring-1 tw:focus:ring-primary"
+                        className="tw:w-full tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:rounded-xl tw:px-2.5 tw:py-1.5 tw:text-xs tw:bg-white dark:tw:bg-slate-900 tw:text-slate-900 dark:tw:text-slate-100 tw:focus:outline-none tw:focus:ring-2 tw:focus:ring-indigo-500/30"
                       />
                     </div>
 
                     <div className="tw:space-y-2">
-                      <label className="tw:flex tw:items-center tw:gap-2 tw:text-xs tw:font-semibold tw:text-muted-foreground tw:cursor-pointer">
+                      <label className="tw:flex tw:items-center tw:gap-2 tw:text-xs tw:font-semibold tw:text-slate-500 dark:tw:text-slate-400 tw:cursor-pointer">
                         <input
                           type="checkbox"
                           checked={store.morphologyConfig.enableFuzzyMatch}
@@ -2158,7 +2156,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
 
                       {store.morphologyConfig.enableFuzzyMatch && (
                         <div className="tw:flex tw:items-center tw:gap-3">
-                          <span className="tw:text-xs tw:text-muted-foreground">
+                          <span className="tw:text-xs tw:text-slate-500 dark:tw:text-slate-400">
                             {tx('maxDistance')}
                           </span>
                           <input
@@ -2173,7 +2171,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
                             }
                             className="tw:w-20 tw:cursor-pointer"
                           />
-                          <span className="tw:text-xs tw:font-bold tw:text-foreground tw:min-w-4">
+                          <span className="tw:text-xs tw:font-bold tw:text-slate-900 dark:tw:text-slate-100 tw:min-w-4">
                             {store.morphologyConfig.maxEditDistance || 2}
                           </span>
                         </div>
@@ -2223,7 +2221,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
                       ] as const
                     ).map((column) => (
                       <div key={column.key} className="tw:space-y-2 tw:min-w-0">
-                        <span className="tw:font-bold tw:text-xs tw:text-foreground">
+                        <span className="tw:font-bold tw:text-xs tw:text-slate-900 dark:tw:text-slate-100">
                           {column.title}
                         </span>
 
@@ -2234,7 +2232,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
                             value={column.value}
                             onChange={(e) => column.setValue(e.target.value)}
                             aria-label={column.title}
-                            className="tw:w-16 tw:flex-shrink-0 tw:border tw:border-border tw:rounded-lg tw:px-2 tw:py-1 tw:text-xs tw:bg-background tw:text-foreground tw:focus:outline-none tw:focus:ring-1 tw:focus:ring-primary"
+                            className="tw:w-16 tw:flex-shrink-0 tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:rounded-xl tw:px-2 tw:py-1 tw:text-xs tw:bg-white dark:tw:bg-slate-900 tw:text-slate-900 dark:tw:text-slate-100 tw:focus:outline-none tw:focus:ring-2 tw:focus:ring-indigo-500/30"
                           />
                           <input
                             type="text"
@@ -2242,13 +2240,13 @@ globalThis.webViewComponent = function KeyTermsWebView({
                             value={column.labelValue}
                             onChange={(e) => column.setLabelValue(e.target.value)}
                             aria-label={`${column.title} label`}
-                            className="tw:flex-1 tw:min-w-0 tw:border tw:border-border tw:rounded-lg tw:px-2 tw:py-1 tw:text-xs tw:bg-background tw:text-foreground tw:focus:outline-none tw:focus:ring-1 tw:focus:ring-primary"
+                            className="tw:flex-1 tw:min-w-0 tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:rounded-xl tw:px-2 tw:py-1 tw:text-xs tw:bg-white dark:tw:bg-slate-900 tw:text-slate-900 dark:tw:text-slate-100 tw:focus:outline-none tw:focus:ring-2 tw:focus:ring-indigo-500/30"
                           />
                           <button
                             type="button"
                             onClick={column.add}
                             aria-label={`Add ${column.type}`}
-                            className="tw:inline-flex tw:items-center tw:justify-center tw:px-2.5 tw:py-1 tw:bg-primary tw:text-primary-foreground tw:rounded-lg tw:text-xs hover:tw:opacity-90 tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring"
+                            className="tw:inline-flex tw:items-center tw:justify-center tw:px-2.5 tw:py-1 tw:bg-indigo-600 tw:text-white tw:rounded-xl tw:text-xs hover:tw:bg-indigo-700 tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30"
                           >
                             <Plus size={12} />
                           </button>
@@ -2259,7 +2257,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
                             column.list.map((rule) => (
                               <div
                                 key={rule.id}
-                                className="tw:flex tw:items-center tw:justify-between tw:p-1.5 tw:bg-secondary tw:rounded tw:text-xs tw:gap-2"
+                                className="tw:flex tw:items-center tw:justify-between tw:p-1.5 tw:bg-slate-100 dark:tw:bg-slate-800 tw:rounded tw:text-xs tw:gap-2"
                               >
                                 <label className="tw:flex tw:items-center tw:gap-2 tw:cursor-pointer tw:min-w-0 tw:flex-1">
                                   <input
@@ -2267,10 +2265,10 @@ globalThis.webViewComponent = function KeyTermsWebView({
                                     checked={rule.enabled}
                                     onChange={() => toggleRule(rule.id, column.type)}
                                   />
-                                  <span className="tw:font-bold tw:text-foreground tw:truncate">
+                                  <span className="tw:font-bold tw:text-slate-900 dark:tw:text-slate-100 tw:truncate">
                                     {rule.affix}
                                   </span>
-                                  <span className="tw:text-muted-foreground tw:truncate">
+                                  <span className="tw:text-slate-500 dark:tw:text-slate-400 tw:truncate">
                                     ({rule.label})
                                   </span>
                                 </label>
@@ -2278,7 +2276,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
                                   type="button"
                                   onClick={() => deleteRule(rule.id, column.type)}
                                   aria-label={`Delete ${column.type} rule`}
-                                  className="tw:text-muted-foreground hover:tw:text-destructive tw:flex-shrink-0 tw:focus-visible:outline-none tw:focus-visible:ring-1 tw:focus-visible:ring-ring tw:rounded"
+                                  className="tw:text-slate-500 dark:tw:text-slate-400 hover:tw:text-rose-600 dark:tw:text-rose-400 tw:flex-shrink-0 tw:focus-visible:outline-none tw:focus-visible:ring-1 tw:focus-visible:ring-indigo-500/30 tw:rounded"
                                 >
                                   <Trash2 size={12} />
                                 </button>
@@ -2291,11 +2289,10 @@ globalThis.webViewComponent = function KeyTermsWebView({
                 </div>
               )}
             </div>
-
           </div>
         ) : (
-          <div className="tw:flex-1 tw:flex tw:flex-col tw:items-center tw:justify-center tw:text-muted-foreground tw:text-sm tw:gap-3 tw:p-8 tw:text-center">
-            <div className="tw:p-4 tw:bg-card tw:rounded-full tw:border tw:border-border">
+          <div className="tw:flex-1 tw:flex tw:flex-col tw:items-center tw:justify-center tw:text-slate-500 dark:tw:text-slate-400 tw:text-sm tw:gap-3 tw:p-8 tw:text-center">
+            <div className="tw:p-4 tw:bg-white dark:tw:bg-slate-900 tw:rounded-full tw:border tw:border-slate-200 dark:tw:border-slate-800">
               <BookOpen size={32} />
             </div>
             <p className="tw:max-w-xs">{tx('selectTermPrompt')}</p>

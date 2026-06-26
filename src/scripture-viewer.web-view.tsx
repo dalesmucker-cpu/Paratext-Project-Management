@@ -482,11 +482,49 @@ const renderFootnotes = (node: React.ReactNode): React.ReactNode => {
   return node;
 };
 
+function ToggleSwitch({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label="Alternar"
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={(e) => {
+        e.stopPropagation();
+        onChange(!checked);
+      }}
+      className={`tw:relative tw:inline-flex tw:h-5 tw:w-9 tw:shrink-0 tw:cursor-pointer tw:rounded-full tw:transition-colors tw:duration-200 focus:tw:outline-none focus:tw:ring-2 focus:tw:ring-indigo-100 ${
+        checked ? 'tw:bg-indigo-600' : 'tw:bg-slate-300'
+      }`}
+    >
+      <span
+        className={`tw:pointer-events-none tw:inline-block tw:h-4 tw:w-4 tw:transform tw:rounded-full tw:bg-white tw:shadow-sm tw:ring-0 tw:transition tw:duration-200 tw:mt-0.5 ${
+          checked ? 'tw:translate-x-4' : 'tw:translate-x-0.5'
+        }`}
+      />
+    </button>
+  );
+}
+
 globalThis.webViewComponent = function ScriptureViewerWebView({
   projectId,
   updateWebViewDefinition,
   useWebViewScrollGroupScrRef,
 }: WebViewProps) {
+  const initials = (name: string): string => {
+    if (!name) return '?';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  };
+
   const selectProject = useDialogCallback(
     'platform.selectProject',
     useMemo(
@@ -509,18 +547,26 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   const [selectedChapter, setSelectedChapter] = useState<number>(1);
   const [totalChapters, setTotalChapters] = useState<number>(1);
 
-  const [controlsVisible, setControlsVisible] = useState(() => {
-    const saved = localStorage.getItem('scripture_viewer_controls_visible');
-    return saved !== 'false';
-  });
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
-  const toggleControls = () => {
-    setControlsVisible((v) => {
-      const next = !v;
-      localStorage.setItem('scripture_viewer_controls_visible', String(next));
-      return next;
-    });
-  };
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [menuOpen]);
 
   // Scroll group integration
   const [scrRef, setScrRef, scrollGroupId, setScrollGroupId] = useWebViewScrollGroupScrRef
@@ -603,7 +649,6 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   const [notesDisplayStyle, setNotesDisplayStyle] = useState(() => {
     return localStorage.getItem('scripture_viewer_notes_display_style') || 'highlight';
   });
-  const [showSettings, setShowSettings] = useState(false);
   const [showDraftingSidebar, setShowDraftingSidebar] = useState(() => {
     return localStorage.getItem('scripture_viewer_drafting_sidebar') !== 'false';
   });
@@ -2431,41 +2476,261 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
         <div className="tw:flex-1 tw:flex tw:flex-col tw:bg-white tw:min-w-0 tw:h-full tw:overflow-hidden">
           {/* Toolbar */}
           <div className="tw:px-4 tw:py-2 tw:bg-white tw:border-b tw:border-gray-200 tw:flex tw:flex-wrap tw:items-center tw:justify-between tw:gap-2 tw:shrink-0 tw:shadow-sm">
-            <div className="tw:flex tw:items-center tw:gap-2">
-              <button
-                onClick={toggleControls}
-                className="tw:p-1.5 tw:rounded-md tw:text-slate-600 tw:hover:bg-slate-100 tw:hover:text-slate-800 tw:transition-colors tw:cursor-pointer tw:flex tw:items-center tw:justify-center"
-                title={controlsVisible ? 'Ocultar controles' : 'Mostrar controles'}
-              >
-                <svg
-                  className="tw:w-5 tw:h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  xmlns="http://www.w3.org/2000/svg"
+            <div className="tw:flex tw:items-center tw:gap-4">
+              {/* Hamburger menu with dropdown */}
+              <div className="tw:relative" ref={menuRef}>
+                <button
+                  type="button"
+                  onClick={() => setMenuOpen((v) => !v)}
+                  className={`tw:p-1.5 tw:rounded-md tw:transition-colors tw:cursor-pointer tw:flex tw:items-center tw:justify-center tw:border ${
+                    menuOpen
+                      ? 'tw:bg-indigo-50 tw:text-indigo-600 tw:border-indigo-100'
+                      : 'tw:text-slate-600 tw:hover:bg-slate-100 tw:hover:text-slate-800 tw:border-transparent'
+                  }`}
+                  title="Menú de opciones"
+                  aria-label="Menú de opciones"
+                  aria-expanded={menuOpen}
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M4 6h16M4 12h16M4 18h16"
-                  />
-                </svg>
-              </button>
-              <span className="tw:font-bold tw:text-slate-800 tw:text-base">Lector</span>
-              <button
-                onClick={() => selectProject()}
-                className="tw:px-2 tw:py-1 tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:border-slate-350 tw:rounded tw:text-xs tw:font-semibold tw:text-slate-700 tw:cursor-pointer"
-                title="Cambiar de proyecto o recurso"
-              >
-                Recurso
-              </button>
+                  <svg
+                    className="tw:w-5 tw:h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M4 6h16M4 12h16M4 18h16"
+                    />
+                  </svg>
+                </button>
+
+                {menuOpen && (
+                  <div
+                    className="tw:absolute tw:left-0 tw:top-full tw:mt-1.5 tw:w-80 tw:bg-white tw:border tw:border-slate-200 tw:rounded-xl tw:shadow-2xl tw:overflow-hidden tw:text-sm"
+                    style={{ zIndex: 10000 }}
+                  >
+                    {/* Project section */}
+                    <div className="tw:px-4 tw:pt-3.5 tw:pb-2">
+                      <div className="tw:text-[10px] tw:font-bold tw:uppercase tw:tracking-wider tw:text-slate-400 tw:mb-1.5">
+                        Proyecto
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          selectProject();
+                          setMenuOpen(false);
+                        }}
+                        className="tw:w-full tw:flex tw:items-center tw:gap-2.5 tw:px-2.5 tw:py-2 tw:rounded-lg tw:text-slate-700 tw:hover:bg-slate-50 tw:transition-colors tw:cursor-pointer tw:text-left"
+                      >
+                        <span className="tw:text-base">📚</span>
+                        <span className="tw:flex-1 tw:font-medium">Cambiar Recurso</span>
+                      </button>
+                      <div className="tw:flex tw:items-center tw:gap-2.5 tw:px-2.5 tw:py-2">
+                        <span className="tw:text-base">👤</span>
+                        {currentUser ? (
+                          <button
+                            type="button"
+                            onClick={() => setCurrentUser('')}
+                            className="tw:flex-1 tw:flex tw:items-center tw:justify-between tw:text-left tw:font-medium tw:text-slate-700 tw:cursor-pointer"
+                            title="Haga clic para cambiar de usuario"
+                          >
+                            <span>Usuario</span>
+                            <span className="tw:px-2 tw:py-0.5 tw:bg-slate-100 tw:rounded tw:text-xs tw:font-semibold tw:text-slate-700">
+                              {currentUser}
+                            </span>
+                          </button>
+                        ) : (
+                          <div className="tw:flex-1 tw:flex tw:items-center tw:justify-between tw:gap-2">
+                            <span className="tw:font-medium tw:text-amber-700 tw:text-xs">
+                              ¿Quién eres?
+                            </span>
+                            <select
+                              className="tw:border tw:border-amber-200 tw:bg-amber-50 tw:rounded tw:px-1.5 tw:py-0.5 tw:text-xs focus:tw:outline-none tw:cursor-pointer"
+                              value={currentUser}
+                              onChange={async (e) => {
+                                const val = e.target.value;
+                                if (val) {
+                                  setCurrentUser(val);
+                                  try {
+                                    await papi.commands.sendCommand(
+                                      'paratextProjectManager.setCurrentUser',
+                                      val,
+                                    );
+                                  } catch (e) {
+                                    if (isPapiDisconnectedError(e)) handleCatch(e);
+                                  }
+                                }
+                              }}
+                            >
+                              <option value="">Seleccionar...</option>
+                              {teamMembers.map((m) => (
+                                <option key={m} value={m}>
+                                  {m}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="tw:h-px tw:bg-slate-100" />
+
+                    {/* Display section */}
+                    <div className="tw:px-4 tw:pt-3.5 tw:pb-2">
+                      <div className="tw:text-[10px] tw:font-bold tw:uppercase tw:tracking-wider tw:text-slate-400 tw:mb-1.5">
+                        Pantalla
+                      </div>
+
+                      <div className="tw:flex tw:items-center tw:justify-between tw:px-2.5 tw:py-1.5">
+                        <span className="tw:font-medium tw:text-slate-700">Tamaño de letra</span>
+                        <div className="tw:flex tw:items-center tw:gap-1">
+                          <button
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => setFontSize((f) => Math.max(12, f - 2))}
+                            className="tw:w-7 tw:h-7 tw:flex tw:items-center tw:justify-center tw:bg-slate-100 tw:hover:bg-slate-200 tw:rounded-md tw:text-xs tw:font-bold tw:text-slate-700 tw:cursor-pointer tw:transition-colors"
+                            title="Disminuir tamaño de letra"
+                          >
+                            A-
+                          </button>
+                          <span className="tw:w-10 tw:text-center tw:text-xs tw:font-semibold tw:text-slate-500 tw:tabular-nums">
+                            {fontSize}px
+                          </span>
+                          <button
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => setFontSize((f) => Math.min(30, f + 2))}
+                            className="tw:w-7 tw:h-7 tw:flex tw:items-center tw:justify-center tw:bg-slate-100 tw:hover:bg-slate-200 tw:rounded-md tw:text-xs tw:font-bold tw:text-slate-700 tw:cursor-pointer tw:transition-colors"
+                            title="Aumentar tamaño de letra"
+                          >
+                            A+
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="tw:flex tw:items-center tw:justify-between tw:px-2.5 tw:py-1.5">
+                        <span className="tw:font-medium tw:text-slate-700">🔑 Términos Clave</span>
+                        <ToggleSwitch
+                          checked={keyTermsOverlayEnabled}
+                          onChange={(nextVal) => {
+                            setKeyTermsOverlayEnabled(nextVal);
+                            localStorage.setItem(
+                              'key_terms_overlay_enabled',
+                              nextVal ? 'true' : 'false',
+                            );
+                          }}
+                        />
+                      </div>
+
+                      <div className="tw:flex tw:items-center tw:justify-between tw:px-2.5 tw:py-1.5">
+                        <span className="tw:font-medium tw:text-slate-700">
+                          ✍️ Redactar (Términos)
+                        </span>
+                        <ToggleSwitch
+                          checked={showDraftingSidebar}
+                          onChange={(nextVal) => {
+                            setShowDraftingSidebar(nextVal);
+                            localStorage.setItem(
+                              'scripture_viewer_drafting_sidebar',
+                              String(nextVal),
+                            );
+                          }}
+                        />
+                      </div>
+
+                      {typeof useWebViewScrollGroupScrRef === 'function' && setScrollGroupId && (
+                        <div className="tw:flex tw:items-center tw:justify-between tw:px-2.5 tw:py-1.5">
+                          <span className="tw:font-medium tw:text-slate-700">
+                            Grupo de desplazamiento
+                          </span>
+                          <div className="tw:inline-flex tw:items-center tw:scale-90">
+                            <ScrollGroupSelector
+                              availableScrollGroupIds={[undefined, ...Array(5).keys()]}
+                              onChangeScrollGroupId={setScrollGroupId}
+                              scrollGroupId={scrollGroupId}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="tw:h-px tw:bg-slate-100" />
+
+                    {/* Settings section */}
+                    <div className="tw:px-4 tw:pt-3.5 tw:pb-3.5">
+                      <div className="tw:text-[10px] tw:font-bold tw:uppercase tw:tracking-wider tw:text-slate-400 tw:mb-1.5">
+                        Configuración
+                      </div>
+
+                      <div className="tw:flex tw:items-center tw:justify-between tw:px-2.5 tw:py-1.5">
+                        <span className="tw:font-medium tw:text-slate-700">
+                          Versículo en línea propia
+                        </span>
+                        <ToggleSwitch
+                          checked={versesOnOwnLine}
+                          onChange={(val) => {
+                            setVersesOnOwnLine(val);
+                            localStorage.setItem('scripture_viewer_verses_own_line', String(val));
+                          }}
+                        />
+                      </div>
+
+                      <div className="tw:flex tw:items-center tw:justify-between tw:gap-3 tw:px-2.5 tw:py-1.5">
+                        <span className="tw:font-medium tw:text-slate-700 tw:shrink-0">
+                          Fuente del Texto
+                        </span>
+                        <select
+                          value={fontFamily}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setFontFamily(val);
+                            localStorage.setItem('scripture_viewer_font_family', val);
+                          }}
+                          className="tw:border tw:border-slate-200 tw:bg-slate-50 tw:rounded-lg tw:px-2 tw:py-1.5 tw:text-xs tw:text-slate-700 focus:tw:outline-none focus:tw:border-indigo-400 tw:cursor-pointer tw:w-40"
+                        >
+                          <option value="sans-serif">Predeterminado (Sans)</option>
+                          <option value="serif">Georgia (Serif)</option>
+                          <option value="monospace">Consolas (Monospace)</option>
+                          <option value="outfit">Outfit (Premium)</option>
+                          <option value="inter">Inter (Moderno)</option>
+                        </select>
+                      </div>
+
+                      <div className="tw:flex tw:items-center tw:justify-between tw:gap-3 tw:px-2.5 tw:py-1.5">
+                        <span className="tw:font-medium tw:text-slate-700 tw:shrink-0">
+                          Visualización de Notas
+                        </span>
+                        <select
+                          value={notesDisplayStyle}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setNotesDisplayStyle(val);
+                            localStorage.setItem('scripture_viewer_notes_display_style', val);
+                          }}
+                          className="tw:border tw:border-slate-200 tw:bg-slate-50 tw:rounded-lg tw:px-2 tw:py-1.5 tw:text-xs tw:text-slate-700 focus:tw:outline-none focus:tw:border-indigo-400 tw:cursor-pointer tw:w-40"
+                        >
+                          <option value="highlight">Resaltado Amarillo</option>
+                          <option value="flag">Bandera (🚩)</option>
+                          <option value="pin">Pin (📌)</option>
+                          <option value="dialog">Globo de Diálogo (💬)</option>
+                          <option value="tag">Etiqueta (🏷️)</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <select
                 value={selectedBook}
                 onChange={(e) => {
                   navigateToReference(e.target.value, 1, 1);
                 }}
-                className="tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:text-xs tw:font-semibold tw:text-slate-700 focus:tw:outline-none focus:tw:border-indigo-500"
+                className="tw:border tw:border-gray-300 tw:rounded-md tw:px-2.5 tw:py-1.5 tw:bg-white tw:text-xs tw:font-semibold tw:text-slate-700 focus:tw:outline-none focus:tw:border-indigo-500 focus:tw:ring-2 focus:tw:ring-indigo-100 tw:cursor-pointer tw:transition-all"
               >
                 {books.map((b) => (
                   <option key={b.code} value={b.code}>
@@ -2477,16 +2742,17 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
               {/* Chapter Selection */}
               <div className="tw:flex tw:items-center tw:gap-1">
                 <button
+                  type="button"
                   disabled={selectedChapter <= 1}
                   onClick={() => navigateToReference(selectedBook, selectedChapter - 1, 1)}
-                  className="tw:px-2 tw:py-1 tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:rounded tw:text-xs tw:disabled:opacity-40 tw:cursor-pointer"
+                  className="tw:w-7 tw:h-7 tw:flex tw:items-center tw:justify-center tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:border-slate-200 tw:rounded-md tw:text-xs tw:disabled:opacity-40 tw:cursor-pointer tw:transition-colors"
                 >
                   ◀
                 </button>
                 <select
                   value={selectedChapter}
                   onChange={(e) => navigateToReference(selectedBook, Number(e.target.value), 1)}
-                  className="tw:border tw:border-gray-300 tw:rounded tw:px-2 tw:py-1 tw:bg-white tw:text-xs tw:font-semibold tw:text-slate-700 focus:tw:outline-none focus:tw:border-indigo-500"
+                  className="tw:border tw:border-gray-300 tw:rounded-md tw:px-2.5 tw:py-1.5 tw:bg-white tw:text-xs tw:font-semibold tw:text-slate-700 focus:tw:outline-none focus:tw:border-indigo-500 focus:tw:ring-2 focus:tw:ring-indigo-100 tw:cursor-pointer tw:transition-all"
                 >
                   {Array.from({ length: totalChapters }, (_, idx) => idx + 1).map((ch) => (
                     <option key={ch} value={ch}>
@@ -2495,9 +2761,10 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                   ))}
                 </select>
                 <button
+                  type="button"
                   disabled={selectedChapter >= totalChapters}
                   onClick={() => navigateToReference(selectedBook, selectedChapter + 1, 1)}
-                  className="tw:px-2 tw:py-1 tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:rounded tw:text-xs tw:disabled:opacity-40 tw:cursor-pointer"
+                  className="tw:w-7 tw:h-7 tw:flex tw:items-center tw:justify-center tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:border-slate-200 tw:rounded-md tw:text-xs tw:disabled:opacity-40 tw:cursor-pointer tw:transition-colors"
                 >
                   ▶
                 </button>
@@ -2505,206 +2772,6 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
             </div>
 
             <div className="tw:flex tw:items-center tw:gap-2">
-              {/* User picker */}
-              {controlsVisible &&
-                (currentUser ? (
-                  <span
-                    className="tw:text-xs tw:font-semibold tw:text-slate-700 tw:bg-slate-100 tw:border tw:px-2 tw:py-1 tw:rounded tw:cursor-pointer hover:tw:bg-slate-200 tw:transition-colors tw:flex tw:items-center tw:gap-1"
-                    onClick={() => setCurrentUser('')}
-                    title="Haga clic para cambiar de usuario"
-                  >
-                    Usuario: {currentUser}
-                  </span>
-                ) : (
-                  <div className="tw:flex tw:items-center tw:gap-1 tw:bg-amber-50 tw:border tw:border-amber-200 tw:px-2 tw:py-1 tw:rounded">
-                    <span className="tw:text-amber-800 tw:font-medium tw:text-[10px]">
-                      ¿Quién eres?
-                    </span>
-                    <select
-                      className="tw:border tw:rounded tw:px-1.5 tw:py-0.5 tw:bg-white tw:text-[10px] focus:tw:outline-none"
-                      value={currentUser}
-                      onChange={async (e) => {
-                        const val = e.target.value;
-                        if (val) {
-                          setCurrentUser(val);
-                          try {
-                            await papi.commands.sendCommand(
-                              'paratextProjectManager.setCurrentUser',
-                              val,
-                            );
-                          } catch (e) {
-                            if (isPapiDisconnectedError(e)) handleCatch(e);
-                          }
-                        }
-                      }}
-                    >
-                      <option value="">Seleccionar...</option>
-                      {teamMembers.map((m) => (
-                        <option key={m} value={m}>
-                          {m}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ))}
-
-              {/* Scroll Group Selector */}
-              {controlsVisible &&
-                typeof useWebViewScrollGroupScrRef === 'function' &&
-                setScrollGroupId && (
-                  <div className="tw:inline-flex tw:items-center tw:scale-90">
-                    <ScrollGroupSelector
-                      availableScrollGroupIds={[undefined, ...Array(5).keys()]}
-                      onChangeScrollGroupId={setScrollGroupId}
-                      scrollGroupId={scrollGroupId}
-                    />
-                  </div>
-                )}
-
-              {/* Font size adjustment */}
-              <button
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => setFontSize((f) => Math.max(12, f - 2))}
-                className="tw:px-2.5 tw:py-1 tw:bg-slate-50 tw:hover:bg-slate-100 tw:border tw:rounded tw:text-xs tw:cursor-pointer"
-                title="Disminuir tamaño de letra"
-              >
-                A-
-              </button>
-              <button
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => setFontSize((f) => Math.min(30, f + 2))}
-                className="tw:px-2.5 tw:py-1 tw:bg-slate-50 tw:hover:bg-slate-100 tw:border tw:rounded tw:text-xs tw:cursor-pointer"
-                title="Aumentar tamaño de letra"
-              >
-                A+
-              </button>
-              <button
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  const nextVal = !keyTermsOverlayEnabled;
-                  setKeyTermsOverlayEnabled(nextVal);
-                  localStorage.setItem('key_terms_overlay_enabled', nextVal ? 'true' : 'false');
-                }}
-                className={`tw:px-2.5 tw:py-1 tw:border tw:rounded tw:text-xs tw:cursor-pointer tw:flex tw:items-center tw:gap-1 tw:transition-all ${
-                  keyTermsOverlayEnabled
-                    ? 'tw:bg-indigo-600 tw:hover:bg-indigo-700 tw:border-indigo-600 tw:text-white'
-                    : 'tw:bg-slate-50 tw:hover:bg-slate-100 tw:border-slate-300 tw:text-slate-700'
-                }`}
-                title="Alternar resaltado de Términos Clave"
-              >
-                🔑 Términos Clave
-              </button>
-              <div className="tw:relative">
-                <button
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => setShowSettings(!showSettings)}
-                  className={`tw:px-2.5 tw:py-1 tw:border tw:rounded tw:text-xs tw:cursor-pointer tw:flex tw:items-center tw:gap-1 tw:transition-all ${
-                    showSettings
-                      ? 'tw:bg-slate-700 tw:border-slate-700 tw:text-white'
-                      : 'tw:bg-slate-50 tw:hover:bg-slate-100 tw:border-slate-300 tw:text-slate-700'
-                  }`}
-                  title="Configuración del Lector"
-                >
-                  ⚙️ Configuración
-                </button>
-
-                {showSettings && (
-                  <div
-                    className="tw:absolute tw:right-0 tw:top-full tw:mt-1.5 tw:w-64 tw:border tw:border-slate-200 tw:rounded-xl tw:shadow-xl tw:p-4 tw:space-y-3.5 tw:text-xs"
-                    style={{ backgroundColor: '#ffffff', color: '#1e293b', zIndex: 10000 }}
-                  >
-                    <div
-                      className="tw:font-bold tw:border-b tw:pb-1.5"
-                      style={{ borderColor: '#e2e8f0', color: '#1e293b' }}
-                    >
-                      Configuración de Lectura
-                    </div>
-                    <div className="tw:flex tw:items-center tw:justify-between tw:gap-2">
-                      <span className="tw:font-medium" style={{ color: '#475569' }}>
-                        Versículo en línea propia
-                      </span>
-                      <input
-                        type="checkbox"
-                        checked={versesOnOwnLine}
-                        onChange={(e) => {
-                          const val = e.target.checked;
-                          setVersesOnOwnLine(val);
-                          localStorage.setItem('scripture_viewer_verses_own_line', String(val));
-                        }}
-                        className="tw:cursor-pointer"
-                      />
-                    </div>
-
-                    <div className="tw:flex tw:flex-col tw:gap-1">
-                      <span className="tw:font-medium" style={{ color: '#475569' }}>
-                        Fuente del Texto
-                      </span>
-                      <select
-                        value={fontFamily}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setFontFamily(val);
-                          localStorage.setItem('scripture_viewer_font_family', val);
-                        }}
-                        className="tw:border tw:rounded-lg tw:px-2 tw:py-1.5 focus:tw:outline-none"
-                        style={{
-                          backgroundColor: '#f8fafc',
-                          color: '#334155',
-                          borderColor: '#cbd5e1',
-                        }}
-                      >
-                        <option value="sans-serif">Predeterminado (Sans)</option>
-                        <option value="serif">Georgia (Serif)</option>
-                        <option value="monospace">Consolas (Monospace)</option>
-                        <option value="outfit">Outfit (Premium)</option>
-                        <option value="inter">Inter (Moderno)</option>
-                      </select>
-                    </div>
-
-                    <div className="tw:flex tw:flex-col tw:gap-1">
-                      <span className="tw:font-medium" style={{ color: '#475569' }}>
-                        Visualización de Notas
-                      </span>
-                      <select
-                        value={notesDisplayStyle}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setNotesDisplayStyle(val);
-                          localStorage.setItem('scripture_viewer_notes_display_style', val);
-                        }}
-                        className="tw:border tw:rounded-lg tw:px-2 tw:py-1.5 focus:tw:outline-none"
-                        style={{
-                          backgroundColor: '#f8fafc',
-                          color: '#334155',
-                          borderColor: '#cbd5e1',
-                        }}
-                      >
-                        <option value="highlight">Resaltado Amarillo</option>
-                        <option value="flag">Bandera (🚩)</option>
-                        <option value="pin">Pin (📌)</option>
-                        <option value="dialog">Globo de Diálogo (💬)</option>
-                        <option value="tag">Etiqueta (🏷️)</option>
-                      </select>
-                    </div>
-                  </div>
-                )}
-              </div>
-              <button
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  const nextVal = !showDraftingSidebar;
-                  setShowDraftingSidebar(nextVal);
-                  localStorage.setItem('scripture_viewer_drafting_sidebar', String(nextVal));
-                }}
-                className={`tw:px-2.5 tw:py-1 tw:border tw:rounded tw:text-xs tw:cursor-pointer tw:flex tw:items-center tw:gap-1 tw:transition-all ${
-                  showDraftingSidebar
-                    ? 'tw:bg-violet-600 tw:hover:bg-violet-700 tw:border-violet-600 tw:text-white'
-                    : 'tw:bg-slate-50 tw:hover:bg-slate-100 tw:border-slate-300 tw:text-slate-700'
-                }`}
-                title="Alternar panel lateral de redactado"
-              >
-                ✍️ Redactar (Términos)
-              </button>
               {isEditingVerse && (
                 <button
                   type="button"
@@ -2719,17 +2786,39 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                   }}
                   disabled={!verseEditorCanUndo}
                   title="Deshacer (Ctrl+Z)"
-                  className="tw:px-2.5 tw:py-1 tw:bg-amber-50 tw:hover:bg-amber-100 tw:border tw:border-amber-300 tw:text-amber-800 tw:rounded tw:text-xs tw:font-semibold tw:cursor-pointer disabled:tw:opacity-40 disabled:tw:cursor-not-allowed tw:flex tw:items-center tw:gap-1 tw:transition-all"
+                  className="tw:px-3 tw:py-1.5 tw:bg-amber-50 tw:hover:bg-amber-100 tw:border tw:border-amber-300 tw:text-amber-800 tw:rounded-md tw:text-xs tw:font-semibold tw:cursor-pointer disabled:tw:opacity-40 disabled:tw:cursor-not-allowed tw:flex tw:items-center tw:gap-1 tw:transition-all"
                 >
-                  Deshacer
+                  ↶ Deshacer
                 </button>
               )}
               <button
+                type="button"
                 onClick={() => loadChapter(selectedBook, selectedChapter)}
-                className="tw:px-3 tw:py-1 tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:border-slate-200 tw:text-slate-700 tw:rounded tw:text-xs tw:font-semibold tw:cursor-pointer"
+                className="tw:px-3 tw:py-1.5 tw:bg-primary tw:hover:bg-primary/90 tw:border tw:border-transparent tw:text-primary-foreground tw:rounded-md tw:text-xs tw:font-semibold tw:cursor-pointer tw:transition-colors tw:flex tw:items-center tw:gap-1.5"
+                title="Recargar el capítulo actual"
               >
+                <svg
+                  className="tw:w-3.5 tw:h-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
+                </svg>
                 {loading ? 'Cargando...' : 'Actualizar'}
               </button>
+              <div
+                className="tw:w-8 tw:h-8 tw:rounded-full tw:bg-slate-900 dark:tw:bg-slate-700 tw:text-white tw:grid tw:place-items-center tw:text-xs tw:font-medium tw:shrink-0"
+                title={currentUser || 'Usuario'}
+              >
+                {initials(currentUser)}
+              </div>
             </div>
           </div>
 
@@ -3140,15 +3229,17 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                     prefillTimestamp: Date.now(),
                   } as any,
                 );
-                papi.commands.sendCommand(
-                  'paratextProjectManager.requestPrPrefill',
-                  projectId,
-                  selectedBook,
-                  selectedChapter,
-                  verseNum,
-                  fullVerse,
-                  fullVerse,
-                ).catch(() => {});
+                papi.commands
+                  .sendCommand(
+                    'paratextProjectManager.requestPrPrefill',
+                    projectId,
+                    selectedBook,
+                    selectedChapter,
+                    verseNum,
+                    fullVerse,
+                    fullVerse,
+                  )
+                  .catch(() => {});
               } catch {
                 /* failed to open PR view */
               }

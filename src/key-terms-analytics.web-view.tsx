@@ -525,17 +525,19 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
 
   if (!projectId) {
     return (
-      <div className="tw:flex tw:flex-col tw:items-center tw:justify-center tw:h-full tw:p-8 tw:text-center tw:gap-6 tw:text-sm tw:bg-background tw:text-foreground">
-        <div className="tw:p-4 tw:bg-card tw:rounded-full tw:border tw:border-border tw:text-muted-foreground tw:animate-bounce">
+      <div className="tw:flex tw:flex-col tw:items-center tw:justify-center tw:h-full tw:p-8 tw:text-center tw:gap-6 tw:text-sm tw:bg-slate-100 dark:tw:bg-slate-950 tw:text-slate-900 dark:tw:text-slate-100">
+        <div className="tw:p-4 tw:bg-white dark:tw:bg-slate-900 tw:rounded-full tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:text-slate-500 dark:tw:text-slate-400 tw:animate-bounce">
           <FolderOpen size={48} />
         </div>
         <div className="tw:space-y-2">
           <p className="tw:text-lg tw:font-bold">{tx('noProject')}</p>
-          <p className="tw:text-xs tw:text-muted-foreground tw:max-w-xs">{tx('noProjectDesc')}</p>
+          <p className="tw:text-xs tw:text-slate-500 dark:tw:text-slate-400 tw:max-w-xs">
+            {tx('noProjectDesc')}
+          </p>
         </div>
         <button
           type="button"
-          className="tw:inline-flex tw:items-center tw:gap-2 tw:px-5 tw:py-2.5 tw:bg-primary tw:text-primary-foreground tw:rounded-xl hover:tw:opacity-90 tw:cursor-pointer tw:font-semibold tw:shadow-lg tw:transition-all tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring tw:focus-visible:ring-offset-2 tw:focus-visible:ring-offset-background"
+          className="tw:inline-flex tw:items-center tw:gap-2 tw:px-5 tw:py-2.5 tw:bg-indigo-600 tw:text-white tw:rounded-xl hover:tw:bg-indigo-700 tw:cursor-pointer tw:font-semibold tw:shadow-sm tw:transition-colors tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30 tw:focus-visible:ring-offset-2 tw:focus-visible:ring-offset-white dark:tw:focus-visible:ring-offset-slate-900"
           onClick={() => selectProject()}
         >
           {tx('selectProject')}
@@ -546,9 +548,12 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
 
   if (loading) {
     return (
-      <div className="tw:flex tw:flex-col tw:items-center tw:justify-center tw:h-full tw:bg-background tw:text-foreground tw:gap-4">
-        <RefreshCw size={36} className="tw:text-primary tw:animate-spin" />
-        <span className="tw:text-xs tw:text-muted-foreground tw:font-medium">
+      <div className="tw:flex tw:flex-col tw:items-center tw:justify-center tw:h-full tw:bg-slate-100 dark:tw:bg-slate-950 tw:text-slate-900 dark:tw:text-slate-100 tw:gap-4">
+        <RefreshCw
+          size={36}
+          className="tw:text-indigo-600 dark:tw:text-indigo-400 tw:animate-spin"
+        />
+        <span className="tw:text-xs tw:text-slate-500 dark:tw:text-slate-400 tw:font-medium">
           {tx('loadingMetrics')}
         </span>
       </div>
@@ -556,18 +561,18 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
   }
 
   return (
-    <div className="tw:flex tw:flex-col tw:h-full tw:bg-background tw:text-foreground tw:font-sans">
+    <div className="tw:flex tw:flex-col tw:h-full tw:bg-slate-100 dark:tw:bg-slate-950 tw:text-slate-900 dark:tw:text-slate-100 tw:font-sans">
       {/* Top Header */}
-      <div className="tw:px-6 tw:py-4 tw:bg-card tw:border-b tw:border-border tw:flex tw:flex-col md:tw:flex-row tw:items-start md:tw:items-center tw:gap-4 tw:justify-between tw:flex-shrink-0">
+      <div className="tw:px-6 tw:py-4 tw:bg-white dark:tw:bg-slate-900 tw:border-b tw:border-slate-200 dark:tw:border-slate-800 tw:flex tw:flex-col md:tw:flex-row tw:items-start md:tw:items-center tw:gap-4 tw:justify-between tw:flex-shrink-0">
         <div className="tw:flex tw:items-center tw:gap-3 tw:min-w-0">
-          <div className="tw:bg-gradient-to-br tw:from-indigo-500 tw:to-violet-600 tw:p-2 tw:rounded-xl tw:shadow-lg tw:shadow-indigo-500/20 tw:flex-shrink-0">
-            <PieChart size={20} className="tw:text-white" />
+          <div className="tw:bg-indigo-50 tw:p-2 tw:rounded-xl tw:ring-1 tw:ring-indigo-200 dark:tw:bg-indigo-900/30 dark:tw:ring-indigo-800 tw:flex-shrink-0">
+            <PieChart size={20} className="tw:text-indigo-600 dark:tw:text-indigo-400" />
           </div>
           <div className="tw:flex tw:flex-col tw:min-w-0">
-            <span className="tw:text-lg tw:font-extrabold tw:bg-gradient-to-r tw:from-indigo-500 tw:via-violet-500 tw:to-pink-500 tw:bg-clip-text tw:text-transparent tw:truncate">
+            <h1 className="tw:text-[20px] tw:font-semibold tw:tracking-tight tw:text-slate-900 dark:tw:text-slate-100 tw:truncate">
               {tx('title')}
-            </span>
-            <span className="tw:text-[10px] tw:text-muted-foreground tw:font-semibold tw:uppercase tw:tracking-wider">
+            </h1>
+            <span className="tw:text-xs tw:text-slate-500 dark:tw:text-slate-400 tw:font-medium">
               {tx('consistencyCheck')}
             </span>
           </div>
@@ -575,13 +580,13 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
             <div
               role="status"
               aria-live="polite"
-              className="tw:flex tw:items-center tw:gap-1.5 tw:ml-2 tw:bg-primary/10 tw:border tw:border-primary/30 tw:rounded-full tw:py-0.5 tw:px-2.5 tw:flex-shrink-0"
+              className="tw:flex tw:items-center tw:gap-1.5 tw:ml-2 tw:bg-indigo-50 dark:tw:bg-indigo-900/30 tw:border tw:border-indigo-200 dark:tw:border-indigo-800 tw:rounded-full tw:py-0.5 tw:px-2.5 tw:flex-shrink-0"
             >
               <span className="tw:relative tw:flex tw:h-2 tw:w-2">
-                <span className="tw:animate-ping tw:absolute tw:inline-flex tw:h-full tw:w-full tw:rounded-full tw:bg-primary tw:opacity-75" />
-                <span className="tw:relative tw:inline-flex tw:rounded-full tw:h-2 tw:w-2 tw:bg-primary" />
+                <span className="tw:animate-ping tw:absolute tw:inline-flex tw:h-full tw:w-full tw:rounded-full tw:bg-indigo-600 tw:opacity-75" />
+                <span className="tw:relative tw:inline-flex tw:rounded-full tw:h-2 tw:w-2 tw:bg-indigo-600" />
               </span>
-              <span className="tw:text-[9px] tw:text-primary tw:font-bold tw:uppercase tw:tracking-wider">
+              <span className="tw:text-[9px] tw:text-indigo-600 dark:tw:text-indigo-400 tw:font-bold tw:uppercase tw:tracking-wider">
                 {tx('scanning')}
               </span>
             </div>
@@ -590,8 +595,8 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
 
         <div className="tw:flex tw:items-center tw:gap-2 tw:flex-wrap">
           {/* Book Dropdown Selector */}
-          <label className="tw:flex tw:items-center tw:gap-2 tw:bg-card tw:border tw:border-border tw:rounded-xl tw:px-3 tw:py-1.5">
-            <span className="tw:text-[10px] tw:text-muted-foreground tw:font-bold tw:uppercase tw:tracking-wide">
+          <label className="tw:flex tw:items-center tw:gap-2 tw:bg-white dark:tw:bg-slate-900 tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:rounded-xl tw:px-3 tw:py-1.5">
+            <span className="tw:text-[10px] tw:text-slate-500 dark:tw:text-slate-400 tw:font-bold tw:uppercase tw:tracking-wide">
               {tx('book')}
             </span>
             <select
@@ -600,10 +605,14 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
                 setSelectedBook(e.target.value as BibleBook);
                 setSelectedChapter(1);
               }}
-              className="tw:text-xs tw:font-bold tw:bg-transparent tw:text-primary tw:outline-none tw:border-none tw:cursor-pointer tw:pr-2"
+              className="tw:text-xs tw:font-bold tw:bg-transparent tw:text-indigo-600 dark:tw:text-indigo-400 tw:outline-none tw:border-none tw:cursor-pointer tw:pr-2"
             >
               {booksWithTerms.map((b) => (
-                <option key={b} value={b} className="tw:bg-card tw:text-foreground tw:font-bold">
+                <option
+                  key={b}
+                  value={b}
+                  className="tw:bg-white dark:tw:bg-slate-900 tw:text-slate-900 dark:tw:text-slate-100 tw:font-bold"
+                >
                   {b}
                 </option>
               ))}
@@ -614,7 +623,7 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
             type="button"
             onClick={scanBook}
             disabled={scanning}
-            className="tw:inline-flex tw:items-center tw:gap-2 tw:px-3 tw:py-2 tw:bg-card hover:tw:bg-accent tw:border tw:border-border disabled:tw:opacity-50 tw:rounded-xl tw:text-xs tw:font-bold tw:cursor-pointer tw:transition-colors tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring tw:focus-visible:ring-offset-2 tw:focus-visible:ring-offset-background"
+            className="tw:inline-flex tw:items-center tw:gap-2 tw:px-3 tw:py-2 tw:bg-white dark:tw:bg-slate-900 hover:tw:bg-slate-50 dark:tw:hover:tw:bg-slate-800 tw:border tw:border-slate-200 dark:tw:border-slate-800 disabled:tw:opacity-50 tw:rounded-xl tw:text-xs tw:font-bold tw:cursor-pointer tw:transition-colors tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30 tw:focus-visible:ring-offset-2 tw:focus-visible:ring-offset-white dark:tw:focus-visible:ring-offset-slate-900"
           >
             <RefreshCw size={14} className={scanning ? 'tw:animate-spin' : ''} />
             <span className="tw:hidden sm:tw:inline">{tx('refreshScan')}</span>
@@ -625,7 +634,7 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
             onClick={toggleLang}
             title={tx('toggleLanguage')}
             aria-label={tx('toggleLanguage')}
-            className="tw:inline-flex tw:items-center tw:gap-1.5 tw:px-2.5 tw:py-2 tw:bg-card hover:tw:bg-accent tw:border tw:border-border tw:rounded-xl tw:text-xs tw:font-bold tw:cursor-pointer tw:transition-colors tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring tw:focus-visible:ring-offset-2 tw:focus-visible:ring-offset-background"
+            className="tw:inline-flex tw:items-center tw:gap-1.5 tw:px-2.5 tw:py-2 tw:bg-white dark:tw:bg-slate-900 hover:tw:bg-slate-50 dark:tw:hover:tw:bg-slate-800 tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:rounded-xl tw:text-xs tw:font-bold tw:cursor-pointer tw:transition-colors tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30 tw:focus-visible:ring-offset-2 tw:focus-visible:ring-offset-white dark:tw:focus-visible:ring-offset-slate-900"
           >
             <Languages size={14} />
             <span className="tw:uppercase">{lang}</span>
@@ -634,7 +643,7 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
           <button
             type="button"
             onClick={() => selectProject()}
-            className="tw:inline-flex tw:items-center tw:gap-2 tw:px-3 tw:py-2 tw:bg-primary/10 hover:tw:bg-primary/20 tw:text-primary tw:border tw:border-primary/25 tw:rounded-xl tw:text-xs tw:font-bold tw:cursor-pointer tw:transition-colors tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring tw:focus-visible:ring-offset-2 tw:focus-visible:ring-offset-background"
+            className="tw:inline-flex tw:items-center tw:gap-2 tw:px-3 tw:py-2 tw:bg-indigo-50 dark:tw:bg-indigo-900/30 hover:tw:bg-indigo-100 dark:tw:hover:tw:bg-indigo-900/40 tw:text-indigo-600 dark:tw:text-indigo-400 tw:border tw:border-indigo-200 dark:tw:border-indigo-800 tw:rounded-xl tw:text-xs tw:font-bold tw:cursor-pointer tw:transition-colors tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30 tw:focus-visible:ring-offset-2 tw:focus-visible:ring-offset-white dark:tw:focus-visible:ring-offset-slate-900"
           >
             {tx('changeProject')}
           </button>
@@ -644,7 +653,7 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
       {error && (
         <div
           role="alert"
-          className="tw:bg-destructive/10 tw:border-b tw:border-destructive/30 tw:px-6 tw:py-2.5 tw:text-destructive tw:text-xs tw:font-semibold tw:flex tw:justify-between tw:items-center"
+          className="tw:bg-rose-50 dark:tw:bg-rose-950/40 tw:border-b tw:border-rose-200 dark:tw:border-rose-900 tw:px-6 tw:py-2.5 tw:text-rose-600 dark:tw:text-rose-400 tw:text-xs tw:font-semibold tw:flex tw:justify-between tw:items-center"
         >
           <div className="tw:flex tw:items-center tw:gap-2">
             <AlertTriangle size={14} />
@@ -654,7 +663,7 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
             <button
               type="button"
               onClick={() => window.location.reload()}
-              className="tw:bg-destructive tw:hover:opacity-90 tw:text-white tw:px-3 tw:py-1 tw:rounded tw:font-semibold tw:cursor-pointer tw:transition-opacity"
+              className="tw:bg-rose-600 hover:tw:bg-rose-700 tw:text-white tw:px-3 tw:py-1 tw:rounded tw:font-semibold tw:cursor-pointer tw:transition-colors"
               title="Recargar la vista para reestablecer la conexión con Paratext"
             >
               Reconectar
@@ -663,7 +672,7 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
             <button
               type="button"
               onClick={loadData}
-              className="tw:text-destructive tw:underline hover:tw:opacity-80 tw:ml-2 tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring tw:rounded"
+              className="tw:text-rose-600 dark:tw:text-rose-400 tw:underline hover:tw:text-rose-700 tw:ml-2 tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30 tw:rounded"
             >
               {tx('retry')}
             </button>
@@ -674,41 +683,40 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
       {/* Main Workspace */}
       <div className="tw:flex-1 tw:flex tw:flex-col lg:tw:flex-row tw:overflow-y-auto lg:tw:overflow-hidden">
         {/* Left Side: Stats and problematic terms */}
-        <div className="tw:w-full lg:tw:w-80 tw:border-b lg:tw:border-b-0 lg:tw:border-r tw:border-border tw:bg-card tw:p-5 tw:flex tw:flex-col sm:tw:grid sm:tw:grid-cols-2 lg:tw:flex lg:tw:flex-col tw:gap-5 tw:overflow-y-auto lg:tw:max-h-full tw:flex-shrink-0">
+        <div className="tw:w-full lg:tw:w-80 tw:border-b lg:tw:border-b-0 lg:tw:border-r tw:border-slate-200 dark:tw:border-slate-800 tw:bg-white dark:tw:bg-slate-900 tw:p-5 tw:flex tw:flex-col sm:tw:grid sm:tw:grid-cols-2 lg:tw:flex lg:tw:flex-col tw:gap-5 tw:overflow-y-auto lg:tw:max-h-full tw:flex-shrink-0">
           {/* Stats Card */}
-          <div className="tw:relative tw:bg-gradient-to-br tw:from-indigo-500 tw:to-violet-700 tw:p-5 tw:rounded-2xl tw:text-white tw:shadow-lg tw:shadow-indigo-500/20 tw:space-y-4 tw:overflow-hidden">
-            <div className="tw:absolute tw:top-0 tw:right-0 tw:-mt-6 tw:-mr-6 tw:w-24 tw:h-24 tw:bg-white/5 tw:rounded-full tw:blur-xl tw:pointer-events-none" />
+          <div className="tw:relative tw:bg-white dark:tw:bg-slate-900 tw:p-5 tw:rounded-2xl tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:shadow-sm tw:space-y-4 tw:overflow-hidden">
             <div className="tw:flex tw:items-center tw:justify-between tw:relative">
-              <h3 className="tw:text-[10px] tw:font-black tw:uppercase tw:tracking-widest tw:text-indigo-100">
+              <h3 className="tw:text-[10px] tw:font-bold tw:uppercase tw:tracking-wider tw:text-slate-500 dark:tw:text-slate-400">
                 {tx('progressIn', selectedBook)}
               </h3>
-              <Trophy size={16} className="tw:text-indigo-100 tw:animate-pulse" />
+              <Trophy size={16} className="tw:text-amber-500" />
             </div>
 
             <div className="tw:flex tw:items-baseline tw:gap-1 tw:relative">
               <span className="tw:text-5xl tw:font-black tw:tracking-tighter">
                 {bookStats.percent}%
               </span>
-              <span className="tw:text-xs tw:text-indigo-100 tw:font-semibold">
+              <span className="tw:text-xs tw:text-slate-500 dark:tw:text-slate-400 tw:font-semibold">
                 {tx('verified')}
               </span>
             </div>
 
-            <div className="tw:w-full tw:h-2 tw:bg-black/30 tw:rounded-full tw:overflow-hidden tw:relative">
+            <div className="tw:w-full tw:h-2 tw:bg-slate-200 dark:tw:bg-slate-700 tw:rounded-full tw:overflow-hidden tw:relative">
               <div
-                className="tw:h-full tw:bg-gradient-to-r tw:from-emerald-400 tw:to-teal-300 tw:transition-all tw:duration-500"
+                className="tw:h-full tw:bg-emerald-500 tw:transition-all tw:duration-500"
                 style={{ width: `${bookStats.percent}%` }}
               />
             </div>
 
-            <div className="tw:text-[11px] tw:text-indigo-50 tw:font-medium tw:leading-relaxed tw:relative">
+            <div className="tw:text-[11px] tw:text-slate-600 dark:tw:text-slate-400 tw:font-medium tw:leading-relaxed tw:relative">
               {tx('foundOf', bookStats.foundCount, bookStats.expectedCount)}
             </div>
           </div>
 
           {/* Export Action Card */}
-          <div className="tw:bg-card tw:p-4 tw:rounded-2xl tw:border tw:border-border tw:space-y-3">
-            <h4 className="tw:font-bold tw:text-[10px] tw:text-muted-foreground tw:uppercase tw:tracking-wider tw:flex tw:items-center tw:gap-1.5">
+          <div className="tw:bg-white dark:tw:bg-slate-900 tw:p-4 tw:rounded-2xl tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:space-y-3">
+            <h4 className="tw:font-bold tw:text-[10px] tw:text-slate-500 dark:tw:text-slate-400 tw:uppercase tw:tracking-wider tw:flex tw:items-center tw:gap-1.5">
               <Download size={12} />
               {tx('exportReports')}
             </h4>
@@ -716,17 +724,17 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
               <button
                 type="button"
                 onClick={handleExportCSV}
-                className="tw:flex-1 tw:inline-flex tw:items-center tw:justify-center tw:gap-1 tw:py-2 tw:bg-secondary hover:tw:bg-accent tw:border tw:border-border tw:rounded-xl tw:text-[10px] tw:font-bold tw:shadow-sm tw:cursor-pointer tw:transition-colors tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring"
+                className="tw:flex-1 tw:inline-flex tw:items-center tw:justify-center tw:gap-1 tw:py-2 tw:bg-slate-100 dark:tw:bg-slate-800 hover:tw:bg-slate-50 dark:tw:hover:tw:bg-slate-800 tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:rounded-xl tw:text-[10px] tw:font-bold tw:shadow-sm tw:cursor-pointer tw:transition-colors tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30"
               >
-                <FileSpreadsheet size={12} className="tw:text-muted-foreground" />
+                <FileSpreadsheet size={12} className="tw:text-slate-500 dark:tw:text-slate-400" />
                 CSV
               </button>
               <button
                 type="button"
                 onClick={handleExportHTML}
-                className="tw:flex-1 tw:inline-flex tw:items-center tw:justify-center tw:gap-1 tw:py-2 tw:bg-secondary hover:tw:bg-accent tw:border tw:border-border tw:rounded-xl tw:text-[10px] tw:font-bold tw:shadow-sm tw:cursor-pointer tw:transition-colors tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring"
+                className="tw:flex-1 tw:inline-flex tw:items-center tw:justify-center tw:gap-1 tw:py-2 tw:bg-slate-100 dark:tw:bg-slate-800 hover:tw:bg-slate-50 dark:tw:hover:tw:bg-slate-800 tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:rounded-xl tw:text-[10px] tw:font-bold tw:shadow-sm tw:cursor-pointer tw:transition-colors tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30"
               >
-                <FileText size={12} className="tw:text-muted-foreground" />
+                <FileText size={12} className="tw:text-slate-500 dark:tw:text-slate-400" />
                 HTML
               </button>
             </div>
@@ -734,8 +742,8 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
 
           {/* Problematic terms list */}
           <div className="tw:space-y-3 sm:tw:col-span-2 lg:tw:col-span-1 tw:flex-1 tw:flex tw:flex-col tw:overflow-hidden tw:min-h-0">
-            <h4 className="tw:font-bold tw:text-[10px] tw:text-muted-foreground tw:uppercase tw:tracking-wider tw:flex tw:items-center tw:gap-1.5">
-              <AlertTriangle size={12} className="tw:text-destructive" />
+            <h4 className="tw:font-bold tw:text-[10px] tw:text-slate-500 dark:tw:text-slate-400 tw:uppercase tw:tracking-wider tw:flex tw:items-center tw:gap-1.5">
+              <AlertTriangle size={12} className="tw:text-rose-600 dark:tw:text-rose-400" />
               {tx('mostMissing')}
             </h4>
             <div className="tw:space-y-2 tw:overflow-y-auto tw:flex-1 tw:pr-1">
@@ -744,23 +752,23 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
                   type="button"
                   key={term.id}
                   onClick={() => handleOpenKeyTerms(term.id)}
-                  className="tw:w-full tw:text-left tw:p-3 tw:border tw:border-border tw:bg-card hover:tw:bg-accent tw:rounded-xl tw:cursor-pointer tw:transition-colors tw:flex tw:items-center tw:justify-between tw:gap-3 group tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring"
+                  className="tw:w-full tw:text-left tw:p-3 tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:bg-white dark:tw:bg-slate-900 hover:tw:bg-slate-50 dark:tw:hover:tw:bg-slate-800 tw:rounded-xl tw:cursor-pointer tw:transition-colors tw:flex tw:items-center tw:justify-between tw:gap-3 group tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30"
                 >
                   <div className="tw:space-y-1 tw:min-w-0">
-                    <div className="tw:font-bold tw:text-xs tw:text-foreground group-hover:tw:text-primary tw:transition-colors tw:truncate">
+                    <div className="tw:font-bold tw:text-xs tw:text-slate-900 dark:tw:text-slate-100 group-hover:tw:text-indigo-600 dark:tw:text-indigo-400 tw:transition-colors tw:truncate">
                       {term.gloss}
                     </div>
-                    <div className="tw:text-[10px] tw:text-muted-foreground tw:font-serif tw:italic tw:truncate">
+                    <div className="tw:text-[10px] tw:text-slate-500 dark:tw:text-slate-400 tw:font-serif tw:italic tw:truncate">
                       {term.lemma}
                     </div>
                   </div>
-                  <span className="tw:px-2 tw:py-0.5 tw:bg-destructive/10 tw:text-destructive tw:border tw:border-destructive/20 tw:rounded-full tw:text-[9px] tw:font-bold tw:flex-shrink-0">
+                  <span className="tw:px-2 tw:py-0.5 tw:bg-rose-50 dark:tw:bg-rose-950/40 tw:text-rose-600 dark:tw:text-rose-400 tw:border tw:border-rose-200 dark:tw:border-rose-900/50 tw:rounded-full tw:text-[9px] tw:font-bold tw:flex-shrink-0">
                     -{missingCount}
                   </span>
                 </button>
               ))}
               {problematicTerms.length === 0 && (
-                <div className="tw:text-xs tw:text-muted-foreground tw:text-center tw:py-8 tw:italic">
+                <div className="tw:text-xs tw:text-slate-500 dark:tw:text-slate-400 tw:text-center tw:py-8 tw:italic">
                   {tx('noMissingInBook')}
                 </div>
               )}
@@ -772,12 +780,12 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
         <div className="tw:flex-1 tw:p-4 sm:tw:p-6 tw:overflow-y-auto tw:space-y-6 tw:min-w-0">
           <div className="tw:space-y-3">
             <div className="tw:flex tw:items-center tw:justify-between tw:flex-wrap tw:gap-2">
-              <h3 className="tw:font-bold tw:text-[10px] tw:text-muted-foreground tw:uppercase tw:tracking-wider tw:flex tw:items-center tw:gap-1.5">
+              <h3 className="tw:font-bold tw:text-[10px] tw:text-slate-500 dark:tw:text-slate-400 tw:uppercase tw:tracking-wider tw:flex tw:items-center tw:gap-1.5">
                 <Layers size={12} />
                 {tx('chapterHeatmap')}
               </h3>
               {/* Heatmap Legend */}
-              <div className="tw:flex tw:items-center tw:gap-3 tw:text-[9px] tw:text-muted-foreground tw:font-semibold tw:uppercase tw:tracking-wide">
+              <div className="tw:flex tw:items-center tw:gap-3 tw:text-[9px] tw:text-slate-500 dark:tw:text-slate-400 tw:font-semibold tw:uppercase tw:tracking-wide">
                 <span className="tw:flex tw:items-center tw:gap-1.5">
                   <span className="tw:w-2.5 tw:h-2.5 tw:rounded tw:bg-emerald-500" />
                   {tx('legendComplete')}
@@ -787,7 +795,7 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
                   {tx('legendPartial')}
                 </span>
                 <span className="tw:flex tw:items-center tw:gap-1.5">
-                  <span className="tw:w-2.5 tw:h-2.5 tw:rounded tw:bg-destructive" />
+                  <span className="tw:w-2.5 tw:h-2.5 tw:rounded tw:bg-rose-600" />
                   {tx('legendMissing')}
                 </span>
               </div>
@@ -802,7 +810,7 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
                 const isSelected = selectedChapter === chap;
 
                 let cardClass =
-                  'tw:bg-card tw:border-border tw:text-muted-foreground hover:tw:bg-accent';
+                  'tw:bg-white dark:tw:bg-slate-900 tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:text-slate-500 dark:tw:text-slate-400 hover:tw:bg-slate-50 dark:tw:hover:tw:bg-slate-800';
                 if (expected > 0) {
                   if (found === expected) {
                     cardClass =
@@ -812,7 +820,7 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
                       'tw:bg-amber-500/15 tw:border-amber-500/40 tw:text-amber-700 dark:tw:text-amber-400 hover:tw:bg-amber-500/25';
                   } else {
                     cardClass =
-                      'tw:bg-destructive/15 tw:border-destructive/40 tw:text-destructive hover:tw:bg-destructive/25';
+                      'tw:bg-rose-500/15 tw:border-rose-500/40 tw:text-rose-600 dark:tw:text-rose-400 hover:tw:bg-rose-500/25';
                   }
                 }
 
@@ -823,8 +831,8 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
                     onClick={() => setSelectedChapter(chap)}
                     aria-pressed={isSelected}
                     aria-label={tx('chapterLabel', chap, found, expected)}
-                    className={`tw:p-3 tw:sm:p-3.5 tw:rounded-2xl tw:border tw:text-center tw:transition-all tw:cursor-pointer tw:flex tw:flex-col tw:items-center tw:gap-1 tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring ${cardClass} ${
-                      isSelected ? 'tw:ring-2 tw:ring-primary tw:border-primary' : ''
+                    className={`tw:p-3 sm:tw:p-3.5 tw:rounded-2xl tw:border tw:text-center tw:transition-all tw:cursor-pointer tw:flex tw:flex-col tw:items-center tw:gap-1 tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30 ${cardClass} ${
+                      isSelected ? 'tw:ring-2 tw:ring-indigo-500 tw:border-indigo-500' : ''
                     }`}
                   >
                     <span className="tw:text-lg tw:font-black tw:tracking-tight">{chap}</span>
@@ -839,17 +847,17 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
 
           {/* Chapter detail card */}
           {selectedChapter !== null && chapterMetrics[selectedChapter] && (
-            <div className="tw:bg-card tw:p-4 sm:tw:p-6 tw:rounded-2xl tw:border tw:border-border tw:shadow-sm tw:space-y-4">
-              <div className="tw:flex tw:items-center tw:justify-between tw:flex-wrap tw:gap-2 tw:pb-3 tw:border-b tw:border-border">
+            <div className="tw:bg-white dark:tw:bg-slate-900 tw:p-4 sm:tw:p-6 tw:rounded-2xl tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:shadow-sm tw:space-y-4 tw:overflow-hidden">
+              <div className="tw:flex tw:items-center tw:justify-between tw:flex-wrap tw:gap-2 tw:pb-3 tw:border-b tw:border-slate-200 dark:tw:border-slate-800">
                 <div className="tw:flex tw:items-center tw:gap-2 tw:flex-wrap">
-                  <h3 className="tw:font-extrabold tw:text-sm tw:text-foreground tw:uppercase">
+                  <h3 className="tw:font-extrabold tw:text-sm tw:text-slate-900 dark:tw:text-slate-100 tw:uppercase">
                     {tx('chapterDetails', selectedChapter)}
                   </h3>
-                  <span className="tw:px-2 tw:py-0.5 tw:bg-secondary tw:border tw:border-border tw:rounded-full tw:text-[9px] tw:font-bold tw:text-muted-foreground">
+                  <span className="tw:px-2 tw:py-0.5 tw:bg-slate-100 dark:tw:bg-slate-800 tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:rounded-full tw:text-[9px] tw:font-bold tw:text-slate-500 dark:tw:text-slate-400">
                     {selectedBook} {selectedChapter}
                   </span>
                 </div>
-                <span className="tw:text-xs tw:text-muted-foreground tw:font-medium">
+                <span className="tw:text-xs tw:text-slate-500 dark:tw:text-slate-400 tw:font-medium">
                   {tx(
                     'termsFoundOf',
                     selectedChapterMatches.filter((m) => m.found).length,
@@ -862,7 +870,7 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
               <div className="tw:overflow-x-auto">
                 <table className="tw:w-full tw:text-left tw:border-collapse tw:min-w-[600px]">
                   <thead>
-                    <tr className="tw:border-b tw:border-border tw:text-[10px] tw:text-muted-foreground tw:uppercase tw:tracking-wider">
+                    <tr className="tw:border-b tw:border-slate-200 dark:tw:border-slate-800 tw:text-[10px] tw:text-slate-500 dark:tw:text-slate-400 tw:uppercase tw:tracking-wider">
                       <th className="tw:pb-3 tw:font-bold">{tx('colGloss')}</th>
                       <th className="tw:pb-3 tw:font-bold">{tx('colLemma')}</th>
                       <th className="tw:pb-3 tw:font-bold">{tx('colRenderings')}</th>
@@ -870,33 +878,38 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
                       <th className="tw:pb-3 tw:font-bold">{tx('colActions')}</th>
                     </tr>
                   </thead>
-                  <tbody className="tw:divide-y tw:divide-border tw:text-xs">
+                  <tbody className="tw:divide-y tw:divide-slate-200 dark:tw:divide-slate-800 tw:text-xs">
                     {selectedChapterMatches.map((m) => (
-                      <tr key={m.termId} className="hover:tw:bg-accent tw:transition-colors">
-                        <td className="tw:py-3.5 tw:font-bold tw:text-foreground">{m.gloss}</td>
-                        <td className="tw:py-3.5 tw:font-serif tw:text-primary tw:text-xs">
+                      <tr
+                        key={m.termId}
+                        className="hover:tw:bg-slate-50 dark:tw:hover:tw:bg-slate-800 tw:transition-colors"
+                      >
+                        <td className="tw:py-3.5 tw:font-bold tw:text-slate-900 dark:tw:text-slate-100">
+                          {m.gloss}
+                        </td>
+                        <td className="tw:py-3.5 tw:font-serif tw:text-indigo-600 dark:tw:text-indigo-400 tw:text-xs">
                           {m.lemma}{' '}
                           {m.transliteration ? (
-                            <span className="tw:text-muted-foreground tw:text-[10px] tw:font-sans">
+                            <span className="tw:text-slate-500 dark:tw:text-slate-400 tw:text-[10px] tw:font-sans">
                               ({m.transliteration})
                             </span>
                           ) : null}
                         </td>
-                        <td className="tw:py-3.5 tw:text-muted-foreground">
+                        <td className="tw:py-3.5 tw:text-slate-500 dark:tw:text-slate-400">
                           {m.expectedRenderings.join(', ') || (
-                            <span className="tw:text-muted-foreground tw:italic">
+                            <span className="tw:text-slate-500 dark:tw:text-slate-400 tw:italic">
                               {tx('noneApproved')}
                             </span>
                           )}
                         </td>
                         <td className="tw:py-3.5">
                           {m.found ? (
-                            <span className="tw:inline-flex tw:items-center tw:gap-1.5 tw:bg-emerald-500/15 tw:text-emerald-700 dark:tw:text-emerald-400 tw:px-2.5 tw:py-1 tw:border tw:border-emerald-500/30 tw:rounded-lg tw:font-bold tw:text-[10px]">
+                            <span className="tw:inline-flex tw:items-center tw:gap-1.5 tw:bg-emerald-500/15 tw:text-emerald-700 dark:tw:text-emerald-400 tw:px-2.5 tw:py-1 tw:border tw:border-emerald-500/30 tw:rounded-xl tw:font-bold tw:text-[10px]">
                               <CheckCircle2 size={12} />
                               {m.matchedText}
                             </span>
                           ) : (
-                            <span className="tw:inline-flex tw:items-center tw:gap-1.5 tw:bg-destructive/15 tw:text-destructive tw:px-2.5 tw:py-1 tw:border tw:border-destructive/30 tw:rounded-lg tw:font-bold tw:text-[10px]">
+                            <span className="tw:inline-flex tw:items-center tw:gap-1.5 tw:bg-rose-500/15 tw:text-rose-600 dark:tw:text-rose-400 tw:px-2.5 tw:py-1 tw:border tw:border-rose-200 dark:tw:border-rose-900 tw:rounded-xl tw:font-bold tw:text-[10px]">
                               <XCircle size={12} />
                               {tx('missing')}
                             </span>
@@ -907,7 +920,7 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
                             <button
                               type="button"
                               onClick={() => handleNavigateToRef(m.ref)}
-                              className="tw:inline-flex tw:items-center tw:gap-1 tw:text-primary hover:tw:underline tw:cursor-pointer tw:font-semibold tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring tw:rounded"
+                              className="tw:inline-flex tw:items-center tw:gap-1 tw:text-indigo-600 dark:tw:text-indigo-400 hover:tw:underline tw:cursor-pointer tw:font-semibold tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30 tw:rounded"
                             >
                               <BookOpen size={12} />
                               {tx('viewVerse')}
@@ -915,7 +928,7 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
                             <button
                               type="button"
                               onClick={() => handleOpenKeyTerms(m.termId)}
-                              className="tw:inline-flex tw:items-center tw:gap-1 tw:text-muted-foreground hover:tw:text-foreground tw:cursor-pointer tw:font-semibold tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-ring tw:rounded"
+                              className="tw:inline-flex tw:items-center tw:gap-1 tw:text-slate-500 dark:tw:text-slate-400 hover:tw:text-slate-900 dark:tw:text-slate-100 tw:cursor-pointer tw:font-semibold tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30 tw:rounded"
                             >
                               <Edit3 size={12} />
                               {tx('edit')}
@@ -928,7 +941,7 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
                       <tr>
                         <td
                           colSpan={5}
-                          className="tw:text-center tw:py-8 tw:text-muted-foreground tw:italic"
+                          className="tw:text-center tw:py-8 tw:text-slate-500 dark:tw:text-slate-400 tw:italic"
                         >
                           {tx('noTermsInChapter', selectedChapter)}
                         </td>
