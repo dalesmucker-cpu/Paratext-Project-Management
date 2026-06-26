@@ -21,6 +21,8 @@
 
 /* CUSTOM: need some config from tailwind.config.ts which can't be inlined in this file */
 @config '../tailwind.config.ts';
+@source "./**/*.tsx";
+@source "./**/*.ts";
 
 /* CUSTOM: shared region opener. */
 /* #region shared with https://github.com/paranext/paranext-core/blob/main/lib/platform-bible-react/src/index.css */

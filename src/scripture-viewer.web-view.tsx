@@ -500,14 +500,35 @@ function ToggleSwitch({
         e.stopPropagation();
         onChange(!checked);
       }}
-      className={`tw:relative tw:inline-flex tw:h-5 tw:w-9 tw:shrink-0 tw:cursor-pointer tw:rounded-full tw:transition-colors tw:duration-200 focus:tw:outline-none focus:tw:ring-2 focus:tw:ring-indigo-100 ${
-        checked ? 'tw:bg-indigo-600' : 'tw:bg-slate-300'
-      }`}
+      style={{
+        width: '36px',
+        height: '20px',
+        backgroundColor: checked ? 'var(--primary)' : '#cbd5e1',
+        borderRadius: '9999px',
+        position: 'relative',
+        display: 'inline-flex',
+        alignItems: 'center',
+        border: 'none',
+        cursor: 'pointer',
+        padding: 0,
+        boxSizing: 'border-box',
+        flexShrink: 0,
+        outline: 'none',
+        transition: 'background-color 0.2s ease',
+      }}
     >
       <span
-        className={`tw:pointer-events-none tw:inline-block tw:h-4 tw:w-4 tw:transform tw:rounded-full tw:bg-white tw:shadow-sm tw:ring-0 tw:transition tw:duration-200 tw:mt-0.5 ${
-          checked ? 'tw:translate-x-4' : 'tw:translate-x-0.5'
-        }`}
+        style={{
+          width: '16px',
+          height: '16px',
+          backgroundColor: '#ffffff',
+          borderRadius: '9999px',
+          position: 'absolute',
+          left: checked ? '18px' : '2px',
+          top: '2px',
+          transition: 'left 0.2s ease',
+          boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+        }}
       />
     </button>
   );
@@ -2509,7 +2530,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
 
                 {menuOpen && (
                   <div
-                    className="tw:absolute tw:left-0 tw:top-full tw:mt-1.5 tw:w-80 tw:bg-white tw:border tw:border-slate-200 tw:rounded-xl tw:shadow-2xl tw:overflow-hidden tw:text-sm"
+                    className="tw:absolute tw:left-0 tw:top-full tw:mt-1.5 tw:w-88 tw:bg-white tw:border tw:border-slate-200 tw:rounded-xl tw:shadow-2xl tw:overflow-hidden tw:text-sm"
                     style={{ zIndex: 10000 }}
                   >
                     {/* Project section */}
@@ -2690,7 +2711,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                             setFontFamily(val);
                             localStorage.setItem('scripture_viewer_font_family', val);
                           }}
-                          className="tw:border tw:border-slate-200 tw:bg-slate-50 tw:rounded-lg tw:px-2 tw:py-1.5 tw:text-xs tw:text-slate-700 focus:tw:outline-none focus:tw:border-indigo-400 tw:cursor-pointer tw:w-40"
+                          className="tw:border tw:border-slate-200 tw:bg-slate-50 tw:rounded-lg tw:px-2 tw:py-1.5 tw:text-xs tw:text-slate-700 focus:tw:outline-none focus:tw:border-indigo-400 tw:cursor-pointer tw:w-36"
                         >
                           <option value="sans-serif">Predeterminado (Sans)</option>
                           <option value="serif">Georgia (Serif)</option>
@@ -2711,7 +2732,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                             setNotesDisplayStyle(val);
                             localStorage.setItem('scripture_viewer_notes_display_style', val);
                           }}
-                          className="tw:border tw:border-slate-200 tw:bg-slate-50 tw:rounded-lg tw:px-2 tw:py-1.5 tw:text-xs tw:text-slate-700 focus:tw:outline-none focus:tw:border-indigo-400 tw:cursor-pointer tw:w-40"
+                          className="tw:border tw:border-slate-200 tw:bg-slate-50 tw:rounded-lg tw:px-2 tw:py-1.5 tw:text-xs tw:text-slate-700 focus:tw:outline-none focus:tw:border-indigo-400 tw:cursor-pointer tw:w-36"
                         >
                           <option value="highlight">Resaltado Amarillo</option>
                           <option value="flag">Bandera (🚩)</option>
