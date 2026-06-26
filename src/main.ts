@@ -30,7 +30,7 @@ import pullRequestsStyles from './pull-requests.web-view.scss?inline';
 
 import type { PendingTimeSyncEntry } from './types/task.types';
 import type { KeyTermsStore, VerseMatchStatus, MatchResult } from './types/key-terms.types';
-import type { PullRequestsStore } from './types/pull-requests.types';
+import type { PullRequestsStore, PullRequest, QuorumConfig } from './types/pull-requests.types';
 import { loadLegacyKeyTermsAsync } from './utils/key-terms-parser';
 import { matchRendering } from './utils/key-terms-matcher';
 
@@ -92,8 +92,11 @@ interface TasksDriveConfig {
   expiryDate: number;
   /** Maps projectId → Google Drive file ID for that project's task data */
   fileIds: Record<string, string>;
+  /** Maps projectId → Google Drive file ID for that project's pull request data */
+  prFileIds?: Record<string, string>;
   /** Project IDs with local-only changes that need to be uploaded when Drive is reachable */
   pendingSyncProjects?: string[];
+  pendingPrSyncProjects?: string[];
 }
 
 const TASKS_DRIVE_DEFAULTS: TasksDriveConfig = {
@@ -103,7 +106,9 @@ const TASKS_DRIVE_DEFAULTS: TasksDriveConfig = {
   refreshToken: '',
   expiryDate: 0,
   fileIds: {},
+  prFileIds: {},
   pendingSyncProjects: [],
+  pendingPrSyncProjects: [],
 };
 
 // Module-level references set during activate()
@@ -546,7 +551,13 @@ async function readTasksDriveConfig(): Promise<TasksDriveConfig> {
     if (exists.trim() !== 'true') return { ...TASKS_DRIVE_DEFAULTS };
     const content = await runFileHelper('read', PM_TASKS_CONFIG_PATH);
     const parsed = JSON.parse(content) as Partial<TasksDriveConfig>;
-    return { ...TASKS_DRIVE_DEFAULTS, ...parsed, fileIds: parsed.fileIds ?? {} };
+    return {
+      ...TASKS_DRIVE_DEFAULTS,
+      ...parsed,
+      fileIds: parsed.fileIds ?? {},
+      prFileIds: parsed.prFileIds ?? {},
+      pendingPrSyncProjects: parsed.pendingPrSyncProjects ?? [],
+    };
   } catch (_) {
     return { ...TASKS_DRIVE_DEFAULTS };
   }
@@ -619,6 +630,111 @@ function mergeTaskStores(localJson: string, driveJson: string): string {
   };
   return JSON.stringify(merged, null, 2);
 }
+
+/**
+ * Merges two PullRequestsStore JSON strings.
+ *
+ * - PRs: per-PR ID, keep whichever copy has the newer `updatedAt` timestamp.
+ * - Quorum config: union, preferring remote.
+ * - TeamRoles: union, preferring remote.
+ */
+function mergePrStores(localJson: string, driveJson: string): string {
+  try {
+    const local = JSON.parse(localJson) as PullRequestsStore;
+    const remote = JSON.parse(driveJson) as PullRequestsStore;
+
+    const nextId = Math.max(local.nextId ?? 1, remote.nextId ?? 1);
+    const quorum = { ...(local.quorum || {}), ...(remote.quorum || {}) } as QuorumConfig;
+    const teamRoles = { ...(local.teamRoles || {}), ...(remote.teamRoles || {}) };
+
+    const prMap = new Map<number, PullRequest>();
+    for (const pr of remote.prs ?? []) {
+      prMap.set(pr.id, pr);
+    }
+
+    for (const pr of local.prs ?? []) {
+      const existing = prMap.get(pr.id);
+      if (!existing) {
+        prMap.set(pr.id, pr);
+      } else {
+        const localUpdated = pr.updatedAt || pr.createdAt || '';
+        const remoteUpdated = existing.updatedAt || existing.createdAt || '';
+        if (localUpdated >= remoteUpdated) {
+          prMap.set(pr.id, pr);
+        }
+      }
+    }
+
+    const merged: PullRequestsStore = {
+      schemaVersion: 1,
+      prs: Array.from(prMap.values()).sort((a, b) => a.id - b.id),
+      nextId,
+      quorum,
+      teamRoles,
+    };
+
+    return JSON.stringify(merged, null, 2);
+  } catch (e) {
+    logger.warn(`mergePrStores failed, using local: ${e}`);
+    return localJson;
+  }
+}
+
+/**
+ * Syncs the PullRequestStore to Google Drive in the background (non-blocking).
+ */
+async function syncPrsToDriveBackground(projectId: string, prsJson: string): Promise<void> {
+  try {
+    const token = await getValidDriveToken();
+    if (!token) return;
+
+    const driveConfig = await readTasksDriveConfig();
+    const existingFileId = (driveConfig.prFileIds ?? {})[projectId] || '';
+    const safeName = projectId.replace(/[^a-zA-Z0-9-]/g, '_');
+    const fileName = `paratext-prs-${safeName}.json`;
+
+    let contentToWrite = prsJson;
+    if (existingFileId) {
+      try {
+        const driveContent = await runGcalHelper(
+          'drive-read',
+          [token, existingFileId],
+          undefined,
+          15_000,
+        );
+        contentToWrite = mergePrStores(prsJson, driveContent);
+        logger.info(`Project Manager: merged local + Drive PRs for "${projectId}"`);
+      } catch (readErr) {
+        logger.warn(`Drive read-before-merge PRs failed, writing local only: ${readErr}`);
+      }
+    }
+
+    const result = await runGcalHelper(
+      'drive-write',
+      [token, existingFileId, fileName],
+      contentToWrite,
+      30_000,
+    );
+    const { fileId: newFileId } = JSON.parse(result) as { fileId: string };
+    if (newFileId && newFileId !== existingFileId) {
+      const updatedPrIds = { ...(driveConfig.prFileIds ?? {}), [projectId]: newFileId };
+      await writeTasksDriveConfig({ prFileIds: updatedPrIds });
+      logger.info(`Project Manager: Drive PR file ${newFileId} created for "${projectId}"`);
+    }
+  } catch (driveErr) {
+    logger.warn(`Drive syncPrsToDriveBackground failed: ${driveErr}`);
+    // Queue for retry when internet is available
+    try {
+      const cfg = await readTasksDriveConfig();
+      const pending = new Set(cfg.pendingPrSyncProjects ?? []);
+      pending.add(projectId);
+      await writeTasksDriveConfig({ pendingPrSyncProjects: Array.from(pending) });
+    } catch (_) {
+      /* ignore */
+    }
+  }
+}
+
 
 // Concurrency locks — prevent multiple simultaneous token refreshes
 let driveTokenRefreshing: Promise<void> | null = null;
@@ -704,6 +820,7 @@ async function getValidAccessToken(): Promise<string> {
 /** Cache of projectId -> { projectDir } */
 const projectCache: Record<string, { projectDir: string }> = {};
 const getTasksDriveSyncInProgress = new Set<string>();
+const getPrsDriveSyncInProgress = new Set<string>();
 
 async function resolveProjectDir(projectId: string): Promise<string> {
   if (!projectId || typeof projectId !== 'string' || !projectId.trim()) {
@@ -2543,18 +2660,90 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         },
         teamRoles: {},
       });
+
+      let localContent: string | null = null;
+      let prPath = '';
       try {
         const projectDir = await resolveProjectDir(projectId);
-        const prPath = `${projectDir}${SEP}${PULL_REQUESTS_FILENAME}`;
+        prPath = `${projectDir}${SEP}${PULL_REQUESTS_FILENAME}`;
         const exists = await runFileHelper('exists', prPath);
-        if (exists.trim() !== 'true') return empty;
-        const content = await runFileHelper('read', prPath);
-        JSON.parse(content); // validate
-        return content;
+        if (exists.trim() !== 'false') {
+          const content = await runFileHelper('read', prPath);
+          JSON.parse(content); // validate
+          localContent = content;
+        }
       } catch (e) {
-        logger.warn(`getPullRequests failed for "${projectId}": ${e}`);
-        return empty;
+        logger.warn(`getPullRequests local read failed for "${projectId}": ${e}`);
       }
+
+      // --- Trigger background Drive sync to prevent blocking the UI ---
+      if (!getPrsDriveSyncInProgress.has(projectId)) {
+        getPrsDriveSyncInProgress.add(projectId);
+        (async () => {
+          try {
+            const token = await getValidDriveToken();
+            if (token) {
+              const driveConfig = await readTasksDriveConfig();
+              let fileId = (driveConfig.prFileIds ?? {})[projectId];
+
+              if (!fileId) {
+                const safeName = projectId.replace(/[^a-zA-Z0-9-]/g, '_');
+                const fileName = `paratext-prs-${safeName}.json`;
+                try {
+                  const searchResult = JSON.parse(
+                    await runGcalHelper('drive-search', [token, fileName], undefined, 10_000),
+                  ) as { fileId: string | null };
+                  if (searchResult.fileId) {
+                    fileId = searchResult.fileId;
+                    const updatedPrIds = { ...(driveConfig.prFileIds ?? {}), [projectId]: fileId };
+                    await writeTasksDriveConfig({ prFileIds: updatedPrIds });
+                  }
+                } catch (searchErr) {
+                  logger.warn(`Drive PR file search failed for "${projectId}": ${searchErr}`);
+                }
+              }
+
+              if (fileId) {
+                const driveContent = await runGcalHelper(
+                  'drive-read',
+                  [token, fileId],
+                  undefined,
+                  15_000,
+                );
+                JSON.parse(driveContent); // validate
+                if (localContent) {
+                  const merged = mergePrStores(localContent, driveContent);
+                  if (merged !== localContent && prPath) {
+                    await runFileHelper('write', prPath, merged);
+                    logger.info(
+                      `Project Manager: getPullRequests background merged local+Drive for "${projectId}"`,
+                    );
+                    if (collabEventEmitter) {
+                      collabEventEmitter.emit({ type: 'pull_requests_update', payload: { projectId } });
+                    }
+                  }
+                } else {
+                  if (prPath) {
+                    await runFileHelper('write', prPath, driveContent);
+                    logger.info(
+                      `Project Manager: getPullRequests background synced Drive only (no local file before) for "${projectId}"`,
+                    );
+                    if (collabEventEmitter) {
+                      collabEventEmitter.emit({ type: 'pull_requests_update', payload: { projectId } });
+                    }
+                  }
+                }
+              }
+            }
+          } catch (driveErr) {
+            logger.warn(`Background Drive sync failed in getPullRequests: ${driveErr}`);
+          } finally {
+            getPrsDriveSyncInProgress.delete(projectId);
+          }
+        })();
+      }
+
+      return localContent || empty;
     },
   );
 
@@ -2569,6 +2758,8 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         if (collabEventEmitter) {
           collabEventEmitter.emit({ type: 'pull_requests_update', payload: { projectId } });
         }
+        // Sync to Google Drive in background
+        syncPrsToDriveBackground(projectId, storeJson).catch(() => {});
         return 'ok';
       } catch (e) {
         logger.warn(`savePullRequests failed for "${projectId}": ${e}`);
@@ -2632,6 +2823,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         ];
 
         await runFileHelper('write', prPath, JSON.stringify(store, null, 2));
+        syncPrsToDriveBackground(projectId, JSON.stringify(store, null, 2)).catch(() => {});
 
         // Broadcast verse + PR updates
         if (!isGeneral) {
@@ -2799,6 +2991,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         };
         store.prs.unshift(newPr);
         await writePrStore(projectId, store);
+        syncPrsToDriveBackground(projectId, JSON.stringify(store, undefined, 2)).catch(() => {});
 
         if (collabEventEmitter) {
           collabEventEmitter.emit({ type: 'pull_requests_update', payload: { projectId } });
@@ -4281,10 +4474,69 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     await writeTasksDriveConfig({ pendingSyncProjects: stillPending });
   }
 
+  /** Attempts to upload all pending PR sync projects to Drive. */
+  async function flushPendingPrSyncToDrive(): Promise<void> {
+    const cfg = await readTasksDriveConfig();
+    const pending = cfg.pendingPrSyncProjects ?? [];
+    if (pending.length === 0) return;
+
+    const token = await getValidDriveToken();
+    if (!token) return;
+
+    const stillPending: string[] = [];
+    for (const pid of pending) {
+      try {
+        const projectDir = await resolveProjectDir(pid);
+        const prPath = `${projectDir}${SEP}${PULL_REQUESTS_FILENAME}`;
+        const localJson = await runFileHelper('read', prPath);
+
+        const freshCfg = await readTasksDriveConfig();
+        const existingFileId = (freshCfg.prFileIds ?? {})[pid] || '';
+        const fileName = `paratext-prs-${pid.replace(/[^a-zA-Z0-9-]/g, '_')}.json`;
+
+        let contentToWrite = localJson;
+        if (existingFileId) {
+          try {
+            const driveContent = await runGcalHelper(
+              'drive-read',
+              [token, existingFileId],
+              undefined,
+              15_000,
+            );
+            contentToWrite = mergePrStores(localJson, driveContent);
+          } catch (_) {
+            /* use local-only if Drive read fails */
+          }
+        }
+
+        const result = await runGcalHelper(
+          'drive-write',
+          [token, existingFileId, fileName],
+          contentToWrite,
+          30_000,
+        );
+        const { fileId: newFileId } = JSON.parse(result) as { fileId: string };
+        if (newFileId && newFileId !== existingFileId) {
+          const updatedPrIds = { ...(freshCfg.prFileIds ?? {}), [pid]: newFileId };
+          await writeTasksDriveConfig({ prFileIds: updatedPrIds });
+        }
+        logger.info(`Project Manager: background PR sync succeeded for "${pid}"`);
+      } catch (err) {
+        logger.warn(`Project Manager: background PR sync failed for "${pid}": ${err}`);
+        stillPending.push(pid);
+      }
+    }
+
+    await writeTasksDriveConfig({ pendingPrSyncProjects: stillPending });
+  }
+
   // Background retry loop: attempts to flush queued changes to Drive every 3 minutes
   const driveSyncRetryInterval = setInterval(
     () => {
       flushPendingSyncToDrive().catch(() => {
+        /* ignore */
+      });
+      flushPendingPrSyncToDrive().catch(() => {
         /* ignore */
       });
     },
