@@ -572,7 +572,13 @@ export default function App() {
   // Auth / setup screen if no token
   if (!accessToken) {
     return (
-      <div className="app-container" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center' }}>
+      <>
+        <div className="bg-glow-container">
+          <div className="glow-blob glow-blob-1"></div>
+          <div className="glow-blob glow-blob-2"></div>
+          <div className="glow-blob glow-blob-3"></div>
+        </div>
+        <div className="app-container" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center' }}>
         <div className="glass" style={{ width: '100%', maxWidth: '480px', padding: '40px' }}>
           <div style={{ textAlign: 'center', marginBottom: '32px' }}>
             <div style={{ display: 'inline-flex', padding: '16px', background: 'rgba(129, 140, 248, 0.1)', borderRadius: '24px', marginBottom: '16px', border: '1px solid rgba(129, 140, 248, 0.2)' }}>
@@ -642,13 +648,20 @@ export default function App() {
           </div>
         </div>
       </div>
+      </>
     );
   }
 
   // Dashboard Home - Project Selector
   if (selectedProjectId === null) {
     return (
-      <div className="app-container">
+      <>
+        <div className="bg-glow-container">
+          <div className="glow-blob glow-blob-1"></div>
+          <div className="glow-blob glow-blob-2"></div>
+          <div className="glow-blob glow-blob-3"></div>
+        </div>
+        <div className="app-container">
         <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px', borderBottom: '1px solid var(--border-color)', paddingBottom: '20px' }}>
           <div>
             <h1 style={{ fontSize: '2rem', fontWeight: 700 }} className="gradient-text">Mis Proyectos</h1>
@@ -717,6 +730,7 @@ export default function App() {
           </div>
         )}
       </div>
+      </>
     );
   }
 
@@ -724,7 +738,13 @@ export default function App() {
   if (!selectedProject) return null;
 
   return (
-    <div className="app-container" style={{ paddingBottom: '80px' }}>
+    <>
+      <div className="bg-glow-container">
+        <div className="glow-blob glow-blob-1"></div>
+        <div className="glow-blob glow-blob-2"></div>
+        <div className="glow-blob glow-blob-3"></div>
+      </div>
+      <div className="app-container" style={{ paddingBottom: '80px' }}>
       {/* Header */}
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', borderBottom: '1px solid var(--border-color)', paddingBottom: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -968,8 +988,11 @@ export default function App() {
                         style={{ 
                           padding: '12px 16px', 
                           cursor: 'pointer', 
-                          background: isActive ? 'rgba(129, 140, 248, 0.1)' : 'rgba(30, 41, 59, 0.2)',
+                          background: isActive ? 'rgba(129, 140, 248, 0.12)' : 'rgba(30, 41, 59, 0.2)',
                           borderColor: isActive ? 'var(--primary)' : undefined,
+                          borderLeft: isActive ? '4px solid var(--primary)' : '4px solid transparent',
+                          borderTopLeftRadius: '0px',
+                          borderBottomLeftRadius: '0px',
                           transition: 'all 0.2s'
                         }}
                       >
@@ -1210,5 +1233,6 @@ export default function App() {
         )
       )}
     </div>
+    </>
   );
 }
