@@ -1782,8 +1782,12 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     'paratextProjectManager.getCurrentUser',
     async (): Promise<string> => {
       try {
-        const osUser = process.env.USERNAME || process.env.USER || USER_HOME_DIR.split(SEP).filter(Boolean).pop() || 'Usuario';
-        
+        const osUser =
+          process.env.USERNAME ||
+          process.env.USER ||
+          USER_HOME_DIR.split(SEP).filter(Boolean).pop() ||
+          'Usuario';
+
         let teamMembers = DEFAULT_TEAM_MEMBERS;
         try {
           const exists = await runFileHelper('exists', PM_USER_CONFIG_PATH);
@@ -1797,7 +1801,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         } catch (_) {}
 
         const matched = teamMembers.find((m) => m.toLowerCase() === osUser.toLowerCase());
-        const detectedUser = matched || (osUser.charAt(0).toUpperCase() + osUser.slice(1));
+        const detectedUser = matched || osUser.charAt(0).toUpperCase() + osUser.slice(1);
 
         // Persist back to user config if changed so other integrations can read it
         try {
@@ -1811,7 +1815,10 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
             config.currentUser = detectedUser;
             await runFileHelper('write', PM_USER_CONFIG_PATH, JSON.stringify(config, null, 2));
             if (collabEventEmitter) {
-              collabEventEmitter.emit({ type: 'user_changed', payload: { username: detectedUser } });
+              collabEventEmitter.emit({
+                type: 'user_changed',
+                payload: { username: detectedUser },
+              });
             }
           }
         } catch (_) {}
@@ -2591,7 +2598,14 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
           // updateVerseText so the file is written exactly as the Scripture Viewer does).
           const saveResult: { status: string; error?: string } | string = await sendToNotesHelper(
             'updateVerseText',
-            [projectId, projectDir, pr.ref!.book, pr.ref!.chapter, pr.ref!.verse, pr.proposedText ?? ''],
+            [
+              projectId,
+              projectDir,
+              pr.ref!.book,
+              pr.ref!.chapter,
+              pr.ref!.verse,
+              pr.proposedText ?? '',
+            ],
           );
 
           if (typeof saveResult === 'object' && saveResult && saveResult.status === 'error') {
@@ -3095,7 +3109,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         const initialLen = store.prs.length;
         store.prs = store.prs.filter((p) => p.id !== prIdNum);
         if (store.prs.length === initialLen) return 'error: PR not found';
-        
+
         await writePrStore(projectId, store);
         if (collabEventEmitter) {
           collabEventEmitter.emit({ type: 'pull_requests_update', payload: { projectId } });

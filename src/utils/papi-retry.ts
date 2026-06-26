@@ -61,8 +61,8 @@ function errorToText(e: unknown): string {
  * 4s -> 8s (assuming default baseDelayMs of 2000)
  *
  * If the failure looks like the PAPI connection has dropped (see {@link isPapiDisconnectedError}),
- * the error is thrown immediately as a {@link PapiDisconnectedError} — retrying on a dead
- * connection is futile and only adds latency (500ms × N commands = significant during a herd).
+ * the error is thrown immediately as a {@link PapiDisconnectedError} — retrying on a dead connection
+ * is futile and only adds latency (500ms × N commands = significant during a herd).
  */
 export async function papiRetry<T>(fn: () => Promise<T>, options?: PapiRetryOptions): Promise<T> {
   const { maxRetries = 3, baseDelayMs = 2000, isCancelled } = options ?? {};

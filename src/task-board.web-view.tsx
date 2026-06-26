@@ -1051,7 +1051,8 @@ globalThis.webViewComponent = function TaskBoardWebView({
   const [saving, setSaving] = useState(false);
   const [syncPending, setSyncPending] = useState(false);
   const [error, setError] = useState('');
-  const { ready, disconnected, disconnectedRef, clearDisconnected, handleCatch } = usePapiDisconnect();
+  const { ready, disconnected, disconnectedRef, clearDisconnected, handleCatch } =
+    usePapiDisconnect();
 
   // Auto-dismiss error after 15 seconds
   useEffect(() => {

@@ -701,6 +701,7 @@ globalThis.webViewComponent = function PullRequestsWebView({
   const [toast, setToast] = useState<string | undefined>(undefined);
   const [replyingTo, setReplyingTo] = useState<string | undefined>(undefined);
   const [commentInput, setCommentInput] = useState('');
+  const [altInput, setAltInput] = useState('');
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Phase 2 state
@@ -1444,6 +1445,46 @@ globalThis.webViewComponent = function PullRequestsWebView({
     [store, currentUser, persist, showToast, tx],
   );
 
+  const addAlternative = useCallback(
+    (text: string) => {
+      if (!store || !selected || !text.trim()) return;
+      const cleanText = text.trim();
+      const newAlt: AlternativeRendering = {
+        id: String.fromCharCode(65 + selected.alternatives.length),
+        text: cleanText,
+        proposedBy: currentUser,
+        votes: [],
+        createdAt: new Date().toISOString(),
+      };
+      const updated: PullRequestsStore = {
+        ...store,
+        prs: store.prs.map((p) =>
+          p.id === selected.id
+            ? {
+                ...p,
+                alternatives: [...p.alternatives, newAlt],
+                updatedAt: new Date().toISOString(),
+                history: [
+                  ...p.history,
+                  {
+                    id: generateId(),
+                    actor: currentUser,
+                    action: 'suggested alternative',
+                    detail: `Option ${newAlt.id}: "${newAlt.text}"`,
+                    timestamp: new Date().toISOString(),
+                  },
+                ],
+              }
+            : p,
+        ),
+      };
+      persist(updated);
+      showToast(tx('altSuggested'));
+      setAltInput('');
+    },
+    [store, selected, currentUser, persist, showToast, tx],
+  );
+
   const addComment = useCallback(
     (parentId: string | undefined, text: string): boolean => {
       if (!store || !selected || !text.trim()) return false;
@@ -2019,7 +2060,9 @@ globalThis.webViewComponent = function PullRequestsWebView({
                             </div>
                             <div className="tw:p-4 tw:text-[13.5px] tw:leading-relaxed tw:text-slate-700 dark:tw:text-slate-300 tw:whitespace-pre-wrap tw:break-words">
                               {selected.originalBackTranslation || (
-                                <span className="tw:text-slate-400 dark:tw:text-slate-550 tw:italic">—</span>
+                                <span className="tw:text-slate-400 dark:tw:text-slate-550 tw:italic">
+                                  —
+                                </span>
                               )}
                             </div>
                           </div>
@@ -2031,7 +2074,9 @@ globalThis.webViewComponent = function PullRequestsWebView({
                             </div>
                             <div className="tw:p-4 tw:text-[13.5px] tw:leading-relaxed tw:text-slate-900 dark:tw:text-slate-100 tw:whitespace-pre-wrap tw:break-words">
                               {selected.proposedBackTranslation || (
-                                <span className="tw:text-slate-400 dark:tw:text-slate-550 tw:italic">—</span>
+                                <span className="tw:text-slate-400 dark:tw:text-slate-550 tw:italic">
+                                  —
+                                </span>
                               )}
                             </div>
                           </div>
@@ -2079,6 +2124,32 @@ globalThis.webViewComponent = function PullRequestsWebView({
                             />
                           ))
                         )}
+                      </div>
+                      <div className="tw:p-3 sm:tw:p-4 tw:border-t tw:border-slate-100 dark:tw:border-slate-800 tw:bg-slate-50/70 dark:tw:bg-slate-800/30 tw:rounded-b-2xl">
+                        <div className="tw:flex tw:gap-2.5">
+                          <div className="tw:w-8 tw:h-8 tw:rounded-full tw:bg-slate-900 dark:tw:bg-slate-700 tw:text-white tw:grid tw:place-items-center tw:text-[11px] tw:font-medium tw:shrink-0 tw:mt-0.5">
+                            {initials(currentUser)}
+                          </div>
+                          <div className="tw:flex-1 tw:min-w-0">
+                            <textarea
+                              rows={2}
+                              value={altInput}
+                              onChange={(e) => setAltInput(e.target.value)}
+                              placeholder={tx('altInputPlaceholder')}
+                              className="tw:w-full tw:resize-none tw:rounded-xl tw:border tw:border-slate-300 dark:tw:border-slate-700 tw:bg-white dark:tw:bg-slate-900 tw:px-3.5 tw:py-2.5 tw:text-[14px] tw:leading-snug tw:placeholder-slate-400 focus:tw:outline-none focus:tw:ring-2 focus:tw:ring-indigo-500/30 focus:tw:border-indigo-500"
+                            />
+                            <div className="tw:flex tw:justify-end tw:mt-2.5 tw:gap-2">
+                              <button
+                                type="button"
+                                onClick={() => addAlternative(altInput)}
+                                disabled={!altInput.trim() || saving}
+                                className="tw:px-4 tw:py-1.5 tw:rounded-lg tw:bg-indigo-600 tw:text-white tw:text-[13px] tw:font-semibold hover:tw:bg-indigo-700 active:tw:bg-indigo-800 tw:shadow-sm disabled:tw:opacity-50 disabled:tw:cursor-not-allowed"
+                              >
+                                {tx('suggest')}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
 
@@ -3051,9 +3122,7 @@ globalThis.webViewComponent = function PullRequestsWebView({
                 <textarea
                   rows={10}
                   value={emailDraftModal.body}
-                  onChange={(e) =>
-                    setEmailDraftModal({ ...emailDraftModal, body: e.target.value })
-                  }
+                  onChange={(e) => setEmailDraftModal({ ...emailDraftModal, body: e.target.value })}
                   className="tw:w-full tw:rounded-lg tw:border tw:border-slate-300 dark:tw:border-slate-700 tw:bg-white dark:tw:bg-slate-900 tw:px-3 tw:py-2 tw:text-[13px] tw:font-mono"
                 />
               </div>

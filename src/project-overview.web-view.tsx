@@ -652,7 +652,8 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
   const [showTeamSection, setShowTeamSection] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const { ready, disconnected, disconnectedRef, clearDisconnected, handleCatch } = usePapiDisconnect();
+  const { ready, disconnected, disconnectedRef, clearDisconnected, handleCatch } =
+    usePapiDisconnect();
 
   // Auto-dismiss error after 15 seconds
   useEffect(() => {

@@ -24,16 +24,13 @@ function parseUsfmChapter(content) {
   const cleanUsfmText = (text) => {
     return text
       .replace(/\\x\s+[\s\S]*?\\x\*/g, '')
-      .replace(
-        /\\f\s+(\S+)\s+([\s\S]*?)\\f\*/g,
-        (_, _caller, fContent) => {
-          const cleaned = fContent
-            .replace(/\\[a-z0-9+*]+/gi, '')
-            .replace(/\s+/g, ' ')
-            .trim();
-          return `[FN:${cleaned}]`;
-        },
-      )
+      .replace(/\\f\s+(\S+)\s+([\s\S]*?)\\f\*/g, (_, _caller, fContent) => {
+        const cleaned = fContent
+          .replace(/\\[a-z0-9+*]+/gi, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        return `[FN:${cleaned}]`;
+      })
       .replace(/\\[a-z]+\*?/g, '')
       .replace(/\s+/g, ' ')
       .trim();

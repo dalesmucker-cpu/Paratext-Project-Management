@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react';
 import { isPapiDisconnectedError } from './papi-retry';
 
-/**
- * Safely convert any caught value (including papi plain-object errors) to a readable string.
- */
+/** Safely convert any caught value (including papi plain-object errors) to a readable string. */
 export function errMsg(e: unknown): string {
   if (e instanceof Error) return e.message;
   if (typeof e === 'object' && e) {
@@ -19,9 +17,7 @@ export function errMsg(e: unknown): string {
   return String(e);
 }
 
-/**
- * Spanish message shown in the reconnect banner.
- */
+/** Spanish message shown in the reconnect banner. */
 export const DISCONNECT_MESSAGE =
   'Se perdió la conexión con Paratext. Haz clic en "Reconectar" para reintentar.';
 
@@ -40,21 +36,19 @@ export interface UsePapiDisconnectResult {
 /**
  * Disconnect detection and recovery for all webviews.
  *
- * **Global unhandled rejection handler:** Installs a `window` handler that
- * catches PAPI-related unhandled promise rejections (the platform's JSON-RPC
- * layer logs these at error level before our catch handlers can suppress them).
+ * **Global unhandled rejection handler:** Installs a `window` handler that catches PAPI-related
+ * unhandled promise rejections (the platform's JSON-RPC layer logs these at error level before our
+ * catch handlers can suppress them).
  *
- * **Startup delay:** On mount, waits 3 seconds before setting `ready=true`.
- * The PAPI WebSocket needs time to connect after a reload. Without this delay,
- * mount-effect data loads fire PAPI commands before the WebSocket is ready,
- * producing "Tried to send payload" errors.
+ * **Startup delay:** On mount, waits 3 seconds before setting `ready=true`. The PAPI WebSocket
+ * needs time to connect after a reload. Without this delay, mount-effect data loads fire PAPI
+ * commands before the WebSocket is ready, producing "Tried to send payload" errors.
  *
- * **Detection:** When any PAPI command fails with a disconnect error (via
- * `handleCatch`), the `disconnected` flag is set and the banner appears.
+ * **Detection:** When any PAPI command fails with a disconnect error (via `handleCatch`), the
+ * `disconnected` flag is set and the banner appears.
  *
- * **Recovery:** User clicks "Reconectar" → webview reloads → 3s delay →
- * data loads proceed. If the connection is still dead, the first data load
- * fails and the banner appears again.
+ * **Recovery:** User clicks "Reconectar" → webview reloads → 3s delay → data loads proceed. If the
+ * connection is still dead, the first data load fails and the banner appears again.
  */
 export function usePapiDisconnect(options?: UsePapiDisconnectOptions): UsePapiDisconnectResult {
   const { autoReloadOnFocus: _autoReloadOnFocus = true } = options ?? {};

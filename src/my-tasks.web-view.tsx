@@ -237,7 +237,8 @@ globalThis.webViewComponent = function MyTasksWebView({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const { ready, disconnected, disconnectedRef, clearDisconnected, handleCatch } = usePapiDisconnect();
+  const { ready, disconnected, disconnectedRef, clearDisconnected, handleCatch } =
+    usePapiDisconnect();
 
   // Auto-dismiss error after 15 seconds
   useEffect(() => {
