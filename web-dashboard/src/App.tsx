@@ -146,7 +146,13 @@ function diffWords(original: string, proposed: string) {
 }
 
 export default function App() {
-  const [clientId, setClientId] = useState(() => localStorage.getItem('pm_oauth_client_id') || '');
+  const [clientId, setClientId] = useState(() => {
+    const saved = localStorage.getItem('pm_oauth_client_id');
+    if (saved) return saved;
+    // Fallback to Vite environment variable configured at build time (e.g. on Netlify)
+    return (import.meta.env.VITE_GOOGLE_CLIENT_ID as string) || '';
+  });
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [username, setUsername] = useState(() => localStorage.getItem('pm_dashboard_user') || 'Consultor');
   const [accessToken, setAccessToken] = useState(() => localStorage.getItem('pm_dashboard_token') || '');
   const [projects, setProjects] = useState<ProjectData[]>([]);
@@ -584,20 +590,32 @@ export default function App() {
           )}
 
           <form onSubmit={saveSetup} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#94a3b8', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Google OAuth Client ID</label>
-              <div style={{ position: 'relative' }}>
-                <Key size={18} style={{ position: 'absolute', left: '16px', top: '15px', color: '#64748b' }} />
-                <input 
-                  type="text" 
-                  placeholder="Ingrese Client ID" 
-                  value={clientId} 
-                  onChange={e => setClientId(e.target.value)} 
-                  style={{ paddingLeft: '48px' }} 
-                  required
-                />
+            {(!clientId || showAdvanced) ? (
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#94a3b8', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Google OAuth Client ID</label>
+                <div style={{ position: 'relative' }}>
+                  <Key size={18} style={{ position: 'absolute', left: '16px', top: '15px', color: '#64748b' }} />
+                  <input 
+                    type="text" 
+                    placeholder="Ingrese Client ID" 
+                    value={clientId} 
+                    onChange={e => setClientId(e.target.value)} 
+                    style={{ paddingLeft: '48px' }} 
+                    required
+                  />
+                </div>
               </div>
-            </div>
+            ) : (
+              <div style={{ textAlign: 'right', marginTop: '-10px' }}>
+                <button 
+                  type="button" 
+                  onClick={() => setShowAdvanced(true)} 
+                  style={{ background: 'none', border: 'none', color: '#818cf8', fontSize: '0.8rem', cursor: 'pointer', textDecoration: 'underline', fontFamily: 'inherit' }}
+                >
+                  Cambiar Google Client ID (Avanzado)
+                </button>
+              </div>
+            )}
 
             <div>
               <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#94a3b8', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Nombre en Discusiones</label>
