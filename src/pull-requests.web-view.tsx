@@ -57,6 +57,13 @@ interface ChapterVerseText {
   text: string;
 }
 
+interface EmailDraft {
+  prId: number;
+  recipients: string;
+  subject: string;
+  body: string;
+}
+
 interface OfflineQueueAction {
   type: 'vote' | 'comment' | 'status';
   projectId: string;
@@ -583,12 +590,14 @@ globalThis.webViewComponent = function PullRequestsWebView({
     rationale: '',
   });
   const [commentToDeleteId, setCommentToDeleteId] = useState<string | undefined>(undefined);
+  const [emailDraftModal, setEmailDraftModal] = useState<EmailDraft | undefined>(undefined);
 
   useEffect(() => {
     setShowDeleteModal(false);
     setShowRevertModal(false);
     setShowEditForm(false);
     setCommentToDeleteId(undefined);
+    setEmailDraftModal(undefined);
   }, [selectedId]);
   const [filter, setFilter] = useState<StatusFilter>('all');
   const [search, setSearch] = useState('');
@@ -1146,10 +1155,8 @@ globalThis.webViewComponent = function PullRequestsWebView({
         return;
       }
 
-      const recipients = [consultant, org].filter(Boolean).join(',');
-      const subject = encodeURIComponent(
-        `[Review Request] PR #${pr.id} (${pr.refLabel}): ${pr.title}`,
-      );
+      const recipients = [consultant, org].filter(Boolean).join(', ');
+      const subject = `[Review Request] PR #${pr.id} (${pr.refLabel}): ${pr.title}`;
 
       let bodyText = `Please review this Translation Proposal:\n\n`;
       bodyText += `PR ID: #${pr.id}\n`;
@@ -1175,17 +1182,42 @@ globalThis.webViewComponent = function PullRequestsWebView({
 
       bodyText += `To vote or comment, please open this PR in Paratext 10.`;
 
-      const mailtoUrl = `mailto:${recipients}?subject=${subject}&body=${encodeURIComponent(bodyText)}`;
-
-      const link = document.createElement('a');
-      link.href = mailtoUrl;
-      link.target = '_blank';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      setEmailDraftModal({
+        prId: pr.id,
+        recipients,
+        subject,
+        body: bodyText,
+      });
     },
     [store, tx, showToast],
   );
+
+  const handleCopyDraft = useCallback(() => {
+    if (!emailDraftModal) return;
+    const textToCopy = `Subject: ${emailDraftModal.subject}\n\n${emailDraftModal.body}`;
+    navigator.clipboard
+      .writeText(textToCopy)
+      .then(() => {
+        showToast(tx('emailCopied'));
+      })
+      .catch((err) => {
+        console.error('Failed to copy text: ', err);
+        showToast('Failed to copy to clipboard.');
+      });
+  }, [emailDraftModal, tx, showToast]);
+
+  const handleSendEmail = useCallback(async () => {
+    if (!emailDraftModal) return;
+    const { recipients, subject, body } = emailDraftModal;
+    const mailtoUrl = `mailto:${recipients.trim()}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    try {
+      await papi.commands.sendCommand('paratextProjectManager.openExternal', mailtoUrl);
+      setEmailDraftModal(undefined);
+    } catch (e) {
+      console.error('Failed to open mail app:', e);
+      showToast('Failed to open mail application.');
+    }
+  }, [emailDraftModal, showToast]);
 
   const savePrEdit = useCallback(async () => {
     if (!store || !selected || !editForm.title.trim() || !editForm.proposedText.trim()) return;
@@ -2828,6 +2860,116 @@ globalThis.webViewComponent = function PullRequestsWebView({
                 className="tw:px-4 tw:py-1.5 tw:rounded-lg tw:bg-indigo-600 tw:text-white tw:text-[13px] tw:font-semibold hover:tw:bg-indigo-700 disabled:tw:opacity-50"
               >
                 {tx('saveChanges')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Email Draft Preview Modal */}
+      {emailDraftModal && (
+        // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
+        <div
+          className="tw:fixed tw:inset-0 tw:z-[10000] tw:flex tw:items-center tw:justify-center tw:bg-slate-900/40 tw:backdrop-blur-sm"
+          onClick={() => setEmailDraftModal(undefined)}
+        >
+          {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+          <div
+            className="tw:bg-white dark:tw:bg-slate-900 tw:rounded-xl tw:shadow-2xl tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:w-[560px] tw:max-w-[90vw] tw:max-h-[85vh] tw:overflow-y-auto scrollbar-thin tw:p-5 tw:space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="tw:flex tw:items-center tw:justify-between">
+              <h3 className="tw:font-semibold tw:text-slate-900 dark:tw:text-slate-100 tw:text-[15px]">
+                {tx('emailDraftTitle')} (PR #{emailDraftModal.prId})
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEmailDraftModal(undefined)}
+                className="tw:text-slate-400 hover:tw:text-slate-600 dark:hover:tw:text-slate-300"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="tw:space-y-3.5">
+              <div>
+                <label className="tw:text-[11px] tw:font-semibold tw:text-slate-500 dark:tw:text-slate-400 tw:block tw:mb-1">
+                  {tx('emailDraftRecipients')}
+                </label>
+                <input
+                  type="text"
+                  value={emailDraftModal.recipients}
+                  onChange={(e) =>
+                    setEmailDraftModal({ ...emailDraftModal, recipients: e.target.value })
+                  }
+                  className="tw:w-full tw:rounded-lg tw:border tw:border-slate-300 dark:tw:border-slate-700 tw:bg-white dark:tw:bg-slate-900 tw:px-3 tw:py-1.5 tw:text-[13px]"
+                />
+              </div>
+
+              <div>
+                <label className="tw:text-[11px] tw:font-semibold tw:text-slate-500 dark:tw:text-slate-400 tw:block tw:mb-1">
+                  {tx('emailDraftSubject')}
+                </label>
+                <input
+                  type="text"
+                  value={emailDraftModal.subject}
+                  onChange={(e) =>
+                    setEmailDraftModal({ ...emailDraftModal, subject: e.target.value })
+                  }
+                  className="tw:w-full tw:rounded-lg tw:border tw:border-slate-300 dark:tw:border-slate-700 tw:bg-white dark:tw:bg-slate-900 tw:px-3 tw:py-1.5 tw:text-[13px]"
+                />
+              </div>
+
+              <div>
+                <label className="tw:text-[11px] tw:font-semibold tw:text-slate-500 dark:tw:text-slate-400 tw:block tw:mb-1">
+                  {tx('emailDraftBody')}
+                </label>
+                <textarea
+                  rows={10}
+                  value={emailDraftModal.body}
+                  onChange={(e) =>
+                    setEmailDraftModal({ ...emailDraftModal, body: e.target.value })
+                  }
+                  className="tw:w-full tw:rounded-lg tw:border tw:border-slate-300 dark:tw:border-slate-700 tw:bg-white dark:tw:bg-slate-900 tw:px-3 tw:py-2 tw:text-[13px] tw:font-mono"
+                />
+              </div>
+
+              {/* Warning Notice if URL length > 2000 */}
+              {(() => {
+                const mailtoUrl = `mailto:${emailDraftModal.recipients.trim()}?subject=${encodeURIComponent(emailDraftModal.subject)}&body=${encodeURIComponent(emailDraftModal.body)}`;
+                if (mailtoUrl.length > 2000) {
+                  return (
+                    <div className="tw:flex tw:items-start tw:gap-2.5 tw:p-3 tw:rounded-lg tw:bg-amber-50 dark:tw:bg-amber-950/40 tw:border tw:border-amber-200 dark:tw:border-amber-900/60 tw:text-[12px] tw:text-amber-800 dark:tw:text-amber-300">
+                      <AlertTriangle className="tw:shrink-0 tw:mt-0.5" size={15} />
+                      <span>{tx('emailDraftNotice')}</span>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+            </div>
+
+            <div className="tw:flex tw:justify-end tw:gap-2 tw:pt-1">
+              <button
+                type="button"
+                onClick={() => setEmailDraftModal(undefined)}
+                className="tw:px-3 tw:py-1.5 tw:rounded-lg tw:text-[13px] tw:font-medium tw:text-slate-600 hover:tw:bg-slate-100 dark:hover:tw:bg-slate-800"
+              >
+                {tx('cancel')}
+              </button>
+              <button
+                type="button"
+                onClick={handleCopyDraft}
+                className="tw:px-4 tw:py-1.5 tw:rounded-lg tw:border tw:border-slate-300 dark:tw:border-slate-700 tw:text-slate-700 dark:tw:text-slate-200 tw:text-[13px] tw:font-medium hover:tw:bg-slate-50 dark:hover:tw:bg-slate-800"
+              >
+                {tx('emailCopyDraft')}
+              </button>
+              <button
+                type="button"
+                onClick={handleSendEmail}
+                className="tw:px-4 tw:py-1.5 tw:rounded-lg tw:bg-indigo-600 tw:text-white tw:text-[13px] tw:font-semibold hover:tw:bg-indigo-700"
+              >
+                {tx('emailOpenMailApp')}
               </button>
             </div>
           </div>

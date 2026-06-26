@@ -250,6 +250,15 @@ const en: Dict = {
   'pr.orgEmailLabel': 'Organization Email',
   'pr.emailConfigRequired':
     'Please configure the consultant or organization email address in Settings first.',
+  'pr.emailDraftTitle': 'Reviewer E-mail Draft',
+  'pr.emailDraftRecipients': 'To (Recipients)',
+  'pr.emailDraftSubject': 'Subject',
+  'pr.emailDraftBody': 'Body',
+  'pr.emailOpenMailApp': 'Open in Mail App',
+  'pr.emailCopyDraft': 'Copy Draft',
+  'pr.emailCopied': 'Copied email draft to clipboard!',
+  'pr.emailDraftNotice':
+    'Notice: The draft is quite long. If your mail application fails to open or truncates the message, please use "Copy Draft" and paste it manually.',
   'pr.downvoteTitle': 'Reason required for downvote',
   'pr.downvotePrompt': 'Please explain why you oppose this change:',
   'pr.downvotePlaceholder': 'Reason for downvote…',
@@ -535,6 +544,15 @@ const es: Dict = {
   'pr.orgEmailLabel': 'Correo de la Organización',
   'pr.emailConfigRequired':
     'Por favor configure el correo del asesor o de la organización en la Configuración primero.',
+  'pr.emailDraftTitle': 'Borrador de Correo para Revisores',
+  'pr.emailDraftRecipients': 'Para (Destinatarios)',
+  'pr.emailDraftSubject': 'Asunto',
+  'pr.emailDraftBody': 'Cuerpo',
+  'pr.emailOpenMailApp': 'Abrir en App de Correo',
+  'pr.emailCopyDraft': 'Copiar Borrador',
+  'pr.emailCopied': '¡Borrador de correo copiado al portapapeles!',
+  'pr.emailDraftNotice':
+    'Nota: El borrador es bastante largo. Si su aplicación de correo no se abre o trunca el mensaje, use "Copiar Borrador" y péguelo manualmente.',
   'pr.downvoteTitle': 'Se requiere razón para votar en contra',
   'pr.downvotePrompt': 'Por favor explica por qué te opones a este cambio:',
   'pr.downvotePlaceholder': 'Razón del voto negativo…',
