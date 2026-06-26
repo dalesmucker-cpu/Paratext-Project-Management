@@ -112,6 +112,8 @@ export interface PullRequest {
   kind?: 'verse' | 'general';
   /** Reserved for future multi-verse support. */
   hunks?: never[];
+  originalBackTranslation?: string;
+  proposedBackTranslation?: string;
 }
 
 export interface QuorumConfig {

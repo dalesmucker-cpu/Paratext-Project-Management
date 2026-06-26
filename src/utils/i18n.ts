@@ -259,6 +259,10 @@ const en: Dict = {
   'pr.emailCopied': 'Copied email draft to clipboard!',
   'pr.emailDraftNotice':
     'Notice: The draft is quite long. If your mail application fails to open or truncates the message, please use "Copy Draft" and paste it manually.',
+  'pr.backTranslationTitle': 'Back-Translation',
+  'pr.originalBackTranslationLabel': 'Before Back-Translation (Optional)',
+  'pr.proposedBackTranslationLabel': 'After Back-Translation (Optional)',
+  'pr.backTranslationPlaceholder': 'Enter English back-translation...',
   'pr.downvoteTitle': 'Reason required for downvote',
   'pr.downvotePrompt': 'Please explain why you oppose this change:',
   'pr.downvotePlaceholder': 'Reason for downvote…',
@@ -553,6 +557,10 @@ const es: Dict = {
   'pr.emailCopied': '¡Borrador de correo copiado al portapapeles!',
   'pr.emailDraftNotice':
     'Nota: El borrador es bastante largo. Si su aplicación de correo no se abre o trunca el mensaje, use "Copiar Borrador" y péguelo manualmente.',
+  'pr.backTranslationTitle': 'Retrotraducción',
+  'pr.originalBackTranslationLabel': 'Retrotraducción Anterior (Opcional)',
+  'pr.proposedBackTranslationLabel': 'Retrotraducción Posterior (Opcional)',
+  'pr.backTranslationPlaceholder': 'Texto de retrotraducción...',
   'pr.downvoteTitle': 'Se requiere razón para votar en contra',
   'pr.downvotePrompt': 'Por favor explica por qué te opones a este cambio:',
   'pr.downvotePlaceholder': 'Razón del voto negativo…',

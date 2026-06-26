@@ -588,6 +588,8 @@ globalThis.webViewComponent = function PullRequestsWebView({
     title: '',
     proposedText: '',
     rationale: '',
+    originalBackTranslation: '',
+    proposedBackTranslation: '',
   });
   const [commentToDeleteId, setCommentToDeleteId] = useState<string | undefined>(undefined);
   const [emailDraftModal, setEmailDraftModal] = useState<EmailDraft | undefined>(undefined);
@@ -615,6 +617,8 @@ globalThis.webViewComponent = function PullRequestsWebView({
     originalText: '',
     proposedText: '',
     rationale: '',
+    originalBackTranslation: '',
+    proposedBackTranslation: '',
   });
 
   useEffect(() => {
@@ -627,6 +631,8 @@ globalThis.webViewComponent = function PullRequestsWebView({
         originalText: prefillOriginalText || '',
         proposedText: prefillProposedText || '',
         rationale: '',
+        originalBackTranslation: '',
+        proposedBackTranslation: '',
       });
       setPrKind('verse');
       setShowCreateForm(true);
@@ -998,6 +1004,8 @@ globalThis.webViewComponent = function PullRequestsWebView({
         createForm.rationale.trim(),
         currentUser,
         'open',
+        createForm.originalBackTranslation.trim(),
+        createForm.proposedBackTranslation.trim(),
       );
       if (typeof result === 'string' && result.startsWith('error')) {
         setError(tx('createError', result));
@@ -1015,6 +1023,8 @@ globalThis.webViewComponent = function PullRequestsWebView({
         originalText: '',
         proposedText: '',
         rationale: '',
+        originalBackTranslation: '',
+        proposedBackTranslation: '',
       });
       setPrKind('verse');
       showToast(tx('createSuccess', parsed.id));
@@ -1175,6 +1185,17 @@ globalThis.webViewComponent = function PullRequestsWebView({
         bodyText += `${pr.proposedText}\n\n`;
       }
 
+      if (pr.originalBackTranslation || pr.proposedBackTranslation) {
+        bodyText += `--- Back-Translation ---\n`;
+        if (pr.originalBackTranslation) {
+          bodyText += `Before: ${pr.originalBackTranslation}\n`;
+        }
+        if (pr.proposedBackTranslation) {
+          bodyText += `After: ${pr.proposedBackTranslation}\n`;
+        }
+        bodyText += `\n`;
+      }
+
       if (pr.rationale) {
         bodyText += `--- Rationale ---\n`;
         bodyText += `${pr.rationale}\n\n`;
@@ -1230,6 +1251,8 @@ globalThis.webViewComponent = function PullRequestsWebView({
               title: editForm.title.trim(),
               proposedText: editForm.proposedText.trim(),
               rationale: editForm.rationale.trim(),
+              originalBackTranslation: editForm.originalBackTranslation.trim() || undefined,
+              proposedBackTranslation: editForm.proposedBackTranslation.trim() || undefined,
               updatedAt: new Date().toISOString(),
               history: [
                 ...p.history,
@@ -1981,6 +2004,41 @@ globalThis.webViewComponent = function PullRequestsWebView({
                       </div>
                     )}
 
+                    {/* Back-Translation Comparison Card */}
+                    {(selected.originalBackTranslation || selected.proposedBackTranslation) && (
+                      <div className="tw:mt-4">
+                        <div className="tw:mb-2 tw:text-[13px] tw:font-semibold tw:text-slate-700 dark:tw:text-slate-300 tw:flex tw:items-center tw:gap-1.5">
+                          <span>{tx('backTranslationTitle')}</span>
+                        </div>
+                        <div className="tw:grid lg:tw:grid-cols-2 tw:gap-4">
+                          <div className="tw:bg-white dark:tw:bg-slate-900 tw:rounded-2xl tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:shadow-sm tw:overflow-hidden">
+                            <div className="tw:px-4 tw:py-2.5 tw:border-b tw:border-slate-100 dark:tw:border-slate-800 tw:bg-slate-50/70 dark:tw:bg-slate-800/50">
+                              <span className="tw:text-[11px] tw:font-semibold tw:uppercase tw:tracking-wider tw:text-slate-500">
+                                {tx('originalBackTranslationLabel')}
+                              </span>
+                            </div>
+                            <div className="tw:p-4 tw:text-[13.5px] tw:leading-relaxed tw:text-slate-700 dark:tw:text-slate-300 tw:whitespace-pre-wrap tw:break-words">
+                              {selected.originalBackTranslation || (
+                                <span className="tw:text-slate-400 dark:tw:text-slate-550 tw:italic">—</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="tw:bg-white dark:tw:bg-slate-900 tw:rounded-2xl tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:shadow-sm tw:overflow-hidden">
+                            <div className="tw:px-4 tw:py-2.5 tw:border-b tw:border-slate-100 dark:tw:border-slate-800 tw:bg-slate-50/70 dark:tw:bg-slate-800/50">
+                              <span className="tw:text-[11px] tw:font-semibold tw:uppercase tw:tracking-wider tw:text-slate-500">
+                                {tx('proposedBackTranslationLabel')}
+                              </span>
+                            </div>
+                            <div className="tw:p-4 tw:text-[13.5px] tw:leading-relaxed tw:text-slate-900 dark:tw:text-slate-100 tw:whitespace-pre-wrap tw:break-words">
+                              {selected.proposedBackTranslation || (
+                                <span className="tw:text-slate-400 dark:tw:text-slate-550 tw:italic">—</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Mobile vote */}
                     <div className="sm:tw:hidden tw:flex tw:items-center tw:justify-center tw:gap-2 tw:mt-4">
                       <button
@@ -2157,6 +2215,8 @@ globalThis.webViewComponent = function PullRequestsWebView({
                             title: selected.title,
                             proposedText: selected.proposedText ?? '',
                             rationale: selected.rationale ?? '',
+                            originalBackTranslation: selected.originalBackTranslation ?? '',
+                            proposedBackTranslation: selected.proposedBackTranslation ?? '',
                           });
                           setShowEditForm(true);
                         }}
@@ -2453,6 +2513,38 @@ globalThis.webViewComponent = function PullRequestsWebView({
                 className="tw:w-full tw:resize-none tw:rounded-lg tw:border tw:border-slate-300 dark:tw:border-slate-700 tw:bg-white dark:tw:bg-slate-900 tw:px-3 tw:py-2 tw:text-[13px] tw:font-mono focus:tw:outline-none focus:tw:ring-2 focus:tw:ring-indigo-500/30"
               />
             </div>
+            {prKind === 'verse' && (
+              <div className="tw:grid tw:grid-cols-1 md:tw:grid-cols-2 tw:gap-3">
+                <div>
+                  <label className="tw:text-[12px] tw:font-medium tw:text-slate-600 dark:tw:text-slate-400 tw:block tw:mb-1">
+                    {tx('originalBackTranslationLabel')}
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={createForm.originalBackTranslation}
+                    onChange={(e) =>
+                      setCreateForm({ ...createForm, originalBackTranslation: e.target.value })
+                    }
+                    placeholder={tx('backTranslationPlaceholder')}
+                    className="tw:w-full tw:resize-none tw:rounded-lg tw:border tw:border-slate-300 dark:tw:border-slate-700 tw:bg-white dark:tw:bg-slate-900 tw:px-3 tw:py-2 tw:text-[13px] focus:tw:outline-none focus:tw:ring-2 focus:tw:ring-indigo-500/30"
+                  />
+                </div>
+                <div>
+                  <label className="tw:text-[12px] tw:font-medium tw:text-slate-600 dark:tw:text-slate-400 tw:block tw:mb-1">
+                    {tx('proposedBackTranslationLabel')}
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={createForm.proposedBackTranslation}
+                    onChange={(e) =>
+                      setCreateForm({ ...createForm, proposedBackTranslation: e.target.value })
+                    }
+                    placeholder={tx('backTranslationPlaceholder')}
+                    className="tw:w-full tw:resize-none tw:rounded-lg tw:border tw:border-slate-300 dark:tw:border-slate-700 tw:bg-white dark:tw:bg-slate-900 tw:px-3 tw:py-2 tw:text-[13px] focus:tw:outline-none focus:tw:ring-2 focus:tw:ring-indigo-500/30"
+                  />
+                </div>
+              </div>
+            )}
             <div>
               <label className="tw:text-[12px] tw:font-medium tw:text-slate-600 dark:tw:text-slate-400 tw:block tw:mb-1">
                 {tx('createRationale')}
@@ -2831,6 +2923,38 @@ globalThis.webViewComponent = function PullRequestsWebView({
                 className="tw:w-full tw:resize-none tw:rounded-lg tw:border tw:border-slate-300 dark:tw:border-slate-700 tw:bg-white dark:tw:bg-slate-900 tw:px-3 tw:py-2 tw:text-[13px] tw:font-mono focus:tw:outline-none focus:tw:ring-2 focus:tw:ring-indigo-500/30"
               />
             </div>
+            {selected.kind === 'verse' && (
+              <div className="tw:grid tw:grid-cols-1 md:tw:grid-cols-2 tw:gap-3">
+                <div>
+                  <label className="tw:text-[12px] tw:font-medium tw:text-slate-600 dark:tw:text-slate-400 tw:block tw:mb-1">
+                    {tx('originalBackTranslationLabel')}
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={editForm.originalBackTranslation}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, originalBackTranslation: e.target.value })
+                    }
+                    placeholder={tx('backTranslationPlaceholder')}
+                    className="tw:w-full tw:resize-none tw:rounded-lg tw:border tw:border-slate-300 dark:tw:border-slate-700 tw:bg-white dark:tw:bg-slate-900 tw:px-3 tw:py-2 tw:text-[13px] focus:tw:outline-none focus:tw:ring-2 focus:tw:ring-indigo-500/30"
+                  />
+                </div>
+                <div>
+                  <label className="tw:text-[12px] tw:font-medium tw:text-slate-600 dark:tw:text-slate-400 tw:block tw:mb-1">
+                    {tx('proposedBackTranslationLabel')}
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={editForm.proposedBackTranslation}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, proposedBackTranslation: e.target.value })
+                    }
+                    placeholder={tx('backTranslationPlaceholder')}
+                    className="tw:w-full tw:resize-none tw:rounded-lg tw:border tw:border-slate-300 dark:tw:border-slate-700 tw:bg-white dark:tw:bg-slate-900 tw:px-3 tw:py-2 tw:text-[13px] focus:tw:outline-none focus:tw:ring-2 focus:tw:ring-indigo-500/30"
+                  />
+                </div>
+              </div>
+            )}
 
             <div>
               <label className="tw:text-[12px] tw:font-medium tw:text-slate-600 dark:tw:text-slate-400 tw:block tw:mb-1">

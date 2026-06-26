@@ -2728,6 +2728,8 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
       rationale: string,
       author: string,
       status: 'draft' | 'open' = 'open',
+      originalBackTranslation?: string,
+      proposedBackTranslation?: string,
     ): Promise<string> => {
       try {
         let store = await readPrStore(projectId);
@@ -2764,6 +2766,8 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
           originalText: isGeneral ? undefined : originalText,
           proposedText,
           rationale,
+          originalBackTranslation: originalBackTranslation || undefined,
+          proposedBackTranslation: proposedBackTranslation || undefined,
           votes: [],
           alternatives: [],
           comments: [],
