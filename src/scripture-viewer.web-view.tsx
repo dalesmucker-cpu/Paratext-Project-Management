@@ -503,7 +503,7 @@ function ToggleSwitch({
       style={{
         width: '36px',
         height: '20px',
-        backgroundColor: checked ? 'var(--primary)' : '#cbd5e1',
+        backgroundColor: checked ? '#4f46e5' : '#cbd5e1',
         borderRadius: '9999px',
         position: 'relative',
         display: 'inline-flex',
