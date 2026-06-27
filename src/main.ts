@@ -680,9 +680,7 @@ function mergePrStores(localJson: string, driveJson: string): string {
   }
 }
 
-/**
- * Syncs the PullRequestStore to Google Drive in the background (non-blocking).
- */
+/** Syncs the PullRequestStore to Google Drive in the background (non-blocking). */
 async function syncPrsToDriveBackground(projectId: string, prsJson: string): Promise<void> {
   try {
     const token = await getValidDriveToken();
@@ -734,7 +732,6 @@ async function syncPrsToDriveBackground(projectId: string, prsJson: string): Pro
     }
   }
 }
-
 
 // Concurrency locks — prevent multiple simultaneous token refreshes
 let driveTokenRefreshing: Promise<void> | null = null;
@@ -1401,7 +1398,9 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
                   if (newFileId) {
                     const updatedIds = { ...driveConfig.fileIds, [projectId]: newFileId };
                     await writeTasksDriveConfig({ fileIds: updatedIds });
-                    logger.info(`Project Manager: Initialized Drive task file ${newFileId} for "${projectId}"`);
+                    logger.info(
+                      `Project Manager: Initialized Drive task file ${newFileId} for "${projectId}"`,
+                    );
                   }
                 } catch (writeErr) {
                   logger.warn(`Failed to initialize task file on Drive in background: ${writeErr}`);
@@ -2739,7 +2738,10 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
                       `Project Manager: getPullRequests background merged local+Drive for "${projectId}"`,
                     );
                     if (collabEventEmitter) {
-                      collabEventEmitter.emit({ type: 'pull_requests_update', payload: { projectId } });
+                      collabEventEmitter.emit({
+                        type: 'pull_requests_update',
+                        payload: { projectId },
+                      });
                     }
                   }
                 } else {
@@ -2749,7 +2751,10 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
                       `Project Manager: getPullRequests background synced Drive only (no local file before) for "${projectId}"`,
                     );
                     if (collabEventEmitter) {
-                      collabEventEmitter.emit({ type: 'pull_requests_update', payload: { projectId } });
+                      collabEventEmitter.emit({
+                        type: 'pull_requests_update',
+                        payload: { projectId },
+                      });
                     }
                   }
                 }
@@ -2766,9 +2771,14 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
                   );
                   const { fileId: newFileId } = JSON.parse(result) as { fileId: string };
                   if (newFileId) {
-                    const updatedPrIds = { ...(driveConfig.prFileIds ?? {}), [projectId]: newFileId };
+                    const updatedPrIds = {
+                      ...(driveConfig.prFileIds ?? {}),
+                      [projectId]: newFileId,
+                    };
                     await writeTasksDriveConfig({ prFileIds: updatedPrIds });
-                    logger.info(`Project Manager: Initialized Drive PR file ${newFileId} for "${projectId}"`);
+                    logger.info(
+                      `Project Manager: Initialized Drive PR file ${newFileId} for "${projectId}"`,
+                    );
                   }
                 } catch (writeErr) {
                   logger.warn(`Failed to initialize PR file on Drive in background: ${writeErr}`);

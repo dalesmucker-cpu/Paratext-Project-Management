@@ -425,7 +425,7 @@ function CommentNode({
           <span className="tw:text-[12px] tw:text-slate-500">
             {relativeTime(comment.timestamp, lang)}
           </span>
-          {comment.mentions.length > 0 && (
+          {comment.mentions && comment.mentions.length > 0 && (
             <span className="tw:inline-flex tw:items-center tw:gap-0.5 tw:text-[10px] tw:px-1.5 tw:py-0.5 tw:rounded-full tw:bg-slate-100 tw:text-slate-600">
               <AtSign size={9} /> {comment.mentions.join(', ')}
             </span>
@@ -815,15 +815,15 @@ globalThis.webViewComponent = function PullRequestsWebView({
     return list;
   }, [store, filter, search]);
 
-  const upCount = (pr: PullRequest) => pr.votes.filter((v) => v.value === 'up').length;
-  const downCount = (pr: PullRequest) => pr.votes.filter((v) => v.value === 'down').length;
+  const upCount = (pr: PullRequest) => (pr.votes || []).filter((v) => v.value === 'up').length;
+  const downCount = (pr: PullRequest) => (pr.votes || []).filter((v) => v.value === 'down').length;
   const userVote = (pr: PullRequest) =>
-    pr.votes.find((v) => v.user === currentUser)?.value ?? undefined;
+    (pr.votes || []).find((v) => v.user === currentUser)?.value ?? undefined;
 
   const weightedUpCount = (pr: PullRequest) =>
-    pr.votes.filter((v) => v.value === 'up').reduce((sum, v) => sum + v.weight, 0);
+    (pr.votes || []).filter((v) => v.value === 'up').reduce((sum, v) => sum + (v.weight ?? 1), 0);
   const weightedDownCount = (pr: PullRequest) =>
-    pr.votes.filter((v) => v.value === 'down').reduce((sum, v) => sum + v.weight, 0);
+    (pr.votes || []).filter((v) => v.value === 'down').reduce((sum, v) => sum + (v.weight ?? 1), 0);
 
   const quorumMet = (pr: PullRequest) => {
     const minUpvotes = store?.quorum.minUpvotes ?? 2;
@@ -841,7 +841,7 @@ globalThis.webViewComponent = function PullRequestsWebView({
       return { ok: false, reason: tx('cannotMergeQuorum', needed) };
     }
     if (store?.quorum.requireNoConsultantDownvotes) {
-      const consultantDown = pr.votes.filter(
+      const consultantDown = (pr.votes || []).filter(
         (v) => v.value === 'down' && v.role === 'consultant',
       ).length;
       if (consultantDown > 0) return { ok: false, reason: tx('cannotMergeReview') };
@@ -1450,7 +1450,7 @@ globalThis.webViewComponent = function PullRequestsWebView({
       if (!store || !selected || !text.trim()) return;
       const cleanText = text.trim();
       const newAlt: AlternativeRendering = {
-        id: String.fromCharCode(65 + selected.alternatives.length),
+        id: String.fromCharCode(65 + (selected.alternatives || []).length),
         text: cleanText,
         proposedBy: currentUser,
         votes: [],
@@ -1957,7 +1957,7 @@ globalThis.webViewComponent = function PullRequestsWebView({
                       )}
                       {t === 'history' && (
                         <span className="tw:ml-1 tw:text-[11px] tw:px-1.5 tw:py-0.5 tw:rounded-md tw:bg-slate-100 tw:text-slate-700 tw:font-medium">
-                          {selected.history.length}
+                          {(selected.history || []).length}
                         </span>
                       )}
                     </button>
@@ -2109,12 +2109,12 @@ globalThis.webViewComponent = function PullRequestsWebView({
                         <span className="tw:text-[12px] tw:text-slate-500">{tx('altHint')}</span>
                       </div>
                       <div className="tw:divide-y tw:divide-slate-100 dark:tw:divide-slate-800">
-                        {selected.alternatives.length === 0 ? (
+                        {(selected.alternatives || []).length === 0 ? (
                           <div className="tw:p-5 tw:text-[13px] tw:text-slate-500 tw:text-center">
                             {tx('noAlternatives')}
                           </div>
                         ) : (
-                          selected.alternatives.map((alt) => (
+                          (selected.alternatives || []).map((alt) => (
                             <AlternativeRow
                               key={alt.id}
                               alt={alt}
@@ -2158,7 +2158,7 @@ globalThis.webViewComponent = function PullRequestsWebView({
                       <div className="tw:px-4 sm:tw:px-5 tw:py-3.5 tw:border-b tw:border-slate-100 dark:tw:border-slate-800 tw:flex tw:items-center tw:justify-between">
                         <h2 className="tw:font-semibold tw:tracking-tight">{tx('discussion')}</h2>
                         <span className="tw:text-[12px] tw:text-slate-500">
-                          {selected.comments.length} {tx('comments')}
+                          {(selected.comments || []).length} {tx('comments')}
                         </span>
                       </div>
                       <div className="tw:p-4 sm:tw:p-5 tw:space-y-5 tw:max-h-[380px] tw:overflow-y-auto scrollbar-thin">
@@ -2171,8 +2171,8 @@ globalThis.webViewComponent = function PullRequestsWebView({
                             <CommentNode
                               key={c.id}
                               comment={c}
-                              replies={selected.comments.filter((r) => r.parentId === c.id)}
-                              allComments={selected.comments}
+                              replies={(selected.comments || []).filter((r) => r.parentId === c.id)}
+                              allComments={selected.comments || []}
                               currentUser={currentUser}
                               lang={currentLang}
                               onReply={handleReply}
@@ -3205,7 +3205,7 @@ function AlternativeRow({ alt, currentUser, onVote, tx }: AlternativeRowProps) {
           )}
         </div>
         <div className="tw:text-[12px] tw:text-slate-500 tw:mt-1">
-          {tx('proposedBy', alt.proposedBy)} • {alt.votes.length} {tx('votes')}
+          {tx('proposedBy', alt.proposedBy)} • {(alt.votes || []).length} {tx('votes')}
         </div>
       </div>
       <button
@@ -3291,7 +3291,7 @@ function ChecksPanel({ tx }: { tx: (key: string, ...args: (string | number)[]) =
 }
 
 function HistoryPanel({ pr, lang }: { pr: PullRequest; lang: 'en' | 'es' }) {
-  const sorted = [...pr.history].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  const sorted = [...(pr.history || [])].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
   return (
     <div className="tw:max-w-[1200px] tw:mx-auto tw:p-4 lg:tw:p-6">
       <div className="tw:bg-white dark:tw:bg-slate-900 tw:rounded-2xl tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:shadow-sm tw:overflow-hidden">

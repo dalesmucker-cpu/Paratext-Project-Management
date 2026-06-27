@@ -1,7 +1,8 @@
+/* eslint-disable react/jsx-no-useless-fragment */
 import { WebViewProps } from '@papi/core';
 import papi from '@papi/frontend';
 import { useDialogCallback } from '@papi/frontend/react';
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
 import { ScrollGroupSelector } from 'platform-bible-react';
 import type { ParatextNoteThread } from './types/note.types';
 import { papiRetry, isPapiDisconnectedError } from './utils/papi-retry';
@@ -198,15 +199,18 @@ interface EditableVerseProps {
   onCursorChange?: (offset: number) => void;
   onUndoStateChange?: (canUndo: boolean) => void;
   onEditBroadcast?: (newText: string) => void;
+  children: React.ReactNode;
 }
 
 // Module-level handle to the currently active EditableVerse, so the parent
 // scripture viewer can render an "↶ Deshacer" button next to it.
-let activeEditableVerseHandle: {
-  undo: () => void;
-  canUndo: () => boolean;
-  cancel: () => void;
-} | null = null;
+let activeEditableVerseHandle:
+  | {
+      undo: () => void;
+      canUndo: () => boolean;
+      cancel: () => void;
+    }
+  | undefined = undefined;
 
 export const triggerVerseUndo = () => {
   if (activeEditableVerseHandle && activeEditableVerseHandle.canUndo()) {
@@ -223,8 +227,220 @@ export const triggerVerseCancel = () => {
   }
   return false;
 };
+const RenderOnce = memo(
+  ({ children }: { children: React.ReactNode }) => {
+    return <>{children}</>;
+  },
+  () => true, // Never re-render
+);
 
-const EditableVerse: React.FC<EditableVerseProps> = ({
+const getCleanTextFromDOM = (element: HTMLElement): string => {
+  let cleanText = '';
+
+  const walk = (node: Node) => {
+    if (node.nodeType === 3) {
+      const parent = node.parentElement;
+      if (parent) {
+        if (parent.closest('[data-cursor="true"]') || parent.closest('[aria-label="nota"]')) {
+          return;
+        }
+        const fnEl = parent.closest('[data-footnote="true"]');
+        if (fnEl) {
+          return;
+        }
+      }
+      cleanText += node.textContent || '';
+    } else if (node.nodeType === 1) {
+      // eslint-disable-next-line no-type-assertion/no-type-assertion
+      const el = node as HTMLElement;
+      const isCursor =
+        el.getAttribute('data-cursor') === 'true' || el.closest('[data-cursor="true"]');
+      const isNoteIcon =
+        el.getAttribute('aria-label') === 'nota' || el.closest('[aria-label="nota"]');
+      const fnEl =
+        el.getAttribute('data-footnote') === 'true' ? el : el.closest('[data-footnote="true"]');
+
+      if (isCursor || isNoteIcon) {
+        return;
+      }
+      if (fnEl) {
+        const title = fnEl.getAttribute('title') || '';
+        cleanText += `[FN:${title}]`;
+        return;
+      }
+      for (let i = 0; i < node.childNodes.length; i++) {
+        walk(node.childNodes[i]);
+      }
+    }
+  };
+
+  for (let i = 0; i < element.childNodes.length; i++) {
+    walk(element.childNodes[i]);
+  }
+  return cleanText;
+};
+
+const getCleanOffsetAndContext = (
+  verseEl: HTMLElement,
+  targetContainer: Node,
+  targetOffset: number,
+) => {
+  let cleanOffset = 0;
+
+  const walk = (node: Node): boolean => {
+    if (node === targetContainer) {
+      if (node.nodeType === 3) {
+        const element = node.parentElement;
+        if (element) {
+          if (element.closest('[data-cursor="true"]') || element.closest('[aria-label="nota"]')) {
+            return true;
+          }
+          const fnEl = element.closest('[data-footnote="true"]');
+          if (fnEl) {
+            return true;
+          }
+        }
+        cleanOffset += targetOffset;
+      }
+      return true;
+    }
+
+    if (node.nodeType === 3) {
+      const element = node.parentElement;
+      if (element) {
+        if (element.closest('[data-cursor="true"]') || element.closest('[aria-label="nota"]')) {
+          return false;
+        }
+        const fnEl = element.closest('[data-footnote="true"]');
+        if (fnEl) {
+          return false;
+        }
+      }
+      cleanOffset += node.textContent?.length || 0;
+      return false;
+    }
+
+    if (node.nodeType === 1) {
+      // eslint-disable-next-line no-type-assertion/no-type-assertion
+      const el = node as HTMLElement;
+      const isCursor =
+        el.getAttribute('data-cursor') === 'true' || el.closest('[data-cursor="true"]');
+      const isNoteIcon =
+        el.getAttribute('aria-label') === 'nota' || el.closest('[aria-label="nota"]');
+      const fnEl =
+        el.getAttribute('data-footnote') === 'true' ? el : el.closest('[data-footnote="true"]');
+
+      if (isCursor || isNoteIcon) {
+        if (el.contains(targetContainer)) {
+          return true;
+        }
+        return false;
+      }
+
+      if (fnEl) {
+        if (el.contains(targetContainer)) {
+          return true;
+        }
+        const title = fnEl.getAttribute('title') || '';
+        cleanOffset += 5 + title.length; // "[FN:" + title + "]"
+        return false;
+      }
+    }
+
+    for (let i = 0; i < node.childNodes.length; i++) {
+      if (walk(node.childNodes[i])) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  walk(verseEl);
+  return cleanOffset;
+};
+
+const setCaretAtCleanOffset = (element: HTMLElement, targetOffset: number) => {
+  let currentOffset = 0;
+  const sel = window.getSelection();
+  if (!sel) return;
+
+  const walk = (node: Node): boolean => {
+    if (node.nodeType === 3) {
+      const parent = node.parentElement;
+      if (parent) {
+        if (parent.closest('[data-cursor="true"]') || parent.closest('[aria-label="nota"]')) {
+          return false;
+        }
+        const fnEl = parent.closest('[data-footnote="true"]');
+        if (fnEl) {
+          const title = fnEl.getAttribute('title') || '';
+          const fnLength = 5 + title.length;
+          if (currentOffset + fnLength >= targetOffset) {
+            const range = document.createRange();
+            range.setStartBefore(fnEl);
+            range.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(range);
+            return true;
+          }
+          currentOffset += fnLength;
+          return false;
+        }
+      }
+
+      const len = node.textContent?.length || 0;
+      if (currentOffset + len >= targetOffset) {
+        const localOffset = targetOffset - currentOffset;
+        const range = document.createRange();
+        range.setStart(node, localOffset);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        return true;
+      }
+      currentOffset += len;
+      return false;
+    }
+
+    if (node.nodeType === 1) {
+      // eslint-disable-next-line no-type-assertion/no-type-assertion
+      const el = node as HTMLElement;
+      const isCursor =
+        el.getAttribute('data-cursor') === 'true' || el.closest('[data-cursor="true"]');
+      const isNoteIcon =
+        el.getAttribute('aria-label') === 'nota' || el.closest('[aria-label="nota"]');
+      const fnEl =
+        el.getAttribute('data-footnote') === 'true' ? el : el.closest('[data-footnote="true"]');
+
+      if (isCursor || isNoteIcon) {
+        return false;
+      }
+      if (fnEl) {
+        const title = fnEl.getAttribute('title') || '';
+        const fnLength = 5 + title.length;
+        if (currentOffset + fnLength >= targetOffset) {
+          const range = document.createRange();
+          range.setStartBefore(fnEl);
+          range.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(range);
+          return true;
+        }
+        currentOffset += fnLength;
+        return false;
+      }
+    }
+
+    for (let i = 0; i < node.childNodes.length; i++) {
+      if (walk(node.childNodes[i])) return true;
+    }
+    return false;
+  };
+
+  walk(element);
+};
+
+function EditableVerse({
   initialText,
   initialOffset,
   onSave,
@@ -233,52 +449,26 @@ const EditableVerse: React.FC<EditableVerseProps> = ({
   onCursorChange,
   onUndoStateChange,
   onEditBroadcast,
-}) => {
+  children,
+}: EditableVerseProps) {
+  // eslint-disable-next-line no-null/no-null
   const ref = useRef<HTMLSpanElement>(null);
   const [hasSaved, setHasSaved] = useState(false);
   const undoStackRef = useRef<string[]>([]);
-  const displayInitialText = initialText || '\u200B';
-  const lastInputValueRef = useRef<string>(displayInitialText);
+  const lastInputValueRef = useRef<string>('');
   const [canUndo, setCanUndo] = useState(false);
 
-  // Register this EditableVerse as the active one for the global undo/cancel buttons.
-  useEffect(() => {
-    activeEditableVerseHandle = {
-      undo: () => handleUndo(),
-      canUndo: () => undoStackRef.current.length > 0,
-      cancel: () => {
-        setHasSaved(true);
-        if (ref.current) {
-          ref.current.textContent = displayInitialText;
-        }
-        onCancel();
-      },
-    };
-    return () => {
-      if (activeEditableVerseHandle) activeEditableVerseHandle = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (onUndoStateChange) onUndoStateChange(canUndo);
-  }, [canUndo, onUndoStateChange]);
-
   const getCaretOffset = (element: HTMLElement) => {
-    let caretOffset = 0;
     const sel = window.getSelection();
     if (sel && sel.rangeCount > 0) {
       try {
         const range = sel.getRangeAt(0);
-        const preCaretRange = range.cloneRange();
-        preCaretRange.selectNodeContents(element);
-        preCaretRange.setEnd(range.endContainer, range.endOffset);
-        caretOffset = preCaretRange.toString().length;
+        return getCleanOffsetAndContext(element, range.endContainer, range.endOffset);
       } catch (e) {
-        console.error('Failed to compute caret offset:', e);
+        console.error('Failed to compute clean caret offset:', e);
       }
     }
-    return caretOffset;
+    return 0;
   };
 
   const handleCursorActivity = () => {
@@ -287,7 +477,7 @@ const EditableVerse: React.FC<EditableVerseProps> = ({
     }
   };
 
-  // Push current DOM text onto undo stack when it changes
+  // Push current DOM HTML onto undo stack when it changes
   const pushUndoSnapshot = (newValue: string) => {
     const prev = lastInputValueRef.current;
     if (prev === newValue) return;
@@ -302,83 +492,71 @@ const EditableVerse: React.FC<EditableVerseProps> = ({
     e?.stopPropagation();
     const prev = undoStackRef.current.pop();
     if (prev === undefined || !ref.current) return;
-    // Restore text without re-rendering (avoid React overwriting)
-    ref.current.textContent = prev;
+    ref.current.innerHTML = prev;
     lastInputValueRef.current = prev;
     setCanUndo(undoStackRef.current.length > 0);
-    // Restore caret to end of restored text
     try {
       const range = document.createRange();
       const sel = window.getSelection();
-      const textNode = ref.current.firstChild || ref.current;
-      const length = textNode.textContent?.length || 0;
-      range.setStart(textNode, length);
-      range.setEnd(textNode, length);
+      const textNode = ref.current.lastChild || ref.current;
+      range.selectNodeContents(textNode);
+      range.collapse(false);
       sel?.removeAllRanges();
       sel?.addRange(range);
     } catch (_) {}
   };
 
+  // Register this EditableVerse as the active one for the global undo/cancel buttons.
+  // Defined below handleUndo to resolve eslint use-before-define error.
+  useEffect(() => {
+    activeEditableVerseHandle = {
+      undo: () => handleUndo(),
+      canUndo: () => undoStackRef.current.length > 0,
+      cancel: () => {
+        setHasSaved(true);
+        onCancel();
+      },
+    };
+    return () => {
+      if (activeEditableVerseHandle) activeEditableVerseHandle = undefined;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (onUndoStateChange) onUndoStateChange(canUndo);
+  }, [canUndo, onUndoStateChange]);
+
   useEffect(() => {
     if (ref.current) {
       ref.current.focus();
 
-      // Attempt to position caret at the clicked character offset
+      // On mount, initialize lastInputValueRef with the initial HTML
+      lastInputValueRef.current = ref.current.innerHTML;
+
+      // Position caret at the clicked character offset
       try {
-        const textNode = ref.current.firstChild || ref.current;
-        const range = document.createRange();
-        const sel = window.getSelection();
-        const length = textNode.textContent?.length || 0;
-        const targetOffset = Math.min(Math.max(0, initialOffset), length);
-
-        range.setStart(textNode, targetOffset);
-        range.setEnd(textNode, targetOffset);
-        sel?.removeAllRanges();
-        sel?.addRange(range);
-
-        if (onCursorChange) onCursorChange(targetOffset);
+        setCaretAtCleanOffset(ref.current, initialOffset);
+        if (onCursorChange) onCursorChange(initialOffset);
       } catch (err) {
-        // Fallback: collapse caret to the end
-        try {
-          const range = document.createRange();
-          const sel = window.getSelection();
-          range.selectNodeContents(ref.current);
-          range.collapse(false);
-          sel?.removeAllRanges();
-          sel?.addRange(range);
-
-          if (onCursorChange) onCursorChange(ref.current.textContent?.length || 0);
-        } catch (e) {
-          console.error('Failed to restore cursor position:', e);
-        }
+        console.error('Failed to restore clean cursor position:', err);
       }
     }
   }, [initialOffset]);
 
   const handleBlur = async (e: React.FocusEvent<HTMLSpanElement>) => {
     if (hasSaved) return;
-    const text = e.currentTarget.textContent || '';
-    const cleanText = text.replace(/\u200B/g, '');
+    const cleanText = getCleanTextFromDOM(e.currentTarget);
     setHasSaved(true);
     await onSave(cleanText);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLSpanElement>) => {
-    // Ctrl+Z / Cmd+Z to undo typing within this verse
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
       if (undoStackRef.current.length > 0) {
         handleUndo(e);
         return;
       }
-    }
-    // Ctrl+Y or Ctrl+Shift+Z for redo: re-apply popped value (simple)
-    if (
-      (e.ctrlKey || e.metaKey) &&
-      ((e.shiftKey && e.key.toLowerCase() === 'z') || e.key.toLowerCase() === 'y')
-    ) {
-      // No redo stack in this simple implementation
-      e.preventDefault();
-      return;
     }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -386,19 +564,21 @@ const EditableVerse: React.FC<EditableVerseProps> = ({
     } else if (e.key === 'Escape') {
       e.preventDefault();
       setHasSaved(true);
-      if (ref.current) {
-        ref.current.textContent = displayInitialText;
-      }
       onCancel();
     }
   };
 
   const handleInput = (e: React.FormEvent<HTMLSpanElement>) => {
-    const text = e.currentTarget.textContent || '';
-    pushUndoSnapshot(text);
+    const html = e.currentTarget.innerHTML || '';
+    pushUndoSnapshot(html);
     handleCursorActivity();
-    if (onEditBroadcast) onEditBroadcast(text);
+    if (onEditBroadcast) {
+      const cleanText = getCleanTextFromDOM(e.currentTarget);
+      onEditBroadcast(cleanText);
+    }
   };
+
+  const isEmpty = (initialText || '').trim() === '';
 
   return (
     <span
@@ -420,10 +600,8 @@ const EditableVerse: React.FC<EditableVerseProps> = ({
       style={{
         outline: 'none',
         textDecoration: 'none',
-        // Use inline display for normal verses so we don't shift surrounding text.
-        // For empty verses, use inline-block so the cursor has a visible target area.
-        display: (initialText || '').trim() === '' ? 'inline-block' : 'inline',
-        ...((initialText || '').trim() === ''
+        display: isEmpty ? 'inline-block' : 'inline',
+        ...(isEmpty
           ? {
               minWidth: '80px',
               minHeight: '1.1em',
@@ -433,10 +611,10 @@ const EditableVerse: React.FC<EditableVerseProps> = ({
           : {}),
       }}
     >
-      {displayInitialText}
+      <RenderOnce>{children || '\u200B'}</RenderOnce>
     </span>
   );
-};
+}
 
 const renderFootnotes = (node: React.ReactNode): React.ReactNode => {
   if (typeof node === 'string') {
@@ -450,6 +628,8 @@ const renderFootnotes = (node: React.ReactNode): React.ReactNode => {
             return (
               <span
                 key={idx}
+                contentEditable={false}
+                data-footnote="true"
                 className="tw:text-xs tw:font-semibold tw:text-indigo-600 tw:align-super tw:mx-0.5 tw:cursor-pointer tw:select-none tw:hover:text-indigo-800 tw:transition-colors"
                 title={footnoteText}
                 onClick={(e) => {
@@ -674,18 +854,6 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     return localStorage.getItem('scripture_viewer_drafting_sidebar') !== 'false';
   });
 
-  // Dynamically load Inter and Outfit fonts from Google Fonts
-  useEffect(() => {
-    if (!document.getElementById('google-fonts-link')) {
-      const link = document.createElement('link');
-      link.id = 'google-fonts-link';
-      link.rel = 'stylesheet';
-      link.href =
-        'https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Outfit:wght@400;600;700&display=swap';
-      document.head.appendChild(link);
-    }
-  }, []);
-
   const getCursorColors = (user: string) => {
     const userHash = user.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
     const palette = [
@@ -703,6 +871,8 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     return (
       <span
         key={`cursor-${user}-${idx}`}
+        contentEditable={false}
+        data-cursor="true"
         className="tw:relative tw:inline-block tw:align-baseline tw:text-[0]"
         style={{ width: '0px', height: '1.2em', lineHeight: '1.2em', marginLeft: '-1px' }}
       >
@@ -1188,9 +1358,6 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   useEffect(() => {
     isEditingVerseRef.current = isEditingVerse;
     editingVerseNumRef.current = selectedVerseNum;
-    if (isEditingVerse) {
-      setVerseHighlight(null);
-    }
   }, [isEditingVerse, selectedVerseNum]);
 
   // Text selection states for new notes
@@ -1199,42 +1366,6 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   const [contextBefore, setContextBefore] = useState('');
   const [contextAfter, setContextAfter] = useState('');
   const [initialOffset, setInitialOffset] = useState(0);
-
-  // Per-verse selection highlight: tracks the current text range the user has
-  // selected inside a verse, so we can render it with a background color.
-  const [verseHighlight, setVerseHighlight] = useState<{
-    verseNum: number;
-    start: number;
-    end: number;
-    text: string;
-  } | null>(null);
-
-  const captureVerseHighlight = (verseNum: number, _verseText: string) => {
-    const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
-      setVerseHighlight(null);
-      return;
-    }
-    const range = sel.getRangeAt(0);
-    const verseEl = document.getElementById(`verse-${verseNum}`);
-    if (!verseEl || !verseEl.contains(range.commonAncestorContainer)) {
-      return;
-    }
-    // Compute character offsets within the verse text using a clone of the range
-    // that is collapsed to its start/end and compared to the verse text length.
-    const pre = range.cloneRange();
-    pre.selectNodeContents(verseEl);
-    pre.setEnd(range.startContainer, range.startOffset);
-    const start = pre.toString().length;
-    const { length } = range.toString();
-    const end = start + length;
-    const selected = range.toString();
-    if (!selected.trim()) {
-      setVerseHighlight(null);
-      return;
-    }
-    setVerseHighlight({ verseNum, start, end, text: selected });
-  };
 
   // Note creation form states
   const [showNewNoteForm, setShowNewNoteForm] = useState(false);
@@ -1261,18 +1392,6 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     return () => window.removeEventListener('click', handleWindowClick);
   }, []);
 
-  // Clear the verse highlight when the user clicks outside any verse span
-  // or when the document selection becomes collapsed.
-  useEffect(() => {
-    const handleSelectionChange = () => {
-      const sel = window.getSelection();
-      if (!sel || sel.isCollapsed) {
-        setVerseHighlight(null);
-      }
-    };
-    document.addEventListener('selectionchange', handleSelectionChange);
-    return () => document.removeEventListener('selectionchange', handleSelectionChange);
-  }, []);
   const [replying, setReplying] = useState<Record<string, boolean>>({});
 
   // File attachment elements
@@ -1580,20 +1699,6 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     handleCatch,
   ]);
 
-  // Scroll to active verse element when selectedVerseNum or chapterBlocks changes
-  useEffect(() => {
-    if (selectedVerseNum !== null) {
-      const timer = setTimeout(() => {
-        const element = document.getElementById(`verse-${selectedVerseNum}`);
-        if (element) {
-          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-      }, 80);
-      return () => clearTimeout(timer);
-    }
-    return undefined;
-  }, [selectedVerseNum, chapterBlocks]);
-
   // Scroll to focused thread card in right sidebar
   useEffect(() => {
     if (selectedThreadIdInSidebar) {
@@ -1763,7 +1868,12 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
             title="Click para ver la nota"
           >
             <span className="tw:border-b tw:border-dashed tw:border-slate-400">{part}</span>
-            <span className="tw:text-xs tw:ml-0.5" role="img" aria-label="nota">
+            <span
+              contentEditable={false}
+              className="tw:text-xs tw:ml-0.5"
+              role="img"
+              aria-label="nota"
+            >
               {symbol}
             </span>
           </span>
@@ -1950,7 +2060,6 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
 
   useEffect(() => {
     if (selectedBook) {
-      setVerseHighlight(null);
       loadChapter(selectedBook, selectedChapter);
       if (pendingVerseRef.current !== null) {
         const pv = pendingVerseRef.current;
@@ -2312,15 +2421,18 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       setSelectedText(selectedStr);
       setIsEditingVerse(false);
 
-      const { anchorNode } = selection;
-      const fullText = anchorNode?.textContent || '';
-      const offset = selection.anchorOffset;
-      setStartPosition(offset);
+      const verseEl = document.getElementById(`verse-${verseNum}`);
+      let startPos = 0;
+      if (verseEl && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        startPos = getCleanOffsetAndContext(verseEl, range.startContainer, range.startOffset);
+      }
+      setStartPosition(startPos);
 
-      const before = fullText.substring(Math.max(0, offset - 30), offset);
-      const after = fullText.substring(
-        offset + selectedStr.length,
-        offset + selectedStr.length + 30,
+      const before = verseText.substring(Math.max(0, startPos - 30), startPos);
+      const after = verseText.substring(
+        startPos + selectedStr.length,
+        startPos + selectedStr.length + 30,
       );
       setContextBefore(before);
       setContextAfter(after);
@@ -2329,8 +2441,10 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
 
     // Capture the click caret offset before swapping to edit component
     let offset = 0;
-    if (selection && selection.rangeCount > 0) {
-      offset = selection.getRangeAt(0).startOffset;
+    const verseEl = document.getElementById(`verse-${verseNum}`);
+    if (selection && selection.rangeCount > 0 && verseEl) {
+      const range = selection.getRangeAt(0);
+      offset = getCleanOffsetAndContext(verseEl, range.startContainer, range.startOffset);
     }
     setInitialOffset(offset);
 
@@ -2350,36 +2464,44 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   };
 
   const handleVerseContextMenu = (e: React.MouseEvent, verseNum: number, verseText: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+
     const selection = window.getSelection();
     const selectedStr = selection ? selection.toString().trim() : '';
     const isEmpty = !verseText || verseText.trim().length === 0;
+
+    selectVerse(verseNum);
+    setSelectedText(selectedStr);
+
     if (selection && selectedStr && !isEmpty) {
-      e.preventDefault();
-      e.stopPropagation();
+      const verseEl = document.getElementById(`verse-${verseNum}`);
+      let startPos = 0;
+      if (verseEl && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        startPos = getCleanOffsetAndContext(verseEl, range.startContainer, range.startOffset);
+      }
+      setStartPosition(startPos);
 
-      selectVerse(verseNum);
-      setSelectedText(selectedStr);
-      setIsEditingVerse(false);
-
-      const { anchorNode } = selection;
-      const fullText = anchorNode?.textContent || '';
-      const offset = selection.anchorOffset;
-      setStartPosition(offset);
-
-      const before = fullText.substring(Math.max(0, offset - 30), offset);
-      const after = fullText.substring(
-        offset + selectedStr.length,
-        offset + selectedStr.length + 30,
+      const before = verseText.substring(Math.max(0, startPos - 30), startPos);
+      const after = verseText.substring(
+        startPos + selectedStr.length,
+        startPos + selectedStr.length + 30,
       );
       setContextBefore(before);
       setContextAfter(after);
-
-      setContextMenuVerseText(verseText);
-      setContextMenu({
-        x: e.clientX,
-        y: e.clientY,
-      });
+    } else {
+      setSelectedText('');
+      setStartPosition(0);
+      setContextBefore('');
+      setContextAfter('');
     }
+
+    setContextMenuVerseText(verseText);
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+    });
   };
 
   // Create new note thread
@@ -2892,10 +3014,6 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                           : null;
 
                         const isEmpty = !child.text || child.text.trim().length === 0;
-                        const selectionForThisVerse =
-                          verseHighlight && verseHighlight.verseNum === child.number
-                            ? verseHighlight
-                            : null;
                         return (
                           <span
                             key={cIdx}
@@ -2904,11 +3022,6 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                             onContextMenu={(e) =>
                               handleVerseContextMenu(e, child.number, child.text)
                             }
-                            onMouseUp={() => {
-                              if (!isEditing) {
-                                captureVerseHighlight(child.number, child.text);
-                              }
-                            }}
                             className={`tw:relative tw:rounded tw:transition-all tw:py-0.5 tw:cursor-text ${
                               versesOnOwnLine ? 'tw:block tw:mb-2' : 'tw:inline'
                             }`}
@@ -3012,28 +3125,32 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                                 onEditBroadcast={(text) => {
                                   handleVerseEditBroadcast(child.number, text);
                                 }}
-                              />
+                              >
+                                {highlightKeyTermsInNode(
+                                  renderFootnotes(
+                                    injectCursorsIntoElements(
+                                      highlightText(
+                                        child.text,
+                                        chapterNotesByVerse[child.number] ?? [],
+                                        child.number,
+                                      ),
+                                      editorsWithCursors,
+                                    ),
+                                  ),
+                                  child.number,
+                                  selectedBook,
+                                )}
+                              </EditableVerse>
                             ) : (
                               <span>
                                 {highlightKeyTermsInNode(
                                   renderFootnotes(
                                     injectCursorsIntoElements(
-                                      selectionForThisVerse
-                                        ? wrapRangeInMark(
-                                            highlightText(
-                                              child.text,
-                                              chapterNotesByVerse[child.number] ?? [],
-                                              child.number,
-                                            ),
-                                            selectionForThisVerse.start,
-                                            selectionForThisVerse.end,
-                                            `v${child.number}`,
-                                          )
-                                        : highlightText(
-                                            child.text,
-                                            chapterNotesByVerse[child.number] ?? [],
-                                            child.number,
-                                          ),
+                                      highlightText(
+                                        child.text,
+                                        chapterNotesByVerse[child.number] ?? [],
+                                        child.number,
+                                      ),
                                       editorsWithCursors,
                                     ),
                                   ),
@@ -3169,25 +3286,29 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
           </div>
         )}
       </div>
-
       {/* Context menu for selection */}
+      {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
       {contextMenu && (
         <div
           className="tw:fixed tw:z-[10000] tw:bg-white tw:border tw:border-slate-200 tw:shadow-lg tw:rounded-lg tw:py-1 tw:w-40 tw:text-xs"
           style={{ top: contextMenu.y, left: contextMenu.x }}
           onClick={(e) => e.stopPropagation()}
         >
-          <button
-            onClick={() => {
-              setContextMenu(null);
-              setIsEditingVerse(false);
-              setNotesPopupVerseNum(selectedVerseNum);
-              setShowNewNoteForm(true);
-            }}
-            className="tw:w-full tw:text-left tw:px-3 tw:py-2 tw:hover:bg-slate-100 tw:text-slate-700 tw:font-semibold tw:flex tw:items-center tw:gap-1.5 tw:cursor-pointer tw:border-none tw:bg-white"
-          >
-            Agregar nota
-          </button>
+          {selectedText && (
+            <button
+              type="button"
+              onClick={() => {
+                setContextMenu(null);
+                setIsEditingVerse(false);
+                setNotesPopupVerseNum(selectedVerseNum);
+                setShowNewNoteForm(true);
+              }}
+              className="tw:w-full tw:text-left tw:px-3 tw:py-2 tw:hover:bg-slate-100 tw:text-slate-700 tw:font-semibold tw:flex tw:items-center tw:gap-1.5 tw:cursor-pointer tw:border-none tw:bg-white"
+            >
+              Agregar nota
+            </button>
+          )}
+
           <button
             type="button"
             onClick={async () => {
