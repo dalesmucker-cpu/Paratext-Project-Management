@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
   ChevronRight, 
   Clock, 
@@ -10,11 +10,82 @@ import {
   RefreshCw, 
   Search, 
   Send, 
+  Table, 
   ThumbsDown, 
   ThumbsUp, 
   User, 
   AlertCircle
 } from 'lucide-react';
+
+// ---- Stages & "Resumen del Proyecto" helpers (mirror src/types/task.types.ts) ----
+
+type TaskStatus = 'pending' | 'in-progress' | 'complete' | 'flagged';
+
+const BIBLE_BOOKS = [
+  'GEN','EXO','LEV','NUM','DEU','JOS','JDG','RUT','1SA','2SA','1KI','2KI','1CH','2CH',
+  'EZR','NEH','EST','JOB','PSA','PRO','ECC','SNG','ISA','JER','LAM','EZK','DAN','HOS',
+  'JOL','AMO','OBA','JON','MIC','NAM','HAB','ZEP','HAG','ZEC','MAL','MAT','MRK','LUK',
+  'JHN','ACT','ROM','1CO','2CO','GAL','EPH','PHP','COL','1TH','2TH','1TI','2TI','TIT',
+  'PHM','HEB','JAS','1PE','2PE','1JN','2JN','3JN','JUD','REV'
+] as const;
+
+const STAGE_LABELS: Record<string, string> = {
+  'primer-borrador': 'Primer Borrador',
+  revision1: 'Revisión 1',
+  revision2: 'Revisión 2',
+  'community-review': 'Revisión en Comunidad',
+  'back-translation': 'Retrotraducción',
+  'back-translation-review': 'Rev. Retrotraducción',
+  'answer-flags': 'Contestar Banderas',
+  'translator-training': 'Capacitación',
+  'consultant-review': 'Revisión Consultor',
+};
+
+const STAGES = Object.keys(STAGE_LABELS);
+
+interface StageConfig {
+  label: string;
+  order: number;
+}
+
+function getStageLabel(stage: string, stageConfig?: Record<string, StageConfig>): string {
+  if (stageConfig?.[stage]?.label) return stageConfig[stage].label;
+  return STAGE_LABELS[stage] ?? stage.replace(/^custom-/, '');
+}
+
+function getOrderedStages(stageConfig?: Record<string, StageConfig>): string[] {
+  if (!stageConfig || Object.keys(stageConfig).length === 0) return [...STAGES];
+  const customKeys = Object.keys(stageConfig).filter((k) => !STAGES.includes(k));
+  const allStages = [...STAGES, ...customKeys];
+  return allStages.sort((a, b) => {
+    const orderA = stageConfig[a]?.order ?? STAGES.indexOf(a);
+    const orderB = stageConfig[b]?.order ?? STAGES.indexOf(b);
+    return orderA - orderB;
+  });
+}
+
+/** Aggregate cell status for a (book, stage) combination */
+function aggregateStatus(tasks: ProjectTask[]): TaskStatus | null {
+  if (tasks.length === 0) return null;
+  if (tasks.every((t) => t.status === 'complete')) return 'complete';
+  if (tasks.some((t) => t.status === 'flagged')) return 'flagged';
+  if (tasks.some((t) => t.status === 'in-progress')) return 'in-progress';
+  return 'pending';
+}
+
+const CELL_ICONS: Record<TaskStatus, string> = {
+  pending: '•',
+  'in-progress': '⟳',
+  complete: '✓',
+  flagged: '⚑',
+};
+
+const CELL_COLORS: Record<TaskStatus, { bg: string; color: string }> = {
+  pending: { bg: 'rgba(100, 116, 139, 0.12)', color: '#94a3b8' },
+  'in-progress': { bg: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24' },
+  complete: { bg: 'rgba(16, 185, 129, 0.15)', color: '#34d399' },
+  flagged: { bg: 'rgba(239, 68, 68, 0.15)', color: '#f87171' },
+};
 
 // Interfaces based on extension schemas
 interface ProjectTask {
@@ -23,13 +94,14 @@ interface ProjectTask {
   chapter: number;
   stage: string;
   assignedTo: string[];
-  status: 'pending' | 'in-progress' | 'complete' | 'flagged';
+  status: TaskStatus;
   notes: string;
   deadline?: string;
 }
 
 interface TaskStore {
   tasks: ProjectTask[];
+  stageConfig?: Record<string, StageConfig>;
 }
 
 interface PrVote {
@@ -171,8 +243,53 @@ export default function App() {
   const [taskStatusFilter, setTaskStatusFilter] = useState<string>('all');
   const [prStatusFilter, setPrStatusFilter] = useState<string>('all');
 
+  // Board sub-view: 'kanban' (status columns) or 'summary' (Resumen del Proyecto grid)
+  const [boardView, setBoardView] = useState<'summary' | 'kanban'>('summary');
+
   const selectedProject = projects.find(p => p.id === selectedProjectId);
   const selectedPr = selectedProject?.prsStore?.prs.find(pr => pr.id === selectedPrId);
+
+  // --- "Resumen del Proyecto" computations ---
+  const orderedStages = useMemo(
+    () => getOrderedStages(selectedProject?.tasksStore?.stageConfig),
+    [selectedProject?.tasksStore?.stageConfig]
+  );
+
+  const allTasks = selectedProject?.tasksStore?.tasks ?? [];
+  const booksInUse = useMemo(
+    () => BIBLE_BOOKS.filter(b => allTasks.some(t => t.book === b)),
+    [allTasks]
+  );
+
+  const summaryGrid = useMemo(() => {
+    const map: Record<string, Record<string, ProjectTask[]>> = {};
+    for (const book of booksInUse) {
+      map[book] = {};
+      for (const stage of orderedStages) {
+        map[book][stage] = allTasks.filter(t => t.book === book && t.stage === stage);
+      }
+    }
+    return map;
+  }, [booksInUse, orderedStages, allTasks]);
+
+  const stageSummary = useMemo(() => {
+    const summary: Record<string, { total: number; complete: number; flagged: number; inProgress: number }> = {};
+    for (const stage of orderedStages) {
+      const stageTasks = allTasks.filter(t => t.stage === stage);
+      summary[stage] = {
+        total: stageTasks.length,
+        complete: stageTasks.filter(t => t.status === 'complete').length,
+        flagged: stageTasks.filter(t => t.status === 'flagged').length,
+        inProgress: stageTasks.filter(t => t.status === 'in-progress').length,
+      };
+    }
+    return summary;
+  }, [allTasks, orderedStages]);
+
+  const totalTasks = allTasks.length;
+  const completedTasks = allTasks.filter(t => t.status === 'complete').length;
+  const flaggedTasks = allTasks.filter(t => t.status === 'flagged').length;
+  const pctComplete = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
   // Load Google Identity Services SDK
   useEffect(() => {
@@ -307,7 +424,6 @@ export default function App() {
   const loadProjectData = async (project: ProjectData) => {
     setLoading(true);
     setError(null);
-    setSelectedPrId(null);
     try {
       let tasksStore: TaskStore | undefined;
       let prsStore: PullRequestsStore | undefined;
@@ -341,6 +457,14 @@ export default function App() {
       }));
 
       setSelectedProjectId(project.id);
+
+      // Preserve the currently selected PR across reloads/refreshes; only clear it if it
+      // no longer exists in the refreshed store (avoids the PR detail panel going blank).
+      setSelectedPrId(prev => {
+        if (prev == null) return prev;
+        const found = prsStore?.prs?.some(pr => pr.id === prev);
+        return found ? prev : null;
+      });
     } catch (err: any) {
       setError(`Error cargando datos del proyecto: ${err.message}`);
     } finally {
@@ -884,7 +1008,105 @@ export default function App() {
               })}
             </div>
 
-            {/* Kanban Columns (Read Only Status View) */}
+            {/* Sub-view toggle: Resumen (summary grid) vs Tablero (kanban) */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', gap: '4px', background: 'rgba(22, 28, 45, 0.4)', padding: '4px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                <button
+                  onClick={() => setBoardView('summary')}
+                  className={`btn ${boardView === 'summary' ? 'btn-primary' : ''}`}
+                  style={{ borderRadius: '8px', padding: '6px 14px', border: 'none', fontSize: '0.85rem', background: boardView === 'summary' ? undefined : 'transparent', boxShadow: boardView === 'summary' ? undefined : 'none' }}
+                >
+                  <Table size={14} /> Resumen del Proyecto
+                </button>
+                <button
+                  onClick={() => setBoardView('kanban')}
+                  className={`btn ${boardView === 'kanban' ? 'btn-primary' : ''}`}
+                  style={{ borderRadius: '8px', padding: '6px 14px', border: 'none', fontSize: '0.85rem', background: boardView === 'kanban' ? undefined : 'transparent', boxShadow: boardView === 'kanban' ? undefined : 'none' }}
+                >
+                  <Layout size={14} /> Tablero
+                </button>
+              </div>
+              <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
+                Resumen del Proyecto — {pctComplete}% completo ({completedTasks}/{totalTasks} tareas{flaggedTasks > 0 ? `, ${flaggedTasks} con bandera` : ''})
+              </span>
+            </div>
+
+            {/* Resumen del Proyecto grid table */}
+            {boardView === 'summary' ? (
+              <div className="glass" style={{ padding: '12px', overflowX: 'auto' }}>
+                {totalTasks === 0 ? (
+                  <p style={{ textAlign: 'center', color: '#64748b', padding: '30px 0' }}>
+                    No hay tareas para mostrar en el resumen.
+                  </p>
+                ) : (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: orderedStages.length > 4 ? '680px' : 'auto' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ padding: '10px 8px', textAlign: 'left', borderBottom: '2px solid var(--border-color)', fontSize: '0.8rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em', position: 'sticky', left: 0, background: 'rgba(15, 23, 42, 0.85)', backdropFilter: 'blur(8px)', zIndex: 2 }}>
+                          Libro
+                        </th>
+                        {orderedStages.map(stage => {
+                          const s = stageSummary[stage];
+                          const allComplete = s && s.total > 0 && s.complete === s.total;
+                          const hasFlagged = s && s.flagged > 0;
+                          return (
+                            <th key={stage} style={{ padding: '10px 6px', textAlign: 'center', borderBottom: '2px solid var(--border-color)', fontSize: '0.75rem', fontWeight: 600, whiteSpace: 'nowrap', maxWidth: '110px' }} title={getStageLabel(stage, selectedProject.tasksStore?.stageConfig)}>
+                              <div style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {getStageLabel(stage, selectedProject.tasksStore?.stageConfig)}
+                              </div>
+                              {s && s.total > 0 && (
+                                <div style={{ fontSize: '0.65rem', fontWeight: 500, color: allComplete ? '#34d399' : hasFlagged ? '#f87171' : '#64748b', marginTop: '2px' }}>
+                                  {s.complete}/{s.total}
+                                </div>
+                              )}
+                            </th>
+                          );
+                        })}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {booksInUse.map(book => (
+                        <tr key={book} style={{ transition: 'background 0.15s' }}>
+                          <td style={{ padding: '6px 12px 6px 8px', fontWeight: 700, fontSize: '0.85rem', borderBottom: '1px solid var(--border-color)', position: 'sticky', left: 0, background: 'rgba(15, 23, 42, 0.85)', backdropFilter: 'blur(8px)', zIndex: 2, color: '#f1f5f9' }}>
+                            {book}
+                          </td>
+                          {orderedStages.map(stage => {
+                            const cellTasks = summaryGrid[book]?.[stage] ?? [];
+                            const status = aggregateStatus(cellTasks);
+                            const colors = status ? CELL_COLORS[status] : null;
+                            return (
+                              <td key={stage} style={{ padding: '6px', textAlign: 'center', borderBottom: '1px solid var(--border-color)', fontSize: '0.95rem' }} title={cellTasks.length > 0 ? `${cellTasks.length} tarea${cellTasks.length !== 1 ? 's' : ''}` : ''}>
+                                {status && (
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '2px', padding: '2px 6px', borderRadius: '6px', background: colors!.bg, color: colors!.color, fontWeight: 600 }} title={`Estado: ${getTaskStatusLabel(status)}`}>
+                                    {CELL_ICONS[status]}
+                                    {cellTasks.length > 1 && <sup style={{ fontSize: '0.6rem' }}>{cellTasks.length}</sup>}
+                                  </span>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr>
+                        <td style={{ padding: '8px 12px 8px 8px', fontWeight: 700, fontSize: '0.8rem', borderTop: '2px solid var(--border-color)', position: 'sticky', left: 0, background: 'rgba(15, 23, 42, 0.85)', backdropFilter: 'blur(8px)', zIndex: 2, color: '#94a3b8' }}>
+                          Total
+                        </td>
+                        {orderedStages.map(stage => {
+                          const s = stageSummary[stage];
+                          return (
+                            <td key={stage} style={{ padding: '8px', textAlign: 'center', fontSize: '0.75rem', fontWeight: 600, borderTop: '2px solid var(--border-color)', color: s.total === 0 ? '#475569' : s.complete === s.total ? '#34d399' : '#cbd5e1' }}>
+                              {s.total > 0 ? `${s.complete}/${s.total}` : ''}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    </tfoot>
+                  </table>
+                )}
+              </div>
+            ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', alignItems: 'start' }}>
               {(['pending', 'in-progress', 'flagged', 'complete'] as const).map(status => {
                 const colTasks = filteredTasks.filter(t => t.status === status);
@@ -947,6 +1169,7 @@ export default function App() {
                 );
               })}
             </div>
+            )}
           </div>
         )
       ) : (
