@@ -182,6 +182,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     passcodeInvalid: "Clave de acceso incorrecta.",
     unlockBtn: "Desbloquear",
     lockTitle: "Acceso Protegido",
+    description: "Descripción",
   },
   en: {
     projectsTitle: "My Projects",
@@ -266,6 +267,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     passcodeInvalid: "Invalid passcode.",
     unlockBtn: "Unlock",
     lockTitle: "Protected Access",
+    description: "Description",
   }
 };
 
@@ -327,6 +329,7 @@ interface PullRequest {
   votes: PrVote[];
   alternatives: AlternativeRendering[];
   comments: PrComment[];
+  kind?: 'verse' | 'general';
   history?: {
     id: string;
     actor: string;
@@ -1738,41 +1741,60 @@ export default function App() {
                           </div>
                         )}
 
-                        {/* Visual Word Diff */}
-                        {(selectedPr.originalText || selectedPr.proposedText) && (
-                          <div>
-                            <h3 className="section-label">{t('diffTitle')}</h3>
-                            <div className="glass" style={{
-                              padding: '20px', background: '#0a0d14',
-                              border: '1px solid rgba(255, 255, 255, 0.03)',
-                            }}>
-                              <div style={{
-                                display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px',
-                                marginBottom: '16px', borderBottom: '1px solid rgba(255, 255, 255, 0.04)', paddingBottom: '12px',
-                              }}>
-                                <div>
-                                  <span style={{
-                                    fontSize: '0.8rem', color: '#ef4444', background: 'rgba(239, 68, 68, 0.1)',
-                                    padding: '2px 8px', borderRadius: '4px', fontWeight: 600,
-                                  }}>{t('prevText')}</span>
-                                </div>
-                                <div>
-                                  <span style={{
-                                    fontSize: '0.8rem', color: '#10b981', background: 'rgba(16, 185, 129, 0.1)',
-                                    padding: '2px 8px', borderRadius: '4px', fontWeight: 600,
-                                  }}>{t('propText')}</span>
-                                </div>
+                        {/* Proposed Text: Diff for Verse PRs, simple description block for General PRs */}
+                        {(() => {
+                          const isGeneral = selectedPr.kind === 'general' || !selectedPr.ref;
+                          if (isGeneral) {
+                            if (!selectedPr.proposedText) return null;
+                            return (
+                              <div>
+                                <h3 className="section-label">{t('description')}</h3>
+                                <p className="glass" style={{
+                                  padding: '16px 20px', background: '#0a0d14',
+                                  border: '1px solid rgba(255, 255, 255, 0.03)',
+                                  fontSize: '1rem', color: '#cbd5e1', whiteSpace: 'pre-wrap',
+                                }}>{selectedPr.proposedText}</p>
                               </div>
-                              <div style={{ fontFamily: "'Outfit', sans-serif", fontSize: '1.05rem', lineHeight: '1.6' }}>
-                                {diffWords(selectedPr.originalText || '', selectedPr.proposedText || '').map((chunk, idx) => {
-                                  if (chunk.type === 'delete') return <span key={idx} className="diff-deleted">{chunk.text}</span>;
-                                  if (chunk.type === 'insert') return <span key={idx} className="diff-inserted">{chunk.text}</span>;
-                                  return <span key={idx}>{chunk.text}</span>;
-                                })}
+                            );
+                          }
+
+                          // Verse-specific PR with Diff
+                          if (!selectedPr.originalText && !selectedPr.proposedText) return null;
+                          return (
+                            <div>
+                              <h3 className="section-label">{t('diffTitle')}</h3>
+                              <div className="glass" style={{
+                                padding: '20px', background: '#0a0d14',
+                                border: '1px solid rgba(255, 255, 255, 0.03)',
+                              }}>
+                                <div style={{
+                                  display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px',
+                                  marginBottom: '16px', borderBottom: '1px solid rgba(255, 255, 255, 0.04)', paddingBottom: '12px',
+                                }}>
+                                  <div>
+                                    <span style={{
+                                      fontSize: '0.8rem', color: '#ef4444', background: 'rgba(239, 68, 68, 0.1)',
+                                      padding: '2px 8px', borderRadius: '4px', fontWeight: 600,
+                                    }}>{t('prevText')}</span>
+                                  </div>
+                                  <div>
+                                    <span style={{
+                                      fontSize: '0.8rem', color: '#10b981', background: 'rgba(16, 185, 129, 0.1)',
+                                      padding: '2px 8px', borderRadius: '4px', fontWeight: 600,
+                                    }}>{t('propText')}</span>
+                                  </div>
+                                </div>
+                                <div style={{ fontFamily: "'Outfit', sans-serif", fontSize: '1.05rem', lineHeight: '1.6' }}>
+                                  {diffWords(selectedPr.originalText || '', selectedPr.proposedText || '').map((chunk, idx) => {
+                                    if (chunk.type === 'delete') return <span key={idx} className="diff-deleted">{chunk.text}</span>;
+                                    if (chunk.type === 'insert') return <span key={idx} className="diff-inserted">{chunk.text}</span>;
+                                    return <span key={idx}>{chunk.text}</span>;
+                                  })}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        )}
+                          );
+                        })()}
 
                         {/* Voting */}
                         <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '20px' }}>
