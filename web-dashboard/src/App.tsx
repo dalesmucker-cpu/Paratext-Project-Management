@@ -35,16 +35,16 @@ const BIBLE_BOOKS = [
   '3JN', 'JUD', 'REV',
 ] as const;
 
-const STAGE_LABELS: Record<string, string> = {
-  'primer-borrador': 'Primer Borrador',
-  revision1: 'Revisión 1',
-  revision2: 'Revisión 2',
-  'community-review': 'Revisión en Comunidad',
-  'back-translation': 'Retrotraducción',
-  'back-translation-review': 'Rev. Retrotraducción',
-  'answer-flags': 'Contestar Banderas',
-  'translator-training': 'Capacitación',
-  'consultant-review': 'Revisión Consultor',
+const STAGE_LABELS: Record<string, Record<string, string>> = {
+  'primer-borrador': { es: 'Primer Borrador', en: 'First Draft' },
+  revision1: { es: 'Revisión 1', en: 'Revision 1' },
+  revision2: { es: 'Revisión 2', en: 'Revision 2' },
+  'community-review': { es: 'Revisión en Comunidad', en: 'Community Review' },
+  'back-translation': { es: 'Retrotraducción', en: 'Back Translation' },
+  'back-translation-review': { es: 'Rev. Retrotraducción', en: 'Back Translation Review' },
+  'answer-flags': { es: 'Contestar Banderas', en: 'Resolve Flags' },
+  'translator-training': { es: 'Capacitación', en: 'Translator Training' },
+  'consultant-review': { es: 'Revisión Consultor', en: 'Consultant Review' },
 };
 
 const STAGES = Object.keys(STAGE_LABELS);
@@ -54,9 +54,9 @@ interface StageConfig {
   order: number;
 }
 
-function getStageLabel(stage: string, stageConfig?: Record<string, StageConfig>): string {
+function getStageLabel(stage: string, lang: string, stageConfig?: Record<string, StageConfig>): string {
   if (stageConfig?.[stage]?.label) return stageConfig[stage].label;
-  return STAGE_LABELS[stage] ?? stage.replace(/^custom-/, '');
+  return STAGE_LABELS[stage]?.[lang] ?? STAGE_LABELS[stage]?.es ?? stage.replace(/^custom-/, '');
 }
 
 function getOrderedStages(stageConfig?: Record<string, StageConfig>): string[] {
@@ -86,11 +86,187 @@ const CELL_ICONS: Record<TaskStatus, string> = {
   flagged: '⚑',
 };
 
-const STATUS_LABELS: Record<TaskStatus, string> = {
-  pending: 'Pendiente',
-  'in-progress': 'En Progreso',
-  complete: 'Completado',
-  flagged: 'Bandera',
+function getStatusLabel(status: TaskStatus, lang: string): string {
+  const map: Record<TaskStatus, Record<string, string>> = {
+    pending: { es: 'Pendiente', en: 'Pending' },
+    'in-progress': { es: 'En Progreso', en: 'In Progress' },
+    complete: { es: 'Completado', en: 'Completed' },
+    flagged: { es: 'Bandera', en: 'Flagged' },
+  };
+  return map[status]?.[lang] ?? map[status]?.es ?? status;
+}
+
+const CONFIG_PASSCODE = 'slingshot2026'; // Change this to set a custom passcode for the hosted site
+
+const TRANSLATIONS: Record<string, Record<string, string>> = {
+  es: {
+    projectsTitle: "Mis Proyectos",
+    projectsSub: "Seleccione el proyecto de traducción para ver su tablero y pull requests.",
+    nameInput: "Nombre en Discusiones",
+    roleInput: "Rol / Relación",
+    btnGoogle: "Ingresar con Google",
+    btnLogout: "Cerrar Sesión",
+    tabResumen: "Resumen del Proyecto",
+    tabTablero: "Tablero",
+    tabPrs: "Pull Requests",
+    searchBook: "Buscar libro (MAT)",
+    allPrs: "Todas las PRs",
+    totalProgress: "Progreso Total",
+    pending: "Pendiente",
+    inProgress: "En Progreso",
+    complete: "Completado",
+    flagged: "Bandera",
+    votedUp: "Votado A Favor",
+    votedDown: "Votado En Contra",
+    voteUp: "A Favor",
+    voteDown: "En Contra",
+    suggestAlt: "Sugerir Traducción Alternativa",
+    vote: "Votar",
+    voted: "Votado",
+    propose: "Proponer",
+    discussionTitle: "Discusión y Comentarios",
+    noComments: "Sin comentarios. Inicie la conversación.",
+    writeComment: "Escriba un comentario o aclaración...",
+    prevText: "Texto Anterior",
+    propText: "Texto Propuesto",
+    diffTitle: "Comparativa de Versículos (Diff)",
+    rationaleTitle: "Justificación / Razón",
+    overdue: "vencido",
+    noDeadline: "Sin fecha",
+    allStatus: "Todos los Estados",
+    consultant: "Consultor",
+    abtRep: "Representante ABT",
+    other: "Otro",
+    viewProject: "Ver Proyecto",
+    searchingDrive: "Buscando archivos de proyectos en Google Drive...",
+    noFilesFound: "No se encontraron archivos de Paratext Project Manager.",
+    makeSureSync: "Asegúrese de haber habilitado y sincronizado Google Drive desde la extensión de Paratext 10.",
+    retry: "Reintentar",
+    googleClientId: "Google OAuth Client ID",
+    changeClientId: "Cambiar Google Client ID (Avanzado)",
+    privacyNote: "Este dashboard se ejecuta localmente en su navegador y se conecta de forma segura con la API de Google Drive sin servidores intermediarios.",
+    invalidClientId: "Por favor ingrese un Google Client ID válido.",
+    googleSdkNotLoaded: "El SDK de Google no está cargado aún. Espere un momento y reintente.",
+    sessionExpired: "Su sesión de Google ha expirado. Por favor inicie sesión nuevamente.",
+    authError: "Error de autenticación:",
+    driveFetchError: "Error obteniendo archivos de Drive:",
+    projectLoadError: "Error cargando datos del proyecto:",
+    driveSaveError: "Error al guardar en Drive:",
+    projectCode: "Código del proyecto:",
+    code: "Código:",
+    proposedBy: "Propuesto por:",
+    created: "Creado:",
+    updated: "Actualizado:",
+    status: "Estado:",
+    selectPrLeft: "Seleccione una PR del panel izquierdo",
+    reviewPrDesc: "Para revisar propuestas, votar o comentar.",
+    votesUp: "Votos a Favor",
+    votesDown: "Votos en Contra",
+    enterAltSuggestion: "Ingrese su propuesta alternativa...",
+    cancel: "Cancelar",
+    save: "Guardar",
+    edit: "Editar",
+    delete: "Eliminar",
+    noTasks: "Sin tareas",
+    flaggedTasks: "con bandera",
+    inProgressTasks: "en progreso",
+    completeTasks: "completo",
+    total: "Total",
+    book: "Libro",
+    stage: "Etapa",
+    projects: "Proyectos",
+    votedFavor: "Votado A Favor",
+    votedAgainst: "Votado En Contra",
+    votingRole: "Votación",
+    enterPasscode: "Ingrese la clave de acceso para entrar:",
+    passcodeInvalid: "Clave de acceso incorrecta.",
+    unlockBtn: "Desbloquear",
+    lockTitle: "Acceso Protegido",
+  },
+  en: {
+    projectsTitle: "My Projects",
+    projectsSub: "Select the translation project to view its board and pull requests.",
+    nameInput: "Name in Discussions",
+    roleInput: "Role / Relationship",
+    btnGoogle: "Sign in with Google",
+    btnLogout: "Log Out",
+    tabResumen: "Project Overview",
+    tabTablero: "Board",
+    tabPrs: "Pull Requests",
+    searchBook: "Search book (MAT)",
+    allPrs: "All PRs",
+    totalProgress: "Total Progress",
+    pending: "Pending",
+    inProgress: "In Progress",
+    complete: "Completed",
+    flagged: "Flagged",
+    votedUp: "Voted in Favor",
+    votedDown: "Voted Against",
+    voteUp: "In Favor",
+    voteDown: "Against",
+    suggestAlt: "Suggest Alternative Translation",
+    vote: "Vote",
+    voted: "Voted",
+    propose: "Propose",
+    discussionTitle: "Discussion & Comments",
+    noComments: "No comments yet. Start the conversation.",
+    writeComment: "Write a comment or clarification...",
+    prevText: "Previous Text",
+    propText: "Proposed Text",
+    diffTitle: "Verse Comparison (Diff)",
+    rationaleTitle: "Justification / Reason",
+    overdue: "overdue",
+    noDeadline: "No deadline",
+    allStatus: "All Statuses",
+    consultant: "Consultant",
+    abtRep: "ABT Representative",
+    other: "Other",
+    viewProject: "View Project",
+    searchingDrive: "Searching for project files on Google Drive...",
+    noFilesFound: "No Paratext Project Manager files were found.",
+    makeSureSync: "Make sure you have enabled and synced Google Drive from the Paratext 10 extension.",
+    retry: "Retry",
+    googleClientId: "Google OAuth Client ID",
+    changeClientId: "Change Google Client ID (Advanced)",
+    privacyNote: "This dashboard runs locally in your browser and securely connects with the Google Drive API without intermediate servers.",
+    invalidClientId: "Please enter a valid Google Client ID.",
+    googleSdkNotLoaded: "The Google SDK is not loaded yet. Please wait a moment and retry.",
+    sessionExpired: "Your Google session has expired. Please sign in again.",
+    authError: "Authentication error:",
+    driveFetchError: "Error fetching files from Drive:",
+    projectLoadError: "Error loading project data:",
+    driveSaveError: "Error saving to Drive:",
+    projectCode: "Project code:",
+    code: "Code:",
+    proposedBy: "Proposed by:",
+    created: "Created:",
+    updated: "Updated:",
+    status: "Status:",
+    selectPrLeft: "Select a PR from the left panel",
+    reviewPrDesc: "To review proposals, vote, or comment.",
+    votesUp: "Votes in Favor",
+    votesDown: "Votes Against",
+    enterAltSuggestion: "Enter your alternative proposal...",
+    cancel: "Cancel",
+    save: "Save",
+    edit: "Edit",
+    delete: "Delete",
+    noTasks: "No tasks",
+    flaggedTasks: "flagged",
+    inProgressTasks: "in progress",
+    completeTasks: "complete",
+    total: "Total",
+    book: "Book",
+    stage: "Stage",
+    projects: "Projects",
+    votedFavor: "Voted in Favor",
+    votedAgainst: "Voted Against",
+    votingRole: "Voting",
+    enterPasscode: "Enter passcode to enter:",
+    passcodeInvalid: "Invalid passcode.",
+    unlockBtn: "Unlock",
+    lockTitle: "Protected Access",
+  }
 };
 
 // ---- Data Interfaces ----
@@ -319,6 +495,23 @@ export default function App() {
   const [accessToken, setAccessToken] = useState(
     () => localStorage.getItem('pm_dashboard_token') || '',
   );
+
+  // --- Language State ---
+  const [lang, setLang] = useState(
+    () => localStorage.getItem('pm_dashboard_lang') || 'es',
+  );
+
+  const t = (key: string): string => {
+    return TRANSLATIONS[lang]?.[key] ?? TRANSLATIONS['es']?.[key] ?? key;
+  };
+
+  // --- Passcode Gate State ---
+  const [passcodeAttempt, setPasscodeAttempt] = useState('');
+  const [isUnlocked, setIsUnlocked] = useState(() => {
+    if (!CONFIG_PASSCODE) return true;
+    return localStorage.getItem('pm_dashboard_unlocked') === 'true';
+  });
+  const [passcodeError, setPasscodeError] = useState('');
 
   // --- Comment Editing State ---
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
@@ -794,14 +987,68 @@ export default function App() {
   // ==========================
 
   function getDeadlineInfo(deadline?: string) {
-    if (!deadline) return { label: 'Sin fecha', className: '' };
+    if (!deadline) return { label: t('noDeadline'), className: '' };
     const d = new Date(deadline);
     const now = new Date();
     const diffDays = Math.ceil((d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-    const label = d.toLocaleDateString('es', { day: 'numeric', month: 'short' });
-    if (diffDays < 0) return { label: `${label} (vencido)`, className: 'overdue' };
+    const label = d.toLocaleDateString(lang, { day: 'numeric', month: 'short' });
+    if (diffDays < 0) return { label: `${label} (${t('overdue')})`, className: 'overdue' };
     if (diffDays <= 7) return { label, className: 'soon' };
     return { label, className: '' };
+  }
+
+  // ==========================
+  // ===   RENDER: PASSCODE GATE
+  // ==========================
+
+  const handleVerifyPasscode = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (passcodeAttempt.toLowerCase() === CONFIG_PASSCODE.toLowerCase()) {
+      setIsUnlocked(true);
+      localStorage.setItem('pm_dashboard_unlocked', 'true');
+      setPasscodeError('');
+    } else {
+      setPasscodeError(t('passcodeInvalid'));
+    }
+  };
+
+  if (CONFIG_PASSCODE && !isUnlocked) {
+    return (
+      <>
+        <div className="bg-glow-container">
+          <div className="glow-blob glow-blob-1"></div>
+          <div className="glow-blob glow-blob-2"></div>
+          <div className="glow-blob glow-blob-3"></div>
+        </div>
+        <div className="app-container" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center' }}>
+          <div className="glass" style={{ width: '100%', maxWidth: '400px', padding: '40px' }}>
+            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+              <h1 style={{ fontSize: '1.5rem', marginBottom: '8px' }}>{t('lockTitle')}</h1>
+              <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>{t('enterPasscode')}</p>
+            </div>
+            
+            {passcodeError && (
+              <div style={{
+                padding: '10px 12px', background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '8px',
+                color: '#fca5a5', fontSize: '0.85rem', marginBottom: '16px',
+                textAlign: 'center'
+              }}>
+                {passcodeError}
+              </div>
+            )}
+
+            <form onSubmit={handleVerifyPasscode} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <input type="password" placeholder="••••••••" value={passcodeAttempt}
+                onChange={(e) => setPasscodeAttempt(e.target.value)} required style={{ textAlign: 'center', fontSize: '1.2rem', letterSpacing: '0.2em' }} />
+              <button type="submit" className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }}>
+                {t('unlockBtn')}
+              </button>
+            </form>
+          </div>
+        </div>
+      </>
+    );
   }
 
   // ==========================
@@ -818,6 +1065,15 @@ export default function App() {
         </div>
         <div className="app-container" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center' }}>
           <div className="glass" style={{ width: '100%', maxWidth: '480px', padding: '40px' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '-20px' }}>
+              <button onClick={() => {
+                const newLang = lang === 'es' ? 'en' : 'es';
+                setLang(newLang);
+                localStorage.setItem('pm_dashboard_lang', newLang);
+              }} className="btn" style={{ padding: '6px 10px', fontSize: '0.75rem' }}>
+                🌐 {lang === 'es' ? 'EN' : 'ES'}
+              </button>
+            </div>
             <div style={{ textAlign: 'center', marginBottom: '32px' }}>
               <div style={{
                 display: 'inline-flex', padding: '16px',
@@ -828,7 +1084,7 @@ export default function App() {
               </div>
               <h1 style={{ fontSize: '1.8rem', marginBottom: '8px' }}>Tablero & PR Dashboard</h1>
               <p style={{ color: '#94a3b8', fontSize: '0.95rem' }}>
-                Acceda a la información de sus proyectos en Google Drive de forma segura.
+                {t('projectsSub')}
               </p>
             </div>
 
@@ -850,7 +1106,7 @@ export default function App() {
                   <label style={{
                     display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#94a3b8',
                     marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em',
-                  }}>Google OAuth Client ID</label>
+                  }}>{t('googleClientId')}</label>
                   <div style={{ position: 'relative' }}>
                     <Key size={18} style={{ position: 'absolute', left: '16px', top: '15px', color: '#64748b' }} />
                     <input type="text" placeholder="Ingrese Client ID" value={clientId}
@@ -862,7 +1118,7 @@ export default function App() {
                   <button type="button" onClick={() => setShowAdvanced(true)} style={{
                     background: 'none', border: 'none', color: '#818cf8', fontSize: '0.8rem',
                     cursor: 'pointer', textDecoration: 'underline', fontFamily: 'inherit',
-                  }}>Cambiar Google Client ID (Avanzado)</button>
+                  }}>{t('changeClientId')}</button>
                 </div>
               )}
 
@@ -870,7 +1126,7 @@ export default function App() {
                 <label style={{
                   display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#94a3b8',
                   marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em',
-                }}>Nombre en Discusiones</label>
+                }}>{t('nameInput')}</label>
                 <div style={{ position: 'relative' }}>
                   <User size={18} style={{ position: 'absolute', left: '16px', top: '15px', color: '#64748b' }} />
                   <input type="text" placeholder="Ej: Consultor Perez" value={username}
@@ -882,16 +1138,16 @@ export default function App() {
                 <label style={{
                   display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#94a3b8',
                   marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em',
-                }}>Rol / Relación</label>
+                }}>{t('roleInput')}</label>
                 <select value={userRole} onChange={(e) => setUserRole(e.target.value)} required>
-                  <option value="consultant">Consultor</option>
-                  <option value="abt-rep">Representante ABT</option>
-                  <option value="other">Otro</option>
+                  <option value="consultant">{t('consultant')}</option>
+                  <option value="abt-rep">{t('abtRep')}</option>
+                  <option value="other">{t('other')}</option>
                 </select>
               </div>
 
               <button type="submit" className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', padding: '14px' }}>
-                Ingresar con Google
+                {t('btnGoogle')}
               </button>
             </form>
 
@@ -899,8 +1155,7 @@ export default function App() {
               marginTop: '24px', borderTop: '1px solid var(--border-color)', paddingTop: '20px',
               fontSize: '0.8rem', color: '#64748b', textAlign: 'center',
             }}>
-              Este dashboard se ejecuta localmente en su navegador y se conecta de forma segura con
-              la API de Google Drive sin servidores intermediarios.
+              {t('privacyNote')}
             </div>
           </div>
         </div>
@@ -923,17 +1178,24 @@ export default function App() {
         <div className="app-container">
           <header className="dashboard-header">
             <div>
-              <h1 style={{ fontSize: '2rem', fontWeight: 700 }} className="gradient-text">Mis Proyectos</h1>
+              <h1 style={{ fontSize: '2rem', fontWeight: 700 }} className="gradient-text">{t('projectsTitle')}</h1>
               <p style={{ color: '#94a3b8', fontSize: '0.95rem' }}>
-                Seleccione el proyecto de traducción para ver su tablero y pull requests.
+                {t('projectsSub')}
               </p>
             </div>
             <div className="dashboard-header-right">
+              <button onClick={() => {
+                const newLang = lang === 'es' ? 'en' : 'es';
+                setLang(newLang);
+                localStorage.setItem('pm_dashboard_lang', newLang);
+              }} className="btn" style={{ padding: '8px 12px', fontSize: '0.85rem' }}>
+                🌐 {lang === 'es' ? 'EN' : 'ES'}
+              </button>
               <span style={{ color: '#94a3b8', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <User size={16} /> {username} ({getRoleLabel(userRole)})
               </span>
               <button onClick={handleLogout} className="btn" style={{ padding: '8px 12px' }}>
-                <LogOut size={16} /> Cerrar Sesión
+                <LogOut size={16} /> {t('btnLogout')}
               </button>
             </div>
           </header>
@@ -953,18 +1215,18 @@ export default function App() {
             <div style={{ display: 'grid', placeItems: 'center', height: '200px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
                 <RefreshCw size={32} className="spin" style={{ color: 'var(--primary)' }} />
-                <span className="pulse" style={{ color: '#94a3b8' }}>Buscando archivos de proyectos en Google Drive...</span>
+                <span className="pulse" style={{ color: '#94a3b8' }}>{t('searchingDrive')}</span>
               </div>
             </div>
           ) : projects.length === 0 ? (
             <div className="glass" style={{ textAlign: 'center', padding: '60px 40px', color: '#94a3b8' }}>
               <Database size={48} style={{ marginBottom: '16px', opacity: 0.5 }} />
-              <p style={{ fontSize: '1.1rem', marginBottom: '8px' }}>No se encontraron archivos de Paratext Project Manager.</p>
+              <p style={{ fontSize: '1.1rem', marginBottom: '8px' }}>{t('noFilesFound')}</p>
               <p style={{ fontSize: '0.9rem', color: '#64748b' }}>
-                Asegúrese de haber habilitado y sincronizado Google Drive desde la extensión de Paratext 10.
+                {t('makeSureSync')}
               </p>
               <button onClick={fetchProjectsFromDrive} className="btn" style={{ marginTop: '20px' }}>
-                <RefreshCw size={14} /> Reintentar
+                <RefreshCw size={14} /> {t('retry')}
               </button>
             </div>
           ) : (
@@ -976,16 +1238,16 @@ export default function App() {
                     <h3 style={{ fontSize: '1.25rem', marginBottom: '12px', textTransform: 'capitalize' }}>{proj.displayName}</h3>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.85rem', color: '#94a3b8' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Layout size={14} /> Tablero: {proj.tasksFileId ? '✓ Disponible' : '❌ No configurado'}
+                        <Layout size={14} /> {t('tabTablero')}: {proj.tasksFileId ? '✓ ' + (lang === 'es' ? 'Disponible' : 'Available') : '❌ ' + (lang === 'es' ? 'No configurado' : 'Not configured')}
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <GitPullRequest size={14} /> Pull Requests: {proj.prsFileId ? '✓ Disponible' : '❌ No configurado'}
+                        <GitPullRequest size={14} /> {t('tabPrs')}: {proj.prsFileId ? '✓ ' + (lang === 'es' ? 'Disponible' : 'Available') : '❌ ' + (lang === 'es' ? 'No configurado' : 'Not configured')}
                       </div>
                     </div>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.9rem', color: 'var(--primary)' }}>
-                      Ver Proyecto <ChevronRight size={16} />
+                      {t('viewProject')} <ChevronRight size={16} />
                     </span>
                   </div>
                 </div>
@@ -1015,22 +1277,29 @@ export default function App() {
         <header className="dashboard-header">
           <div className="dashboard-header-left">
             <button onClick={() => setSelectedProjectId(null)} className="btn" style={{ padding: '8px 12px', fontSize: '0.85rem' }}>
-              ← Proyectos
+              ← {t('projects')}
             </button>
             <div>
               <h1 style={{ fontSize: '1.6rem', fontWeight: 700, textTransform: 'capitalize' }} className="gradient-text">
                 {cleanProjectName(selectedProject.id, projects.map((p) => p.id))}
               </h1>
-              <p style={{ color: '#94a3b8', fontSize: '0.82rem' }}>Código: {selectedProject.id}</p>
+              <p style={{ color: '#94a3b8', fontSize: '0.82rem' }}>{t('code')} {selectedProject.id}</p>
             </div>
           </div>
           <div className="dashboard-header-right">
+            <button onClick={() => {
+              const newLang = lang === 'es' ? 'en' : 'es';
+              setLang(newLang);
+              localStorage.setItem('pm_dashboard_lang', newLang);
+            }} className="btn" style={{ padding: '8px 12px', fontSize: '0.85rem' }}>
+              🌐 {lang === 'es' ? 'EN' : 'ES'}
+            </button>
             <button onClick={() => loadProjectData(selectedProject)} className="btn btn-icon" title="Recargar de Drive">
               <RefreshCw size={16} className={loading ? 'spin' : ''} />
             </button>
             <span style={{ color: '#94a3b8', fontSize: '0.85rem' }}>{username} ({getRoleLabel(userRole)})</span>
             <button onClick={handleLogout} className="btn" style={{ padding: '8px 12px', fontSize: '0.85rem' }}>
-              Cerrar Sesión
+              {t('btnLogout')}
             </button>
           </div>
         </header>
@@ -1050,32 +1319,32 @@ export default function App() {
         <div className="filters-row">
           <div className="tab-bar">
             <button onClick={() => setActiveTab('resumen')} className={`tab-btn ${activeTab === 'resumen' ? 'active' : ''}`}>
-              <Table size={16} /> Resumen del Proyecto
+              <Table size={16} /> {t('tabResumen')}
             </button>
             <button onClick={() => setActiveTab('tablero')} className={`tab-btn ${activeTab === 'tablero' ? 'active' : ''}`}>
-              <Layout size={16} /> Tablero
+              <Layout size={16} /> {t('tabTablero')}
             </button>
             <button onClick={() => setActiveTab('prs')} className={`tab-btn ${activeTab === 'prs' ? 'active' : ''}`}>
-              <GitPullRequest size={16} /> Pull Requests ({selectedProject.prsStore?.prs.length || 0})
+              <GitPullRequest size={16} /> {t('tabPrs')} ({selectedProject.prsStore?.prs.length || 0})
             </button>
           </div>
 
           <div className="filter-group">
             <div className="search-input-wrapper">
               <Search size={16} />
-              <input type="text" placeholder="Buscar libro (MAT)" value={bookFilter}
+              <input type="text" placeholder={t('searchBook')} value={bookFilter}
                 onChange={(e) => setBookFilter(e.target.value)} />
             </div>
             {activeTab === 'prs' && (
               <select value={prStatusFilter} onChange={(e) => setPrStatusFilter(e.target.value)}
                 style={{ padding: '8px 16px', fontSize: '0.85rem', width: '160px' }}>
-                <option value="all">Todas las PRs</option>
-                <option value="open">Abierta</option>
-                <option value="needs-review">Requiere Revisión</option>
-                <option value="approved">Aprobada</option>
-                <option value="merged">Fusionada</option>
-                <option value="closed">Cerrada</option>
-                <option value="expired">Expirada</option>
+                <option value="all">{t('allPrs')}</option>
+                <option value="open">{lang === 'es' ? 'Abierta' : 'Open'}</option>
+                <option value="needs-review">{lang === 'es' ? 'Requiere Revisión' : 'Needs Review'}</option>
+                <option value="approved">{lang === 'es' ? 'Aprobada' : 'Approved'}</option>
+                <option value="merged">{lang === 'es' ? 'Fusionada' : 'Merged'}</option>
+                <option value="closed">{lang === 'es' ? 'Cerrada' : 'Closed'}</option>
+                <option value="expired">{lang === 'es' ? 'Expirada' : 'Expired'}</option>
               </select>
             )}
           </div>
@@ -1098,7 +1367,7 @@ export default function App() {
               !selectedProject.tasksStore ? (
                 <div className="glass empty-state">
                   <Layout size={32} />
-                  <p>No se encontraron datos del proyecto en Google Drive.</p>
+                  <p>{lang === 'es' ? 'No se encontraron datos del proyecto en Google Drive.' : 'No project data found on Google Drive.'}</p>
                 </div>
               ) : (
                 <div>
@@ -1107,7 +1376,7 @@ export default function App() {
                     <div className="glass stat-card">
                       <div className="stat-indicator" style={{ background: 'var(--primary)' }}></div>
                       <div>
-                        <div className="stat-label">Progreso Total</div>
+                        <div className="stat-label">{t('totalProgress')}</div>
                         <div className="stat-value">
                           {pctComplete}%
                           <span className="stat-pct">{completedTasks}/{totalTasks}</span>
@@ -1118,10 +1387,10 @@ export default function App() {
                       </div>
                     </div>
                     {([
-                      { key: 'pending' as const, label: 'Pendiente', count: pendingTasks, color: 'var(--status-pending)' },
-                      { key: 'in-progress' as const, label: 'En Progreso', count: inProgressTasks, color: 'var(--status-in-progress)' },
-                      { key: 'flagged' as const, label: 'Bandera', count: flaggedTasks, color: 'var(--status-flagged)' },
-                      { key: 'complete' as const, label: 'Completado', count: completedTasks, color: 'var(--status-complete)' },
+                      { key: 'pending' as const, label: t('pending'), count: pendingTasks, color: 'var(--status-pending)' },
+                      { key: 'in-progress' as const, label: t('inProgress'), count: inProgressTasks, color: 'var(--status-in-progress)' },
+                      { key: 'flagged' as const, label: t('flagged'), count: flaggedTasks, color: 'var(--status-flagged)' },
+                      { key: 'complete' as const, label: t('complete'), count: completedTasks, color: 'var(--status-complete)' },
                     ]).map(({ key, label, count, color }) => (
                       <div key={key} className="glass stat-card">
                         <div className="stat-indicator" style={{ background: color }}></div>
@@ -1142,7 +1411,7 @@ export default function App() {
                   <div className="glass" style={{ overflow: 'hidden' }}>
                     {totalTasks === 0 ? (
                       <p style={{ textAlign: 'center', color: '#64748b', padding: '40px 0' }}>
-                        No hay tareas para mostrar en el resumen.
+                        {lang === 'es' ? 'No hay tareas para mostrar en el resumen.' : 'No tasks to show in summary.'}
                       </p>
                     ) : (
                       <>
@@ -1150,16 +1419,16 @@ export default function App() {
                           <table className="matrix-table">
                             <thead>
                               <tr>
-                                <th>Libro</th>
+                                <th>{t('book')}</th>
                                 {orderedStages.map((stage) => {
                                   const s = stageSummary[stage];
                                   const allComplete = s && s.total > 0 && s.complete === s.total;
                                   const hasFlagged = s && s.flagged > 0;
                                   return (
                                     <th key={stage}
-                                      title={getStageLabel(stage, selectedProject.tasksStore?.stageConfig)}>
+                                      title={getStageLabel(stage, lang, selectedProject.tasksStore?.stageConfig)}>
                                       <div style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                        {getStageLabel(stage, selectedProject.tasksStore?.stageConfig)}
+                                        {getStageLabel(stage, lang, selectedProject.tasksStore?.stageConfig)}
                                       </div>
                                       {s && s.total > 0 && (
                                         <span className="stage-count" style={{
@@ -1183,7 +1452,7 @@ export default function App() {
                                     return (
                                       <td key={stage}
                                         title={cellTasks.length > 0
-                                          ? `${book} — ${getStageLabel(stage, selectedProject.tasksStore?.stageConfig)}: ${cellTasks.length} tarea${cellTasks.length !== 1 ? 's' : ''} (${STATUS_LABELS[status!]})`
+                                          ? `${book} — ${getStageLabel(stage, lang, selectedProject.tasksStore?.stageConfig)}: ${cellTasks.length} ${cellTasks.length !== 1 ? (lang === 'es' ? 'tareas' : 'tasks') : (lang === 'es' ? 'tarea' : 'task')} (${getStatusLabel(status!, lang)})`
                                           : ''}>
                                         {status && (
                                           <span className={`cell-badge status-${status}`}>
@@ -1199,7 +1468,7 @@ export default function App() {
                             </tbody>
                             <tfoot>
                               <tr>
-                                <td>Total</td>
+                                <td>{t('total')}</td>
                                 {orderedStages.map((stage) => {
                                   const s = stageSummary[stage];
                                   return (
@@ -1221,19 +1490,19 @@ export default function App() {
                         <div className="matrix-legend">
                           <span className="legend-item">
                             <span className="legend-dot" style={{ background: 'var(--status-complete)' }}></span>
-                            ✓ Completo
+                            ✓ {t('complete')}
                           </span>
                           <span className="legend-item">
                             <span className="legend-dot" style={{ background: 'var(--status-in-progress)' }}></span>
-                            ⟳ En Progreso
+                            ⟳ {t('inProgress')}
                           </span>
                           <span className="legend-item">
                             <span className="legend-dot" style={{ background: 'var(--status-pending)' }}></span>
-                            • Pendiente
+                            • {t('pending')}
                           </span>
                           <span className="legend-item">
                             <span className="legend-dot" style={{ background: 'var(--status-flagged)' }}></span>
-                            ⚑ Bandera
+                            ⚑ {t('flagged')}
                           </span>
                         </div>
                       </>
@@ -1250,22 +1519,22 @@ export default function App() {
               !selectedProject.tasksStore ? (
                 <div className="glass empty-state">
                   <Layout size={32} />
-                  <p>No se encontraron datos del Tablero en Google Drive.</p>
+                  <p>{lang === 'es' ? 'No se encontraron datos del Tablero en Google Drive.' : 'No Board data found on Google Drive.'}</p>
                 </div>
               ) : (
                 <div>
                   {/* Summary line */}
                   <div style={{ marginBottom: '12px', fontSize: '0.85rem', color: '#94a3b8' }}>
-                    {pctComplete}% completo — {completedTasks}/{totalTasks} tareas
-                    {inProgressTasks > 0 && <> · <span style={{ color: 'var(--status-in-progress)' }}>⟳ {inProgressTasks} en progreso</span></>}
-                    {flaggedTasks > 0 && <> · <span style={{ color: 'var(--status-flagged)' }}>⚑ {flaggedTasks} con bandera</span></>}
+                    {pctComplete}% {lang === 'es' ? 'completo' : 'complete'} — {completedTasks}/{totalTasks} {lang === 'es' ? 'tareas' : 'tasks'}
+                    {inProgressTasks > 0 && <> · <span style={{ color: 'var(--status-in-progress)' }}>⟳ {inProgressTasks} {t('inProgressTasks')}</span></>}
+                    {flaggedTasks > 0 && <> · <span style={{ color: 'var(--status-flagged)' }}>⚑ {flaggedTasks} {t('flaggedTasks')}</span></>}
                   </div>
 
                   {/* Kanban board — one column per STAGE */}
                   <div className="kanban-container">
                     {orderedStages.map((stage) => {
                       const stageTasks = kanbanByStage[stage] || [];
-                      const stageLabel = getStageLabel(stage, selectedProject.tasksStore?.stageConfig);
+                      const stageLabel = getStageLabel(stage, lang, selectedProject.tasksStore?.stageConfig);
                       const stageComplete = stageTasks.filter((t) => t.status === 'complete').length;
                       const allDone = stageTasks.length > 0 && stageComplete === stageTasks.length;
 
@@ -1290,7 +1559,7 @@ export default function App() {
                           {/* Column body — task cards */}
                           <div className="kanban-column-body">
                             {stageTasks.length === 0 ? (
-                              <div className="kanban-empty">Sin tareas</div>
+                              <div className="kanban-empty">{t('noTasks')}</div>
                             ) : (
                               stageTasks.map((task) => {
                                 const deadlineInfo = getDeadlineInfo(task.deadline);
@@ -1302,7 +1571,7 @@ export default function App() {
                                     <div className="kanban-card-header">
                                       <span className="kanban-card-ref">{task.book} {task.chapter}</span>
                                       <span className={`status-pill ${task.status}`}>
-                                        {CELL_ICONS[task.status]} {STATUS_LABELS[task.status]}
+                                        {CELL_ICONS[task.status]} {getStatusLabel(task.status, lang)}
                                       </span>
                                     </div>
 
@@ -1363,17 +1632,17 @@ export default function App() {
               !selectedProject.prsStore ? (
                 <div className="glass empty-state">
                   <GitPullRequest size={32} />
-                  <p>No se encontraron datos de Pull Requests en Google Drive.</p>
+                  <p>{lang === 'es' ? 'No se encontraron datos de Pull Requests en Google Drive.' : 'No Pull Request data found on Google Drive.'}</p>
                 </div>
               ) : (
                 <div className="pr-layout">
                   {/* PR Sidebar List */}
                   <div className="glass pr-sidebar">
-                    <div className="pr-sidebar-title">Pull Requests ({filteredPrs.length})</div>
+                    <div className="pr-sidebar-title">{t('tabPrs')} ({filteredPrs.length})</div>
                     <div className="pr-list">
                       {filteredPrs.length === 0 ? (
                         <div style={{ textAlign: 'center', padding: '30px 10px', color: '#64748b', fontSize: '0.85rem' }}>
-                          Ningún Pull Request coincide con los filtros.
+                          {lang === 'es' ? 'Ningún Pull Request coincide con los filtros.' : 'No Pull Requests match the filters.'}
                         </div>
                       ) : (
                         filteredPrs.map((pr) => {
@@ -1399,7 +1668,7 @@ export default function App() {
                                 textOverflow: 'ellipsis', overflow: 'hidden', marginBottom: '6px',
                               }}>{pr.title}</p>
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: '#64748b' }}>
-                                <span>Por: {pr.author}</span>
+                                <span>{t('proposedBy')} {pr.author}</span>
                                 {upvoteCount > 0 && (
                                   <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--status-complete)' }}>
                                     <ThumbsUp size={12} /> {upvoteCount}
@@ -1422,9 +1691,9 @@ export default function App() {
                       }}>
                         <div>
                           <GitPullRequest size={48} style={{ opacity: 0.3, marginBottom: '16px' }} />
-                          <p style={{ fontSize: '1.1rem' }}>Seleccione una PR del panel izquierdo</p>
+                          <p style={{ fontSize: '1.1rem' }}>{t('selectPrLeft')}</p>
                           <p style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '4px' }}>
-                            Para revisar propuestas, votar o comentar.
+                            {t('reviewPrDesc')}
                           </p>
                         </div>
                       </div>
@@ -1444,9 +1713,9 @@ export default function App() {
                             </div>
                             <h2 style={{ fontSize: '1.1rem', color: '#f8fafc', fontWeight: 500 }}>{selectedPr.title}</h2>
                             <div style={{ display: 'flex', gap: '16px', color: '#64748b', fontSize: '0.85rem', marginTop: '8px', flexWrap: 'wrap' }}>
-                              <span>Propuesto por: <strong>{selectedPr.author}</strong></span>
-                              <span>Creado: {new Date(selectedPr.createdAt).toLocaleDateString()}</span>
-                              <span>Actualizado: {new Date(selectedPr.updatedAt).toLocaleDateString()}</span>
+                              <span>{t('proposedBy')} <strong>{selectedPr.author}</strong></span>
+                              <span>{t('created')} {new Date(selectedPr.createdAt).toLocaleDateString(lang)}</span>
+                              <span>{t('updated')} {new Date(selectedPr.updatedAt).toLocaleDateString(lang)}</span>
                             </div>
                           </div>
                           <span className="glass" style={{
@@ -1454,14 +1723,14 @@ export default function App() {
                             color: getPrStatusColor(selectedPr.status),
                             background: selectedPr.status === 'merged' ? 'rgba(16,185,129,0.1)' : 'rgba(59,130,246,0.1)',
                           }}>
-                            Estado: {getPrStatusLabel(selectedPr.status)}
+                            {t('status')} {getPrStatusLabel(selectedPr.status)}
                           </span>
                         </div>
 
                         {/* Rationale */}
                         {selectedPr.rationale && (
                           <div>
-                            <h3 className="section-label">Justificación / Razón</h3>
+                            <h3 className="section-label">{t('rationaleTitle')}</h3>
                             <p className="glass" style={{
                               padding: '12px 16px', background: 'rgba(255, 255, 255, 0.02)',
                               fontSize: '0.95rem', color: '#cbd5e1',
@@ -1472,7 +1741,7 @@ export default function App() {
                         {/* Visual Word Diff */}
                         {(selectedPr.originalText || selectedPr.proposedText) && (
                           <div>
-                            <h3 className="section-label">Comparativa de Versículos (Diff)</h3>
+                            <h3 className="section-label">{t('diffTitle')}</h3>
                             <div className="glass" style={{
                               padding: '20px', background: '#0a0d14',
                               border: '1px solid rgba(255, 255, 255, 0.03)',
@@ -1485,13 +1754,13 @@ export default function App() {
                                   <span style={{
                                     fontSize: '0.8rem', color: '#ef4444', background: 'rgba(239, 68, 68, 0.1)',
                                     padding: '2px 8px', borderRadius: '4px', fontWeight: 600,
-                                  }}>Texto Anterior</span>
+                                  }}>{t('prevText')}</span>
                                 </div>
                                 <div>
                                   <span style={{
                                     fontSize: '0.8rem', color: '#10b981', background: 'rgba(16, 185, 129, 0.1)',
                                     padding: '2px 8px', borderRadius: '4px', fontWeight: 600,
-                                  }}>Texto Propuesto</span>
+                                  }}>{t('propText')}</span>
                                 </div>
                               </div>
                               <div style={{ fontFamily: "'Outfit', sans-serif", fontSize: '1.05rem', lineHeight: '1.6' }}>
@@ -1507,7 +1776,7 @@ export default function App() {
 
                         {/* Voting */}
                         <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '20px' }}>
-                          <h3 className="section-label">Votación ({getRoleLabel(userRole)})</h3>
+                          <h3 className="section-label">{t('votingRole')} ({getRoleLabel(userRole)})</h3>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
                             <div style={{ display: 'flex', gap: '12px' }}>
                               <button onClick={() => handleVotePr('up')} className="btn"
@@ -1517,7 +1786,7 @@ export default function App() {
                                   background: selectedPr.votes.some((v) => v.user === username && v.value === 'up')
                                     ? 'rgba(16, 185, 129, 0.2)' : undefined,
                                 }}>
-                                <ThumbsUp size={16} style={{ color: '#10b981' }} /> {selectedPr.votes.some((v) => v.user === username && v.value === 'up') ? 'Votado A Favor' : 'A Favor'}
+                                <ThumbsUp size={16} style={{ color: '#10b981' }} /> {selectedPr.votes.some((v) => v.user === username && v.value === 'up') ? t('votedFavor') : t('voteUp')}
                               </button>
                               <button onClick={() => handleVotePr('down')} className="btn"
                                 disabled={selectedPr.status === 'merged' || selectedPr.status === 'closed'}
@@ -1526,15 +1795,15 @@ export default function App() {
                                   background: selectedPr.votes.some((v) => v.user === username && v.value === 'down')
                                     ? 'rgba(239, 68, 68, 0.2)' : undefined,
                                 }}>
-                                <ThumbsDown size={16} style={{ color: '#ef4444' }} /> {selectedPr.votes.some((v) => v.user === username && v.value === 'down') ? 'Votado En Contra' : 'En Contra'}
+                                <ThumbsDown size={16} style={{ color: '#ef4444' }} /> {selectedPr.votes.some((v) => v.user === username && v.value === 'down') ? t('votedAgainst') : t('voteDown')}
                               </button>
                             </div>
                             <div className="glass" style={{ padding: '8px 16px', fontSize: '0.85rem', display: 'flex', gap: '16px' }}>
                               <span style={{ color: 'var(--status-complete)' }}>
-                                A Favor: {selectedPr.votes.filter((v) => v.value === 'up').length}
+                                {t('voteUp')}: {selectedPr.votes.filter((v) => v.value === 'up').length}
                               </span>
                               <span style={{ color: 'var(--status-flagged)' }}>
-                                En Contra: {selectedPr.votes.filter((v) => v.value === 'down').length}
+                                {t('voteDown')}: {selectedPr.votes.filter((v) => v.value === 'down').length}
                               </span>
                             </div>
                           </div>
@@ -1542,7 +1811,7 @@ export default function App() {
 
                         {/* Alternatives */}
                         <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '20px' }}>
-                          <h3 className="section-label">Sugerir Traducción Alternativa</h3>
+                          <h3 className="section-label">{t('suggestAlt')}</h3>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                             {selectedPr.alternatives && selectedPr.alternatives.length > 0 && (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -1555,7 +1824,7 @@ export default function App() {
                                     }}>
                                       <div>
                                         <p style={{ fontSize: '0.95rem', color: '#fff' }}>{alt.text}</p>
-                                        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Por: {alt.proposedBy}</span>
+                                        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{t('proposedBy')} {alt.proposedBy}</span>
                                       </div>
                                       <button onClick={() => handleVoteAlternative(alt.id)} className="btn"
                                         disabled={selectedPr.status === 'merged'}
@@ -1564,7 +1833,7 @@ export default function App() {
                                           background: userVoted ? 'rgba(16,185,129,0.2)' : undefined,
                                           borderColor: userVoted ? '#10b981' : undefined,
                                         }}>
-                                        <ThumbsUp size={12} style={{ color: '#10b981' }} /> {userVoted ? 'Votado' : 'Votar'} ({alt.votes?.length || 0})
+                                        <ThumbsUp size={12} style={{ color: '#10b981' }} /> {userVoted ? t('voted') : t('vote')} ({alt.votes?.length || 0})
                                       </button>
                                     </div>
                                   );
@@ -1573,9 +1842,9 @@ export default function App() {
                             )}
                             {selectedPr.status !== 'merged' && selectedPr.status !== 'closed' && (
                               <form onSubmit={handleAddSuggestion} style={{ display: 'flex', gap: '12px' }}>
-                                <input type="text" placeholder="Ingrese su propuesta alternativa..."
+                                <input type="text" placeholder={t('enterAltSuggestion')}
                                   value={newSuggestion} onChange={(e) => setNewSuggestion(e.target.value)} required />
-                                <button type="submit" className="btn btn-primary">Proponer</button>
+                                <button type="submit" className="btn btn-primary">{t('propose')}</button>
                               </form>
                             )}
                           </div>
@@ -1583,12 +1852,12 @@ export default function App() {
 
                         {/* Comments */}
                         <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '20px' }}>
-                          <h3 className="section-label">Discusión y Comentarios</h3>
+                          <h3 className="section-label">{t('discussionTitle')}</h3>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '300px', overflowY: 'auto', paddingRight: '4px' }}>
                               {!selectedPr.comments || selectedPr.comments.length === 0 ? (
                                 <p style={{ color: '#64748b', fontSize: '0.85rem', textAlign: 'center', padding: '20px 0' }}>
-                                  Sin comentarios. Inicie la conversación.
+                                  {t('noComments')}
                                 </p>
                               ) : (
                                 selectedPr.comments.map((c) => (
@@ -1605,18 +1874,18 @@ export default function App() {
                                         <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#fff' }}>{c.author}</span>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                           <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                                            {new Date(c.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            {new Date(c.timestamp).toLocaleTimeString(lang, { hour: '2-digit', minute: '2-digit' })}
                                           </span>
                                           {c.author === username && (
                                             <div style={{ display: 'flex', gap: '8px', marginLeft: '12px' }}>
                                               <button onClick={() => { setEditingCommentId(c.id); setEditingCommentText(c.text); }}
                                                 style={{ background: 'none', border: 'none', color: '#818cf8', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 0 }}
-                                                title="Editar">
+                                                title={t('edit')}>
                                                 <Edit2 size={12} />
                                               </button>
                                               <button onClick={() => handleDeleteComment(c.id)}
                                                 style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 0 }}
-                                                title="Eliminar">
+                                                title={t('delete')}>
                                                 <Trash2 size={12} />
                                               </button>
                                             </div>
@@ -1629,10 +1898,10 @@ export default function App() {
                                             style={{ padding: '8px 12px', fontSize: '0.9rem', height: '60px', background: 'rgba(15, 23, 42, 0.8)', minHeight: '60px' }} />
                                           <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                                             <button onClick={() => setEditingCommentId(null)} className="btn" style={{ padding: '4px 8px', fontSize: '0.75rem', borderRadius: '6px' }}>
-                                              Cancelar
+                                              {t('cancel')}
                                             </button>
                                             <button onClick={() => handleUpdateComment(c.id, editingCommentText)} className="btn btn-primary" style={{ padding: '4px 8px', fontSize: '0.75rem', borderRadius: '6px' }}>
-                                              Guardar
+                                              {t('save')}
                                             </button>
                                           </div>
                                         </div>
@@ -1645,9 +1914,9 @@ export default function App() {
                               )}
                             </div>
                             <form onSubmit={handleAddComment} style={{ display: 'flex', gap: '12px' }}>
-                              <input type="text" placeholder="Escriba un comentario o aclaración..."
+                              <input type="text" placeholder={t('writeComment')}
                                 value={newComment} onChange={(e) => setNewComment(e.target.value)} required />
-                              <button type="submit" className="btn btn-icon btn-primary" title="Enviar Comentario">
+                              <button type="submit" className="btn btn-icon btn-primary" title={lang === 'es' ? 'Enviar Comentario' : 'Send Comment'}>
                                 <Send size={16} />
                               </button>
                             </form>
