@@ -15,6 +15,8 @@ import {
   ThumbsUp,
   User,
   AlertCircle,
+  Trash2,
+  Edit2,
 } from 'lucide-react';
 
 // ---- Types & Constants ----
@@ -115,7 +117,7 @@ interface PrVote {
   user: string;
   value: 'up' | 'down';
   reason?: string;
-  role: 'translator' | 'consultant' | 'admin';
+  role: 'translator' | 'consultant' | 'admin' | 'abt-rep' | 'other' | string;
   timestamp: string;
 }
 
@@ -254,6 +256,48 @@ function getPrStatusColor(status: string) {
   return map[status] ?? '#94a3b8';
 }
 
+function cleanProjectName(id: string, allIds: string[]): string {
+  const hexPattern = /^[0-9a-fA-F]{24,40}/;
+  const match = id.match(hexPattern);
+  if (match) {
+    const hex = match[0].toLowerCase();
+    const suffix = id.substring(match[0].length);
+    if (suffix.startsWith('-') && suffix.length > 1) {
+      return suffix.substring(1).replace(/_/g, ' ');
+    }
+    // If just hex, check if any other project has the same hex prefix and a friendly name
+    const matchingProj = allIds.find(otherId => {
+      if (otherId === id) return false;
+      const otherMatch = otherId.match(hexPattern);
+      return otherMatch && otherMatch[0].toLowerCase() === hex && otherId.length > otherMatch[0].length;
+    });
+    if (matchingProj) {
+      const otherMatch = matchingProj.match(hexPattern)!;
+      const suffix = matchingProj.substring(otherMatch[0].length);
+      if (suffix.startsWith('-') && suffix.length > 1) {
+        let name = suffix.substring(1).replace(/_/g, ' ');
+        if (name.toLowerCase().endsWith('-draft')) {
+          name = name.substring(0, name.length - 6);
+        } else if (name.toLowerCase().endsWith(' draft')) {
+          name = name.substring(0, name.length - 6);
+        }
+        return name || 'Slingshot';
+      }
+    }
+    return 'Slingshot';
+  }
+  return id.replace(/_/g, ' ');
+}
+
+function getRoleLabel(role: string): string {
+  const map: Record<string, string> = {
+    consultant: 'Consultor',
+    'abt-rep': 'Representante ABT',
+    other: 'Otro',
+  };
+  return map[role] ?? role;
+}
+
 // ==========================
 // ===   MAIN APP COMPONENT
 // ==========================
@@ -269,9 +313,16 @@ export default function App() {
   const [username, setUsername] = useState(
     () => localStorage.getItem('pm_dashboard_user') || 'Consultor',
   );
+  const [userRole, setUserRole] = useState(
+    () => localStorage.getItem('pm_dashboard_role') || 'consultant',
+  );
   const [accessToken, setAccessToken] = useState(
     () => localStorage.getItem('pm_dashboard_token') || '',
   );
+
+  // --- Comment Editing State ---
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingCommentText, setEditingCommentText] = useState('');
 
   // --- Project State ---
   const [projects, setProjects] = useState<ProjectData[]>([]);
@@ -293,6 +344,35 @@ export default function App() {
 
   const selectedProject = projects.find((p) => p.id === selectedProjectId);
   const selectedPr = selectedProject?.prsStore?.prs.find((pr) => pr.id === selectedPrId);
+
+  // --- Computed Data: Clean and Filtered Projects ---
+  const filteredProjectsList = useMemo(() => {
+    const hexPattern = /^[0-9a-fA-F]{24,40}/;
+    const allIds = projects.map((p) => p.id);
+    
+    // Clean names
+    const cleaned = projects.map((p) => {
+      const displayName = cleanProjectName(p.id, allIds);
+      return { ...p, displayName };
+    });
+
+    // Filter out redundant drafts
+    return cleaned.filter((proj, _, arr) => {
+      const match = proj.id.match(hexPattern);
+      if (match) {
+        const hex = match[0].toLowerCase();
+        const isDraft = proj.id.toLowerCase().includes('draft');
+        if (isDraft) {
+          const hasMain = arr.some((other) => {
+            const otherMatch = other.id.match(hexPattern);
+            return otherMatch && otherMatch[0].toLowerCase() === hex && !other.id.toLowerCase().includes('draft');
+          });
+          if (hasMain) return false;
+        }
+      }
+      return true;
+    });
+  }, [projects]);
 
   // --- Computed Data: Resumen ---
   const orderedStages = useMemo(
@@ -407,6 +487,7 @@ export default function App() {
     }
     localStorage.setItem('pm_oauth_client_id', clientId);
     localStorage.setItem('pm_dashboard_user', username);
+    localStorage.setItem('pm_dashboard_role', userRole);
     triggerGoogleAuth();
   };
 
@@ -566,22 +647,30 @@ export default function App() {
   const handleVotePr = async (value: 'up' | 'down') => {
     if (!selectedProject || !selectedPr || !selectedProject.prsStore) return;
     const now = new Date().toISOString();
-    const newVote: PrVote = { user: username, value, role: 'consultant', timestamp: now };
+
+    const existingVote = selectedPr.votes.find((v) => v.user === username);
+    const isRetraction = existingVote && existingVote.value === value;
 
     const updatedPrs = selectedProject.prsStore.prs.map((pr) => {
       if (pr.id === selectedPr.id) {
         const cleanVotes = pr.votes.filter((v) => v.user !== username);
+        const votes = isRetraction
+          ? cleanVotes
+          : [...cleanVotes, { user: username, value, role: userRole, timestamp: now }];
+
         const history = [
           ...(pr.history || []),
           {
             id: `h-${Date.now()}`,
             actor: username,
-            action: value === 'up' ? 'upvoted' : 'downvoted',
-            detail: `Votó ${value === 'up' ? 'A Favor' : 'En Contra'} de la propuesta.`,
+            action: isRetraction ? 'vote_retracted' : (value === 'up' ? 'upvoted' : 'downvoted'),
+            detail: isRetraction
+              ? `Retractó su voto ${value === 'up' ? 'A Favor' : 'En Contra'}.`
+              : `Votó ${value === 'up' ? 'A Favor' : 'En Contra'} de la propuesta.`,
             timestamp: now,
           },
         ];
-        return { ...pr, votes: [...cleanVotes, newVote], history, updatedAt: now };
+        return { ...pr, votes, history, updatedAt: now };
       }
       return pr;
     });
@@ -627,11 +716,12 @@ export default function App() {
       if (pr.id === selectedPr.id) {
         const alternatives = pr.alternatives.map((alt) => {
           if (alt.id === altId) {
-            const cleanVotes = alt.votes.filter((v) => v.user !== username);
-            return {
-              ...alt,
-              votes: [...cleanVotes, { user: username, value: 'up' as const, role: 'consultant' as const, timestamp: now }],
-            };
+            const hasVoted = alt.votes?.some((v) => v.user === username);
+            const cleanVotes = (alt.votes || []).filter((v) => v.user !== username);
+            const votes = hasVoted
+              ? cleanVotes
+              : [...cleanVotes, { user: username, value: 'up' as const, role: userRole, timestamp: now }];
+            return { ...alt, votes };
           }
           return alt;
         });
@@ -659,6 +749,43 @@ export default function App() {
     });
 
     setNewComment('');
+    await savePrsToDrive({ ...selectedProject.prsStore, prs: updatedPrs });
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    if (!selectedProject || !selectedPr || !selectedProject.prsStore) return;
+    const now = new Date().toISOString();
+
+    const updatedPrs = selectedProject.prsStore.prs.map((pr) => {
+      if (pr.id === selectedPr.id) {
+        const comments = (pr.comments || []).filter((c) => c.id !== commentId);
+        return { ...pr, comments, updatedAt: now };
+      }
+      return pr;
+    });
+
+    await savePrsToDrive({ ...selectedProject.prsStore, prs: updatedPrs });
+  };
+
+  const handleUpdateComment = async (commentId: string, newText: string) => {
+    if (!selectedProject || !selectedPr || !selectedProject.prsStore) return;
+    const now = new Date().toISOString();
+
+    const updatedPrs = selectedProject.prsStore.prs.map((pr) => {
+      if (pr.id === selectedPr.id) {
+        const comments = (pr.comments || []).map((c) => {
+          if (c.id === commentId) {
+            return { ...c, text: newText, timestamp: now };
+          }
+          return c;
+        });
+        return { ...pr, comments, updatedAt: now };
+      }
+      return pr;
+    });
+
+    setEditingCommentId(null);
+    setEditingCommentText('');
     await savePrsToDrive({ ...selectedProject.prsStore, prs: updatedPrs });
   };
 
@@ -751,6 +878,18 @@ export default function App() {
                 </div>
               </div>
 
+              <div>
+                <label style={{
+                  display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#94a3b8',
+                  marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em',
+                }}>Rol / Relación</label>
+                <select value={userRole} onChange={(e) => setUserRole(e.target.value)} required>
+                  <option value="consultant">Consultor</option>
+                  <option value="abt-rep">Representante ABT</option>
+                  <option value="other">Otro</option>
+                </select>
+              </div>
+
               <button type="submit" className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', padding: '14px' }}>
                 Ingresar con Google
               </button>
@@ -791,7 +930,7 @@ export default function App() {
             </div>
             <div className="dashboard-header-right">
               <span style={{ color: '#94a3b8', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <User size={16} /> {username} (Consultor)
+                <User size={16} /> {username} ({getRoleLabel(userRole)})
               </span>
               <button onClick={handleLogout} className="btn" style={{ padding: '8px 12px' }}>
                 <LogOut size={16} /> Cerrar Sesión
@@ -830,11 +969,11 @@ export default function App() {
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '24px' }}>
-              {projects.map((proj) => (
+              {filteredProjectsList.map((proj) => (
                 <div key={proj.id} onClick={() => loadProjectData(proj)} className="glass glass-interactive"
                   style={{ padding: '24px', cursor: 'pointer', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '160px' }}>
                   <div>
-                    <h3 style={{ fontSize: '1.25rem', marginBottom: '12px', textTransform: 'capitalize' }}>{proj.name}</h3>
+                    <h3 style={{ fontSize: '1.25rem', marginBottom: '12px', textTransform: 'capitalize' }}>{proj.displayName}</h3>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.85rem', color: '#94a3b8' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <Layout size={14} /> Tablero: {proj.tasksFileId ? '✓ Disponible' : '❌ No configurado'}
@@ -880,7 +1019,7 @@ export default function App() {
             </button>
             <div>
               <h1 style={{ fontSize: '1.6rem', fontWeight: 700, textTransform: 'capitalize' }} className="gradient-text">
-                {selectedProject.name}
+                {cleanProjectName(selectedProject.id, projects.map((p) => p.id))}
               </h1>
               <p style={{ color: '#94a3b8', fontSize: '0.82rem' }}>Código: {selectedProject.id}</p>
             </div>
@@ -889,7 +1028,7 @@ export default function App() {
             <button onClick={() => loadProjectData(selectedProject)} className="btn btn-icon" title="Recargar de Drive">
               <RefreshCw size={16} className={loading ? 'spin' : ''} />
             </button>
-            <span style={{ color: '#94a3b8', fontSize: '0.85rem' }}>{username} (Consultor)</span>
+            <span style={{ color: '#94a3b8', fontSize: '0.85rem' }}>{username} ({getRoleLabel(userRole)})</span>
             <button onClick={handleLogout} className="btn" style={{ padding: '8px 12px', fontSize: '0.85rem' }}>
               Cerrar Sesión
             </button>
@@ -1368,7 +1507,7 @@ export default function App() {
 
                         {/* Voting */}
                         <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '20px' }}>
-                          <h3 className="section-label">Votación del Consultor</h3>
+                          <h3 className="section-label">Votación ({getRoleLabel(userRole)})</h3>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
                             <div style={{ display: 'flex', gap: '12px' }}>
                               <button onClick={() => handleVotePr('up')} className="btn"
@@ -1378,7 +1517,7 @@ export default function App() {
                                   background: selectedPr.votes.some((v) => v.user === username && v.value === 'up')
                                     ? 'rgba(16, 185, 129, 0.2)' : undefined,
                                 }}>
-                                <ThumbsUp size={16} style={{ color: '#10b981' }} /> A Favor
+                                <ThumbsUp size={16} style={{ color: '#10b981' }} /> {selectedPr.votes.some((v) => v.user === username && v.value === 'up') ? 'Votado A Favor' : 'A Favor'}
                               </button>
                               <button onClick={() => handleVotePr('down')} className="btn"
                                 disabled={selectedPr.status === 'merged' || selectedPr.status === 'closed'}
@@ -1387,7 +1526,7 @@ export default function App() {
                                   background: selectedPr.votes.some((v) => v.user === username && v.value === 'down')
                                     ? 'rgba(239, 68, 68, 0.2)' : undefined,
                                 }}>
-                                <ThumbsDown size={16} style={{ color: '#ef4444' }} /> En Contra
+                                <ThumbsDown size={16} style={{ color: '#ef4444' }} /> {selectedPr.votes.some((v) => v.user === username && v.value === 'down') ? 'Votado En Contra' : 'En Contra'}
                               </button>
                             </div>
                             <div className="glass" style={{ padding: '8px 16px', fontSize: '0.85rem', display: 'flex', gap: '16px' }}>
@@ -1419,12 +1558,13 @@ export default function App() {
                                         <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Por: {alt.proposedBy}</span>
                                       </div>
                                       <button onClick={() => handleVoteAlternative(alt.id)} className="btn"
-                                        disabled={userVoted || selectedPr.status === 'merged'}
+                                        disabled={selectedPr.status === 'merged'}
                                         style={{
                                           padding: '6px 12px', fontSize: '0.8rem',
-                                          background: userVoted ? 'rgba(16,185,129,0.1)' : undefined,
+                                          background: userVoted ? 'rgba(16,185,129,0.2)' : undefined,
+                                          borderColor: userVoted ? '#10b981' : undefined,
                                         }}>
-                                        <ThumbsUp size={12} style={{ color: '#10b981' }} /> ({alt.votes?.length || 0})
+                                        <ThumbsUp size={12} style={{ color: '#10b981' }} /> {userVoted ? 'Votado' : 'Votar'} ({alt.votes?.length || 0})
                                       </button>
                                     </div>
                                   );
@@ -1463,11 +1603,42 @@ export default function App() {
                                     <div className="glass" style={{ padding: '12px 16px', background: 'rgba(30, 41, 59, 0.2)', flexGrow: 1 }}>
                                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                                         <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#fff' }}>{c.author}</span>
-                                        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                                          {new Date(c.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                        </span>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                          <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                                            {new Date(c.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                          </span>
+                                          {c.author === username && (
+                                            <div style={{ display: 'flex', gap: '8px', marginLeft: '12px' }}>
+                                              <button onClick={() => { setEditingCommentId(c.id); setEditingCommentText(c.text); }}
+                                                style={{ background: 'none', border: 'none', color: '#818cf8', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 0 }}
+                                                title="Editar">
+                                                <Edit2 size={12} />
+                                              </button>
+                                              <button onClick={() => handleDeleteComment(c.id)}
+                                                style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 0 }}
+                                                title="Eliminar">
+                                                <Trash2 size={12} />
+                                              </button>
+                                            </div>
+                                          )}
+                                        </div>
                                       </div>
-                                      <p style={{ fontSize: '0.9rem', color: '#cbd5e1', whiteSpace: 'pre-wrap' }}>{c.text}</p>
+                                      {editingCommentId === c.id ? (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '6px' }}>
+                                          <textarea value={editingCommentText} onChange={(e) => setEditingCommentText(e.target.value)}
+                                            style={{ padding: '8px 12px', fontSize: '0.9rem', height: '60px', background: 'rgba(15, 23, 42, 0.8)', minHeight: '60px' }} />
+                                          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                                            <button onClick={() => setEditingCommentId(null)} className="btn" style={{ padding: '4px 8px', fontSize: '0.75rem', borderRadius: '6px' }}>
+                                              Cancelar
+                                            </button>
+                                            <button onClick={() => handleUpdateComment(c.id, editingCommentText)} className="btn btn-primary" style={{ padding: '4px 8px', fontSize: '0.75rem', borderRadius: '6px' }}>
+                                              Guardar
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <p style={{ fontSize: '0.9rem', color: '#cbd5e1', whiteSpace: 'pre-wrap' }}>{c.text}</p>
+                                      )}
                                     </div>
                                   </div>
                                 ))
