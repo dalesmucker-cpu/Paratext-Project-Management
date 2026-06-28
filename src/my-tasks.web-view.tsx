@@ -5,6 +5,8 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { papiRetry, isPapiDisconnectedError } from './utils/papi-retry';
 import { usePapiDisconnect } from './utils/use-papi-disconnect';
 import { ReconnectBanner } from './components/reconnect-banner';
+import { Avatar } from './components/avatar';
+import { AvatarSettingsModal } from './components/avatar-settings-modal';
 import type { ProjectTask, TaskStatus, StageConfig, TaskStore } from './types/task.types';
 import {
   STATUS_LABELS,
@@ -235,6 +237,28 @@ globalThis.webViewComponent = function MyTasksWebView({
   // a backend round-trip). The backend file gives cross-restart persistence.
   const [currentUser, persistCurrentUser] = useWebViewState<string>('currentUser', '');
   const [loading, setLoading] = useState(false);
+  const [showAvatarSettings, setShowAvatarSettings] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Click outside menu detection
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handleGlobalClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    document.addEventListener('click', handleGlobalClick, true);
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => {
+      document.removeEventListener('click', handleGlobalClick, true);
+      document.removeEventListener('keydown', handleKeyDown, true);
+    };
+  }, [menuOpen]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const { ready, disconnected, disconnectedRef, clearDisconnected, handleCatch } =
@@ -590,26 +614,82 @@ globalThis.webViewComponent = function MyTasksWebView({
       <div className="tw:px-3 tw:py-2 tw:bg-white tw:border-b tw:shadow-sm">
         <div className="tw:flex tw:items-center tw:justify-between tw:gap-2 tw:flex-wrap">
           <div className="tw:flex tw:items-center tw:gap-2">
-            <button
-              onClick={toggleSidebar}
-              className="tw:p-1.5 tw:rounded-md tw:text-slate-600 tw:hover:bg-slate-100 tw:hover:text-slate-800 tw:transition-colors tw:cursor-pointer tw:flex tw:items-center tw:justify-center"
-              title={sidebarVisible ? 'Ocultar filtros' : 'Mostrar filtros'}
-            >
-              <svg
-                className="tw:w-5 tw:h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                xmlns="http://www.w3.org/2000/svg"
+            <div className="tw:flex tw:items-center tw:gap-2 tw:relative" ref={menuRef}>
+              <button
+                type="button"
+                onClick={() => setMenuOpen((v) => !v)}
+                className={`tw:p-1.5 tw:rounded-md tw:transition-colors tw:cursor-pointer tw:flex tw:items-center tw:justify-center tw:border ${
+                  menuOpen
+                    ? 'tw:bg-indigo-50 tw:text-indigo-600 tw:border-indigo-100'
+                    : 'tw:text-slate-600 tw:hover:bg-slate-100 tw:hover:text-slate-800 tw:border-transparent'
+                }`}
+                title="Menú de opciones"
+                aria-label="Menú de opciones"
+                aria-expanded={menuOpen}
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M4 6h16M4 12h16M4 18h16"
-                />
-              </svg>
-            </button>
+                <svg
+                  className="tw:w-5 tw:h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M4 6h16M4 12h16M4 18h16"
+                  />
+                </svg>
+              </button>
+
+              {menuOpen && (
+                <div
+                  className="tw:absolute tw:left-0 tw:top-full tw:mt-1.5 tw:w-72 tw:bg-white tw:border tw:border-slate-200 tw:rounded-xl tw:shadow-2xl tw:overflow-hidden tw:text-sm"
+                  style={{ zIndex: 10000 }}
+                >
+                  {/* Filters section */}
+                  <div className="tw:px-4 tw:pt-3.5 tw:pb-2">
+                    <div className="tw:text-[10px] tw:font-bold tw:uppercase tw:tracking-wider tw:text-slate-400 tw:mb-1.5">
+                      Filtros de Tareas
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        toggleSidebar();
+                        setMenuOpen(false);
+                      }}
+                      className="tw:w-full tw:flex tw:items-center tw:gap-2.5 tw:px-2.5 tw:py-2 tw:rounded-lg tw:text-slate-700 tw:hover:bg-slate-50 tw:transition-colors tw:cursor-pointer tw:text-left"
+                    >
+                      <span className="tw:text-base">🎛️</span>
+                      <span className="tw:flex-1 tw:font-medium">
+                        {sidebarVisible ? 'Ocultar filtros' : 'Mostrar filtros'}
+                      </span>
+                    </button>
+                  </div>
+
+                  <div className="tw:h-px tw:bg-slate-100" />
+
+                  {/* Settings section */}
+                  <div className="tw:px-4 tw:pt-3.5 tw:pb-3.5">
+                    <div className="tw:text-[10px] tw:font-bold tw:uppercase tw:tracking-wider tw:text-slate-400 tw:mb-1.5">
+                      Configuración
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAvatarSettings(true);
+                        setMenuOpen(false);
+                      }}
+                      className="tw:w-full tw:flex tw:items-center tw:gap-2.5 tw:px-2.5 tw:py-2 tw:rounded-lg tw:text-slate-700 tw:hover:bg-slate-50 tw:transition-colors tw:cursor-pointer tw:text-left"
+                    >
+                      <span className="tw:text-base">🖼️</span>
+                      <span className="tw:flex-1 tw:font-medium">Configurar Avatar</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
             <span className="tw:font-semibold tw:text-gray-700 tw:flex tw:items-center tw:gap-1.5">
               Mis Tareas
               {counts.flagged + counts['in-progress'] + counts.pending > 0 && (
@@ -666,6 +746,12 @@ globalThis.webViewComponent = function MyTasksWebView({
             >
               Actualizar
             </button>
+
+            <Avatar
+              name={currentUser}
+              onClick={() => setShowAvatarSettings(true)}
+              className="tw:ml-1.5"
+            />
           </div>
         </div>
 
@@ -863,6 +949,13 @@ globalThis.webViewComponent = function MyTasksWebView({
             />
           ))}
         </div>
+      )}
+
+      {showAvatarSettings && (
+        <AvatarSettingsModal
+          currentUser={currentUser}
+          onClose={() => setShowAvatarSettings(false)}
+        />
       )}
     </div>
   );

@@ -10,6 +10,8 @@ import { usePapiDisconnect } from './utils/use-papi-disconnect';
 
 import { AudioPlayer, AttachmentViewer } from './components/note-media-components';
 import { ReconnectBanner } from './components/reconnect-banner';
+import { Avatar } from './components/avatar';
+import { AvatarSettingsModal } from './components/avatar-settings-modal';
 
 function renderTextWithLinks(text: string, baseKey: string): React.ReactNode[] | string {
   const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
@@ -814,6 +816,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   const [selectedVerseNum, setSelectedVerseNum] = useState<number | null>(null);
   const [notesPopupVerseNum, setNotesPopupVerseNum] = useState<number | null>(null);
   const [currentUser, setCurrentUser] = useState('');
+  const [showAvatarSettings, setShowAvatarSettings] = useState(false);
   const [collabCursors, setCollabCursors] = useState<
     Record<
       string,
@@ -2825,6 +2828,19 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                           <option value="tag">Etiqueta (🏷️)</option>
                         </select>
                       </div>
+
+                      <div className="tw:h-px tw:bg-slate-100 tw:my-1.5" />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAvatarSettings(true);
+                          setMenuOpen(false);
+                        }}
+                        className="tw:w-full tw:flex tw:items-center tw:gap-2.5 tw:px-2.5 tw:py-2 tw:rounded-lg tw:text-slate-700 tw:hover:bg-slate-50 tw:transition-colors tw:cursor-pointer tw:text-left"
+                      >
+                        <span className="tw:text-base">🖼️</span>
+                        <span className="tw:flex-1 tw:font-medium">Configurar Avatar</span>
+                      </button>
                     </div>
                   </div>
                 )}
@@ -2918,12 +2934,11 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                 </svg>
                 {loading ? 'Cargando...' : 'Actualizar'}
               </button>
-              <div
-                className="tw:w-8 tw:h-8 tw:rounded-full tw:bg-slate-900 dark:tw:bg-slate-700 tw:text-white tw:grid tw:place-items-center tw:text-xs tw:font-medium tw:shrink-0"
-                title={currentUser || 'Usuario'}
-              >
-                {initials(currentUser)}
-              </div>
+              <Avatar
+                name={currentUser}
+                sizeClass="tw:w-8 tw:h-8"
+                onClick={() => setShowAvatarSettings(true)}
+              />
             </div>
           </div>
 
@@ -3800,6 +3815,13 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
             </div>
           </div>
         </div>
+      )}
+
+      {showAvatarSettings && (
+        <AvatarSettingsModal
+          currentUser={currentUser}
+          onClose={() => setShowAvatarSettings(false)}
+        />
       )}
     </div>
   );

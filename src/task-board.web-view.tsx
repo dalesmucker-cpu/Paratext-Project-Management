@@ -5,6 +5,8 @@ import { useState, useEffect, useCallback, useMemo, useRef, type ChangeEvent } f
 import { papiRetry, isPapiDisconnectedError } from './utils/papi-retry';
 import { usePapiDisconnect } from './utils/use-papi-disconnect';
 import { ReconnectBanner } from './components/reconnect-banner';
+import { Avatar } from './components/avatar';
+import { AvatarSettingsModal } from './components/avatar-settings-modal';
 import type {
   ProjectTask,
   TranslationStage,
@@ -26,6 +28,65 @@ import {
   getOrderedStages,
   deadlineColorClass,
 } from './types/task.types';
+
+function initials(name: string): string {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function ToggleSwitch({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label="Alternar"
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={(e) => {
+        e.stopPropagation();
+        onChange(!checked);
+      }}
+      style={{
+        width: '36px',
+        height: '20px',
+        backgroundColor: checked ? '#4f46e5' : '#cbd5e1',
+        borderRadius: '9999px',
+        position: 'relative',
+        display: 'inline-flex',
+        alignItems: 'center',
+        border: 'none',
+        cursor: 'pointer',
+        padding: 0,
+        boxSizing: 'border-box',
+        flexShrink: 0,
+        outline: 'none',
+        transition: 'background-color 0.2s ease',
+      }}
+    >
+      <span
+        style={{
+          width: '16px',
+          height: '16px',
+          backgroundColor: '#ffffff',
+          borderRadius: '9999px',
+          position: 'absolute',
+          left: checked ? '18px' : '2px',
+          top: '2px',
+          transition: 'left 0.2s ease',
+          boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+        }}
+      />
+    </button>
+  );
+}
 
 // ---- Edit Task Modal ----
 
@@ -59,6 +120,7 @@ function EditTaskModal({
   const [loggedHours, setLoggedHours] = useState(
     task.loggedHours !== undefined ? String(task.loggedHours) : '',
   );
+  const [incompleteStages, setIncompleteStages] = useState<string[]>(task.incompleteStages ?? []);
 
   // Debounce timer ref for live broadcasting (600 ms after last change)
   const liveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -74,6 +136,7 @@ function EditTaskModal({
       dl: string,
       eh: string,
       lh: string,
+      incStages: string[],
     ): ProjectTask => ({
       ...task,
       book: b,
@@ -85,6 +148,7 @@ function EditTaskModal({
       deadline: dl || undefined,
       estimatedHours: eh !== '' ? parseFloat(eh) : undefined,
       loggedHours: lh !== '' ? parseFloat(lh) : undefined,
+      incompleteStages: incStages,
     }),
     [task],
   );
@@ -100,11 +164,12 @@ function EditTaskModal({
       dl: string,
       eh: string,
       lh: string,
+      incStages: string[],
     ) => {
       if (!onLiveChange) return;
       if (liveDebounceRef.current) clearTimeout(liveDebounceRef.current);
       liveDebounceRef.current = setTimeout(() => {
-        onLiveChange(buildDraft(b, ch, st, asgn, n, dl, eh, lh));
+        onLiveChange(buildDraft(b, ch, st, asgn, n, dl, eh, lh, incStages));
       }, 600);
     },
     [onLiveChange, buildDraft],
@@ -123,7 +188,17 @@ function EditTaskModal({
       ? assignees.filter((a) => a !== name)
       : [...assignees, name];
     setAssignees(next);
-    scheduleLive(book, chapter, stage, next, notes, deadline, estimatedHours, loggedHours);
+    scheduleLive(
+      book,
+      chapter,
+      stage,
+      next,
+      notes,
+      deadline,
+      estimatedHours,
+      loggedHours,
+      incompleteStages,
+    );
   };
 
   const handleBookChange = (e: ChangeEvent<HTMLSelectElement>) => {
@@ -137,6 +212,7 @@ function EditTaskModal({
       deadline,
       estimatedHours,
       loggedHours,
+      incompleteStages,
     );
   };
   const handleChapterChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -150,19 +226,23 @@ function EditTaskModal({
       deadline,
       estimatedHours,
       loggedHours,
+      incompleteStages,
     );
   };
   const handleStageChange = (e: ChangeEvent<HTMLSelectElement>) => {
-    setStage(e.target.value);
+    const nextStage = e.target.value;
+    setStage(nextStage);
+    setIncompleteStages([]);
     scheduleLive(
       book,
       chapter,
-      e.target.value,
+      nextStage,
       assignees,
       notes,
       deadline,
       estimatedHours,
       loggedHours,
+      [],
     );
   };
   const handleNotesChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
@@ -176,6 +256,7 @@ function EditTaskModal({
       deadline,
       estimatedHours,
       loggedHours,
+      incompleteStages,
     );
   };
   const handleDeadlineChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -189,15 +270,54 @@ function EditTaskModal({
       e.target.value,
       estimatedHours,
       loggedHours,
+      incompleteStages,
     );
   };
   const handleEstimatedHoursChange = (e: ChangeEvent<HTMLInputElement>) => {
     setEstimatedHours(e.target.value);
-    scheduleLive(book, chapter, stage, assignees, notes, deadline, e.target.value, loggedHours);
+    scheduleLive(
+      book,
+      chapter,
+      stage,
+      assignees,
+      notes,
+      deadline,
+      e.target.value,
+      loggedHours,
+      incompleteStages,
+    );
   };
   const handleLoggedHoursChange = (e: ChangeEvent<HTMLInputElement>) => {
     setLoggedHours(e.target.value);
-    scheduleLive(book, chapter, stage, assignees, notes, deadline, estimatedHours, e.target.value);
+    scheduleLive(
+      book,
+      chapter,
+      stage,
+      assignees,
+      notes,
+      deadline,
+      estimatedHours,
+      e.target.value,
+      incompleteStages,
+    );
+  };
+
+  const handleIncompleteStageToggle = (st: string, isComplete: boolean) => {
+    const nextIncomplete = isComplete
+      ? [...incompleteStages, st]
+      : incompleteStages.filter((x) => x !== st);
+    setIncompleteStages(nextIncomplete);
+    scheduleLive(
+      book,
+      chapter,
+      stage,
+      assignees,
+      notes,
+      deadline,
+      estimatedHours,
+      loggedHours,
+      nextIncomplete,
+    );
   };
 
   const handleSave = () => {
@@ -206,7 +326,17 @@ function EditTaskModal({
       liveDebounceRef.current = null;
     }
     onSave(
-      buildDraft(book, chapter, stage, assignees, notes, deadline, estimatedHours, loggedHours),
+      buildDraft(
+        book,
+        chapter,
+        stage,
+        assignees,
+        notes,
+        deadline,
+        estimatedHours,
+        loggedHours,
+        incompleteStages,
+      ),
     );
     onClose();
   };
@@ -319,6 +449,43 @@ function EditTaskModal({
               />
             </div>
           </div>
+          {(() => {
+            const idx = orderedStages.indexOf(stage);
+            const previousStages = idx > 0 ? orderedStages.slice(0, idx) : [];
+            if (previousStages.length === 0) return null;
+            return (
+              <div className="tw:border-t tw:pt-3 tw:mt-3">
+                <label className="tw:block tw:font-medium tw:mb-1.5 tw:text-slate-700">
+                  Etapas anteriores (completadas)
+                </label>
+                <div className="tw:space-y-1.5">
+                  {previousStages.map((st) => {
+                    const isComplete = !incompleteStages.includes(st);
+                    return (
+                      <label
+                        key={st}
+                        className="tw:flex tw:items-center tw:gap-1.5 tw:cursor-pointer tw:text-xs"
+                      >
+                        <input
+                          type="checkbox"
+                          className="tw:rounded tw:border-slate-300 tw:text-indigo-600 focus:tw:ring-indigo-500"
+                          checked={isComplete}
+                          onChange={() => handleIncompleteStageToggle(st, isComplete)}
+                        />
+                        <span
+                          className={
+                            isComplete ? 'tw:text-slate-600' : 'tw:text-red-600 tw:font-semibold'
+                          }
+                        >
+                          {getStageLabel(st, stageConfig)} {isComplete ? '✓' : '✗'}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
         </div>
         <div className="tw:flex tw:gap-2 tw:mt-4 tw:justify-end">
           <button
@@ -676,11 +843,12 @@ function ActivityLogPanel({ log, onClose }: { log: ActivityLogEntry[]; onClose: 
 
 function TaskCard({
   task,
-  stageConfig: _stageConfig,
-  orderedStages: _orderedStages,
+  stageConfig,
+  orderedStages,
   onStatusChange,
   onDelete,
   onEdit,
+  onUpdateTask,
   isDragging,
   onDragStart,
   onDragEnd,
@@ -691,6 +859,7 @@ function TaskCard({
   onStatusChange: (id: string, status: TaskStatus) => void;
   onDelete: (id: string) => void;
   onEdit: (task: ProjectTask) => void;
+  onUpdateTask: (task: ProjectTask) => void;
   isDragging: boolean;
   onDragStart: (id: string) => void;
   onDragEnd: () => void;
@@ -764,6 +933,49 @@ function TaskCard({
               </button>
             ))}
           </div>
+          {(() => {
+            const idx = orderedStages.indexOf(task.stage);
+            const previousStages = idx > 0 ? orderedStages.slice(0, idx) : [];
+            if (previousStages.length === 0) return null;
+            return (
+              <div className="tw:mb-2.5 tw:pb-2.5 tw:border-b tw:border-gray-100">
+                <span className="tw:font-semibold tw:text-[10px] tw:text-gray-500 tw:block tw:mb-1 tw:uppercase tw:tracking-wider">
+                  Etapas anteriores:
+                </span>
+                <div className="tw:space-y-1">
+                  {previousStages.map((st) => {
+                    const isComplete = !task.incompleteStages?.includes(st);
+                    return (
+                      <label
+                        key={st}
+                        className="tw:flex tw:items-center tw:gap-1.5 tw:cursor-pointer tw:text-[11px] tw:text-slate-700 hover:tw:text-slate-900"
+                      >
+                        <input
+                          type="checkbox"
+                          className="tw:rounded tw:border-slate-300 tw:text-indigo-600 focus:tw:ring-indigo-500 tw:w-3.5 tw:h-3.5"
+                          checked={isComplete}
+                          onChange={() => {
+                            const currentIncomplete = task.incompleteStages ?? [];
+                            const nextIncomplete = isComplete
+                              ? [...currentIncomplete, st]
+                              : currentIncomplete.filter((x) => x !== st);
+                            onUpdateTask({ ...task, incompleteStages: nextIncomplete });
+                          }}
+                        />
+                        <span
+                          className={
+                            isComplete ? 'tw:text-slate-600' : 'tw:text-red-600 tw:font-semibold'
+                          }
+                        >
+                          {getStageLabel(st, stageConfig)} {isComplete ? '✓' : '✗'}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
           <div className="tw:flex tw:gap-1">
             <button
               className="tw:px-1.5 tw:py-0.5 tw:rounded tw:bg-slate-50 tw:text-slate-600 tw:border tw:border-slate-200 tw:hover:bg-slate-100 tw:text-xs"
@@ -1072,18 +1284,40 @@ globalThis.webViewComponent = function TaskBoardWebView({
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
   const [dragOverStage, setDragOverStage] = useState<string | null>(null);
 
-  const [sidebarVisible, setSidebarVisible] = useState(() => {
-    const saved = localStorage.getItem('task_board_sidebar_visible');
-    return saved !== 'false';
-  });
+  const [currentUser, setCurrentUser] = useState('Usuario');
+  const [showAvatarSettings, setShowAvatarSettings] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
-  const toggleSidebar = () => {
-    setSidebarVisible((v) => {
-      const next = !v;
-      localStorage.setItem('task_board_sidebar_visible', String(next));
-      return next;
-    });
-  };
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const uRes = await papi.commands.sendCommand('paratextProjectManager.getCurrentUser');
+        if (uRes) setCurrentUser(uRes);
+      } catch (err) {
+        console.warn('Failed to fetch current user:', err);
+      }
+    };
+    fetchUser();
+  }, []);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [menuOpen]);
 
   const selectProject = useDialogCallback(
     'platform.selectProject',
@@ -1529,26 +1763,144 @@ globalThis.webViewComponent = function TaskBoardWebView({
     <div className="tw:flex tw:flex-col tw:h-full tw:bg-gray-50 tw:text-sm">
       {/* Header */}
       <div className="tw:flex tw:items-center tw:flex-wrap tw:gap-2 tw:px-3 tw:py-2 tw:bg-white tw:border-b tw:shadow-sm">
-        <button
-          onClick={toggleSidebar}
-          className="tw:p-1.5 tw:rounded-md tw:text-slate-600 tw:hover:bg-slate-100 tw:hover:text-slate-800 tw:transition-colors tw:cursor-pointer tw:flex tw:items-center tw:justify-center"
-          title={sidebarVisible ? 'Ocultar filtros' : 'Mostrar filtros'}
-        >
-          <svg
-            className="tw:w-5 tw:h-5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            xmlns="http://www.w3.org/2000/svg"
+        {/* Hamburger menu with dropdown */}
+        <div className="tw:relative tw:flex tw:items-center" ref={menuRef}>
+          <button
+            type="button"
+            onClick={() => setMenuOpen((v) => !v)}
+            className={`tw:p-1.5 tw:rounded-md tw:transition-colors tw:cursor-pointer tw:flex tw:items-center tw:justify-center tw:border ${
+              menuOpen
+                ? 'tw:bg-indigo-50 tw:text-indigo-600 tw:border-indigo-100'
+                : 'tw:text-slate-600 tw:hover:bg-slate-100 tw:hover:text-slate-800 tw:border-transparent'
+            }`}
+            title="Menú de opciones"
+            aria-label="Menú de opciones"
+            aria-expanded={menuOpen}
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              d="M4 6h16M4 12h16M4 18h16"
-            />
-          </svg>
-        </button>
+            <svg
+              className="tw:w-5 tw:h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M4 6h16M4 12h16M4 18h16"
+              />
+            </svg>
+          </button>
+
+          {menuOpen && (
+            <div
+              className="tw:absolute tw:left-0 tw:top-full tw:mt-1.5 tw:w-72 tw:bg-white tw:border tw:border-slate-200 tw:rounded-xl tw:shadow-2xl tw:overflow-hidden tw:text-sm"
+              style={{ zIndex: 10000 }}
+            >
+              {/* Project section */}
+              <div className="tw:px-4 tw:pt-3.5 tw:pb-2">
+                <div className="tw:text-[10px] tw:font-bold tw:uppercase tw:tracking-wider tw:text-slate-400 tw:mb-1.5">
+                  Proyecto
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    selectProject();
+                    setMenuOpen(false);
+                  }}
+                  className="tw:w-full tw:flex tw:items-center tw:gap-2.5 tw:px-2.5 tw:py-2 tw:rounded-lg tw:text-slate-700 tw:hover:bg-slate-50 tw:transition-colors tw:cursor-pointer tw:text-left"
+                >
+                  <span className="tw:text-base">📚</span>
+                  <span className="tw:flex-1 tw:font-medium">Cambiar Proyecto</span>
+                </button>
+                <div className="tw:flex tw:items-center tw:gap-2.5 tw:px-2.5 tw:py-2">
+                  <span className="tw:text-base">👤</span>
+                  <div className="tw:flex-1 tw:flex tw:items-center tw:justify-between tw:text-left tw:font-medium tw:text-slate-700">
+                    <span>Usuario</span>
+                    <span className="tw:px-2 tw:py-0.5 tw:bg-slate-100 tw:rounded tw:text-xs tw:font-semibold tw:text-slate-700">
+                      {currentUser || 'Usuario'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="tw:h-px tw:bg-slate-100" />
+
+              {/* Settings section */}
+              <div className="tw:px-4 tw:pt-3.5 tw:pb-3.5">
+                <div className="tw:text-[10px] tw:font-bold tw:uppercase tw:tracking-wider tw:text-slate-400 tw:mb-1.5">
+                  Configuración
+                </div>
+
+                <div className="tw:flex tw:items-center tw:justify-between tw:px-2.5 tw:py-1.5">
+                  <span className="tw:font-medium tw:text-slate-700">Ocultar completadas</span>
+                  <ToggleSwitch
+                    checked={hideCompleted}
+                    onChange={(val) => {
+                      setHideCompleted(val);
+                    }}
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowStageConfig(true);
+                    setMenuOpen(false);
+                  }}
+                  className="tw:w-full tw:flex tw:items-center tw:gap-2.5 tw:px-2.5 tw:py-2 tw:rounded-lg tw:text-slate-700 tw:hover:bg-slate-50 tw:transition-colors tw:cursor-pointer tw:text-left"
+                >
+                  <span className="tw:text-base">⚙️</span>
+                  <span className="tw:flex-1 tw:font-medium">Configurar Etapas</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAvatarSettings(true);
+                    setMenuOpen(false);
+                  }}
+                  className="tw:w-full tw:flex tw:items-center tw:gap-2.5 tw:px-2.5 tw:py-2 tw:rounded-lg tw:text-slate-700 tw:hover:bg-slate-50 tw:transition-colors tw:cursor-pointer tw:text-left"
+                >
+                  <span className="tw:text-base">🖼️</span>
+                  <span className="tw:flex-1 tw:font-medium">Configurar Avatar</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowActivityLog(true);
+                    setMenuOpen(false);
+                  }}
+                  className="tw:w-full tw:flex tw:items-center tw:gap-2.5 tw:px-2.5 tw:py-2 tw:rounded-lg tw:text-slate-700 tw:hover:bg-slate-50 tw:transition-colors tw:cursor-pointer tw:text-left"
+                >
+                  <span className="tw:text-base">📋</span>
+                  <div className="tw:flex-1 tw:flex tw:items-center tw:justify-between">
+                    <span className="tw:font-medium">Registro de Actividad</span>
+                    {activityLog.length > 0 && (
+                      <span className="tw:bg-slate-100 tw:text-slate-700 tw:text-[10px] tw:rounded-full tw:px-2 tw:py-0.5 tw:font-bold">
+                        {activityLog.length}
+                      </span>
+                    )}
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    loadTasks();
+                    setMenuOpen(false);
+                  }}
+                  className="tw:w-full tw:flex tw:items-center tw:gap-2.5 tw:px-2.5 tw:py-2 tw:rounded-lg tw:text-slate-700 tw:hover:bg-slate-50 tw:transition-colors tw:cursor-pointer tw:text-left"
+                >
+                  <span className="tw:text-base">🔄</span>
+                  <span className="tw:flex-1 tw:font-medium">Actualizar</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
         <span className="tw:font-semibold tw:text-gray-700">Tablero de Tareas</span>
         {saving && <span className="tw:text-gray-400 tw:text-xs tw:ml-2">Guardando…</span>}
         {!saving && syncPending && (
@@ -1560,92 +1912,44 @@ globalThis.webViewComponent = function TaskBoardWebView({
           </span>
         )}
 
-        {sidebarVisible && (
-          <div className="tw:flex tw:gap-1.5 tw:items-center tw:ml-auto tw:flex-wrap">
-            <button
-              className="tw:px-2.5 tw:py-1 tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:border-slate-200 tw:rounded tw:text-xs tw:font-medium tw:text-slate-700 tw:cursor-pointer"
-              onClick={() => selectProject()}
-              title="Cambiar proyecto"
-            >
-              Cambiar Proyecto
-            </button>
-            <select
-              className="tw:border tw:rounded tw:px-2 tw:py-0.5 tw:text-xs"
-              value={filterAssignee}
-              onChange={(e) => setFilterAssignee(e.target.value)}
-            >
-              <option value="all">Todos los miembros</option>
-              {teamMembers.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-            <select
-              className="tw:border tw:rounded tw:px-2 tw:py-0.5 tw:text-xs"
-              value={filterBook}
-              onChange={(e) => setFilterBook(e.target.value)}
-            >
-              <option value="all">Todos los libros</option>
-              {usedBooks.map((b) => (
-                <option key={b} value={b}>
-                  {b}
-                </option>
-              ))}
-            </select>
-            <button
-              className={`tw:px-2.5 tw:py-1 tw:rounded tw:text-xs tw:font-medium tw:border tw:cursor-pointer ${
-                hideCompleted
-                  ? 'tw:bg-slate-100 tw:text-slate-700 tw:border-slate-300'
-                  : 'tw:bg-gray-100 tw:text-gray-500 tw:hover:bg-gray-200 tw:border-transparent'
-              }`}
-              onClick={() => setHideCompleted(!hideCompleted)}
-              title={hideCompleted ? 'Mostrar completas' : 'Esconder completas'}
-            >
-              {hideCompleted ? 'Mostrar completadas' : 'Ocultar completadas'}
-            </button>
-            <button
-              className="tw:px-2.5 tw:py-1 tw:bg-slate-600 tw:text-white tw:rounded tw:text-xs tw:font-medium tw:hover:bg-slate-700 tw:cursor-pointer"
-              onClick={() => setShowNewTask(true)}
-            >
-              + Nueva Tarea
-            </button>
-            <button
-              className={`tw:px-2.5 tw:py-1 tw:rounded tw:text-xs tw:font-medium tw:border tw:cursor-pointer ${
-                showStageConfig
-                  ? 'tw:bg-slate-100 tw:text-slate-700 tw:border-slate-300'
-                  : 'tw:bg-gray-100 tw:hover:bg-gray-200 tw:border-transparent'
-              }`}
-              onClick={() => setShowStageConfig((v) => !v)}
-              title="Configurar etapas"
-            >
-              Etapas
-            </button>
-            <button
-              className={`tw:px-2.5 tw:py-1 tw:rounded tw:text-xs tw:font-medium tw:border tw:relative tw:cursor-pointer ${
-                showActivityLog
-                  ? 'tw:bg-slate-100 tw:text-slate-700 tw:border-slate-300'
-                  : 'tw:bg-gray-100 tw:hover:bg-gray-200 tw:border-transparent'
-              }`}
-              onClick={() => setShowActivityLog((v) => !v)}
-              title="Registro de actividad"
-            >
-              Registro
-              {activityLog.length > 0 && !showActivityLog && (
-                <span className="tw:absolute tw:-top-1 tw:-right-1 tw:bg-slate-500 tw:text-white tw:text-[10px] tw:rounded-full tw:w-4 tw:h-4 tw:flex tw:items-center tw:justify-center tw:leading-none">
-                  {activityLog.length > 99 ? '99+' : activityLog.length}
-                </span>
-              )}
-            </button>
-            <button
-              className="tw:px-2.5 tw:py-1 tw:bg-slate-100 tw:hover:bg-slate-200 tw:border tw:border-slate-200 tw:rounded tw:text-xs tw:font-medium tw:text-slate-700 tw:cursor-pointer"
-              onClick={loadTasks}
-              title="Actualizar"
-            >
-              Actualizar
-            </button>
-          </div>
-        )}
+        <div className="tw:flex tw:gap-1.5 tw:items-center tw:ml-auto tw:flex-wrap">
+          <select
+            className="tw:border tw:rounded tw:px-2 tw:py-0.5 tw:text-xs"
+            value={filterAssignee}
+            onChange={(e) => setFilterAssignee(e.target.value)}
+          >
+            <option value="all">Todos los miembros</option>
+            {teamMembers.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+          <select
+            className="tw:border tw:rounded tw:px-2 tw:py-0.5 tw:text-xs"
+            value={filterBook}
+            onChange={(e) => setFilterBook(e.target.value)}
+          >
+            <option value="all">Todos los libros</option>
+            {usedBooks.map((b) => (
+              <option key={b} value={b}>
+                {b}
+              </option>
+            ))}
+          </select>
+          <button
+            className="tw:px-2.5 tw:py-1 tw:bg-slate-600 tw:text-white tw:rounded tw:text-xs tw:font-medium tw:hover:bg-slate-700 tw:cursor-pointer"
+            onClick={() => setShowNewTask(true)}
+          >
+            + Nueva Tarea
+          </button>
+          <Avatar
+            name={currentUser}
+            sizeClass="tw:w-8 tw:h-8"
+            className="tw:ml-2"
+            onClick={() => setShowAvatarSettings(true)}
+          />
+        </div>
       </div>
 
       {/* Stage config panel */}
@@ -1751,6 +2055,7 @@ globalThis.webViewComponent = function TaskBoardWebView({
                       onStatusChange={updateStatus}
                       onDelete={deleteTask}
                       onEdit={openEditModal}
+                      onUpdateTask={editTask}
                       isDragging={draggingTaskId === task.id}
                       onDragStart={setDraggingTaskId}
                       onDragEnd={() => setDraggingTaskId(null)}
@@ -1782,6 +2087,13 @@ globalThis.webViewComponent = function TaskBoardWebView({
           onClose={() => setEditingTask(null)}
           onSave={editTask}
           onLiveChange={liveEditTask}
+        />
+      )}
+
+      {showAvatarSettings && (
+        <AvatarSettingsModal
+          currentUser={currentUser}
+          onClose={() => setShowAvatarSettings(false)}
         />
       )}
     </div>

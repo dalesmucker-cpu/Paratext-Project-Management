@@ -31,6 +31,7 @@ export interface ProjectTask {
   timeEntries?: TimeEntry[];
   path?: TaskPathStep[]; // ordered workflow route defined at task creation
   currentPathIndex?: number; // 0-based index of the current step in path[]
+  incompleteStages?: string[]; // list of stages before current stage marked as not complete
 }
 
 /** A single time log entry on a task */

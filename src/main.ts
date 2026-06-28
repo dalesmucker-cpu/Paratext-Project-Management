@@ -1995,6 +1995,49 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     },
   );
 
+  const getUserAvatarsPromise = papi.commands.registerCommand(
+    'paratextProjectManager.getUserAvatars',
+    async (): Promise<string> => {
+      try {
+        const exists = await runFileHelper('exists', PM_USER_CONFIG_PATH);
+        if (exists.trim() !== 'true') return '{}';
+        const content = await runFileHelper('read', PM_USER_CONFIG_PATH);
+        const config = JSON.parse(content) as { userAvatars?: Record<string, any> };
+        return JSON.stringify(config.userAvatars || {});
+      } catch (e) {
+        logger.warn(`getUserAvatars failed: ${e}`);
+        return '{}';
+      }
+    },
+  );
+
+  const saveUserAvatarPromise = papi.commands.registerCommand(
+    'paratextProjectManager.saveUserAvatar',
+    async (userName: string, avatarConfigJson: string): Promise<string> => {
+      try {
+        let config: Record<string, any> = {};
+        const exists = await runFileHelper('exists', PM_USER_CONFIG_PATH);
+        if (exists.trim() === 'true') {
+          const content = await runFileHelper('read', PM_USER_CONFIG_PATH);
+          config = JSON.parse(content);
+        }
+        if (!config.userAvatars) config.userAvatars = {};
+        config.userAvatars[userName] = JSON.parse(avatarConfigJson);
+        await runFileHelper('write', PM_USER_CONFIG_PATH, JSON.stringify(config, null, 2));
+        if (collabEventEmitter) {
+          collabEventEmitter.emit({
+            type: 'avatar_changed',
+            payload: { username: userName, config: config.userAvatars[userName] },
+          });
+        }
+        return 'ok';
+      } catch (e) {
+        logger.warn(`saveUserAvatar failed: ${e}`);
+        return `error: ${e}`;
+      }
+    },
+  );
+
   // --- Team member commands ---
 
   const DEFAULT_TEAM_MEMBERS = [
@@ -4612,6 +4655,8 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     await saveTasksPromise,
     await getCurrentUserPromise,
     await setCurrentUserPromise,
+    await getUserAvatarsPromise,
+    await saveUserAvatarPromise,
     await gcalGetStatusPromise,
     await gcalConnectPromise,
     await gcalReconnectPromise,

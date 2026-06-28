@@ -23,6 +23,8 @@ import {
 } from 'lucide-react';
 import { papiRetry, isPapiDisconnectedError } from './utils/papi-retry';
 import { usePapiDisconnect } from './utils/use-papi-disconnect';
+import { Avatar } from './components/avatar';
+import { AvatarSettingsModal } from './components/avatar-settings-modal';
 import { useLocalizedStrings } from './utils/i18n';
 import { diffUsfm, summarizeUsfmDiff, type UsfmDiffSegment } from './utils/usfm-diff';
 import type {
@@ -409,9 +411,7 @@ function CommentNode({
 
   return (
     <div className="tw:flex tw:gap-3">
-      <div className="tw:w-8 tw:h-8 tw:rounded-full tw:bg-slate-800 tw:text-white tw:grid tw:place-items-center tw:text-[11px] tw:font-medium tw:shrink-0">
-        {initials(comment.author)}
-      </div>
+      <Avatar name={comment.author} sizeClass="tw:w-8 tw:h-8" />
       <div className="tw:flex-1 tw:min-w-0">
         <div className="tw:flex tw:items-baseline tw:gap-2 tw:flex-wrap">
           <span className="tw:text-[14px] tw:font-medium tw:text-slate-900 dark:tw:text-slate-100">
@@ -580,6 +580,7 @@ globalThis.webViewComponent = function PullRequestsWebView({
   const { ready, disconnected, clearDisconnected, handleCatch } = usePapiDisconnect();
 
   const [currentUser, setCurrentUser] = useState('Translator');
+  const [showAvatarSettings, setShowAvatarSettings] = useState(false);
   const [selectedId, setSelectedId] = useState<number | undefined>(undefined);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showRevertModal, setShowRevertModal] = useState(false);
@@ -1756,9 +1757,11 @@ globalThis.webViewComponent = function PullRequestsWebView({
                       pr.id === selectedId ? 'tw:text-slate-400' : 'tw:text-slate-500'
                     }`}
                   >
-                    <span className="tw:w-5 tw:h-5 tw:rounded-full tw:bg-slate-800 tw:grid tw:place-items-center tw:text-[10px] tw:font-medium tw:ring-1 tw:ring-slate-700">
-                      {pr.avatar}
-                    </span>
+                    <Avatar
+                      name={pr.author}
+                      sizeClass="tw:w-5 tw:h-5"
+                      className="tw:ring-1 tw:ring-slate-700"
+                    />
                     <span className="tw:truncate">{pr.author}</span>
                     <span>•</span>
                     <span className="tw:shrink-0">{relativeTime(pr.createdAt, currentLang)}</span>
@@ -1902,9 +1905,11 @@ globalThis.webViewComponent = function PullRequestsWebView({
                   >
                     {currentLang === 'en' ? 'ES' : 'EN'}
                   </button>
-                  <div className="tw:w-8 tw:h-8 tw:rounded-full tw:bg-slate-900 dark:tw:bg-slate-700 tw:text-white tw:grid tw:place-items-center tw:text-xs tw:font-medium">
-                    {initials(currentUser)}
-                  </div>
+                  <Avatar
+                    name={currentUser}
+                    sizeClass="tw:w-8 tw:h-8"
+                    onClick={() => setShowAvatarSettings(true)}
+                  />
                 </div>
               </div>
 
@@ -1912,9 +1917,7 @@ globalThis.webViewComponent = function PullRequestsWebView({
               {selected && (
                 <div className="tw:flex tw:items-center tw:gap-2.5 tw:mt-2.5 tw:text-[13px] tw:text-slate-500 tw:flex-wrap">
                   <span className="tw:inline-flex tw:items-center tw:gap-1.5">
-                    <span className="tw:w-5 tw:h-5 tw:rounded-full tw:bg-slate-800 tw:text-white tw:grid tw:place-items-center tw:text-[10px] tw:font-medium">
-                      {selected.avatar}
-                    </span>
+                    <Avatar name={selected.author} sizeClass="tw:w-5 tw:h-5" />
                     <span className="tw:text-slate-700 dark:tw:text-slate-300">
                       {selected.author}
                     </span>
@@ -2127,9 +2130,11 @@ globalThis.webViewComponent = function PullRequestsWebView({
                       </div>
                       <div className="tw:p-3 sm:tw:p-4 tw:border-t tw:border-slate-100 dark:tw:border-slate-800 tw:bg-slate-50/70 dark:tw:bg-slate-800/30 tw:rounded-b-2xl">
                         <div className="tw:flex tw:gap-2.5">
-                          <div className="tw:w-8 tw:h-8 tw:rounded-full tw:bg-slate-900 dark:tw:bg-slate-700 tw:text-white tw:grid tw:place-items-center tw:text-[11px] tw:font-medium tw:shrink-0 tw:mt-0.5">
-                            {initials(currentUser)}
-                          </div>
+                          <Avatar
+                            name={currentUser}
+                            sizeClass="tw:w-8 tw:h-8"
+                            className="tw:mt-0.5"
+                          />
                           <div className="tw:flex-1 tw:min-w-0">
                             <textarea
                               rows={2}
@@ -2186,9 +2191,11 @@ globalThis.webViewComponent = function PullRequestsWebView({
                       </div>
                       <div className="tw:p-3 sm:tw:p-4 tw:border-t tw:border-slate-100 dark:tw:border-slate-800 tw:bg-slate-50/70 dark:tw:bg-slate-800/30 tw:rounded-b-2xl">
                         <div className="tw:flex tw:gap-2.5">
-                          <div className="tw:w-8 tw:h-8 tw:rounded-full tw:bg-slate-900 dark:tw:bg-slate-700 tw:text-white tw:grid tw:place-items-center tw:text-[11px] tw:font-medium tw:shrink-0 tw:mt-0.5">
-                            {initials(currentUser)}
-                          </div>
+                          <Avatar
+                            name={currentUser}
+                            sizeClass="tw:w-8 tw:h-8"
+                            className="tw:mt-0.5"
+                          />
                           <div className="tw:flex-1 tw:min-w-0">
                             <textarea
                               rows={2}
@@ -3175,6 +3182,13 @@ globalThis.webViewComponent = function PullRequestsWebView({
           {toast}
         </div>
       )}
+
+      {showAvatarSettings && (
+        <AvatarSettingsModal
+          currentUser={currentUser}
+          onClose={() => setShowAvatarSettings(false)}
+        />
+      )}
     </div>
   );
 };
@@ -3305,9 +3319,11 @@ function HistoryPanel({ pr, lang }: { pr: PullRequest; lang: 'en' | 'es' }) {
             <ol className="tw:relative tw:border-l tw:border-slate-200 dark:tw:border-slate-700 tw:ml-3 tw:space-y-6">
               {sorted.map((h) => (
                 <li key={h.id} className="tw:ml-6">
-                  <span className="tw:absolute -tw:left-3 tw:w-6 tw:h-6 tw:rounded-full tw:bg-white dark:tw:bg-slate-900 tw:border-2 tw:border-slate-200 dark:tw:border-slate-700 tw:grid tw:place-items-center tw:text-[10px] tw:font-medium tw:text-slate-700 dark:tw:text-slate-300">
-                    {initials(h.actor)}
-                  </span>
+                  <Avatar
+                    name={h.actor}
+                    sizeClass="tw:w-6 tw:h-6"
+                    className="tw:absolute -tw:left-3 tw:bg-white dark:tw:bg-slate-900 tw:border-2 tw:border-slate-200 dark:tw:border-slate-700 tw:text-[10px] tw:text-slate-700 dark:tw:text-slate-300"
+                  />
                   <div className="tw:flex tw:items-baseline tw:gap-2 tw:flex-wrap">
                     <span className="tw:text-[13px] tw:font-medium">{h.action}</span>
                     <span className="tw:text-[12px] tw:text-slate-500">

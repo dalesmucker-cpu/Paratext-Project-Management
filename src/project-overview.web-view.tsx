@@ -5,6 +5,8 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { papiRetry, isPapiDisconnectedError } from './utils/papi-retry';
 import { usePapiDisconnect } from './utils/use-papi-disconnect';
 import { ReconnectBanner } from './components/reconnect-banner';
+import { Avatar } from './components/avatar';
+import { AvatarSettingsModal } from './components/avatar-settings-modal';
 import type {
   ProjectTask,
   TaskStatus,
@@ -21,6 +23,29 @@ import {
   STATUS_COLORS,
   STATUS_LABELS,
 } from './types/task.types';
+
+function getTaskStageStatus(
+  task: ProjectTask,
+  stage: string,
+  orderedStages: string[],
+): TaskStatus | undefined {
+  const currentIdx = orderedStages.indexOf(task.stage);
+  const targetIdx = orderedStages.indexOf(stage);
+  if (targetIdx === -1 || currentIdx === -1) return undefined;
+
+  if (currentIdx === targetIdx) {
+    return task.status;
+  } else if (targetIdx < currentIdx) {
+    // Stage came before current stage
+    if (task.incompleteStages?.includes(stage)) {
+      return 'pending';
+    }
+    return 'complete';
+  } else {
+    // Stage is after current stage
+    return undefined;
+  }
+}
 
 interface GcalStatus {
   connected: boolean;
@@ -664,6 +689,28 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
     return () => clearTimeout(timer);
   }, [error]);
   const [currentUser, setCurrentUser] = useState('');
+  const [showAvatarSettings, setShowAvatarSettings] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Click outside menu detection
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handleGlobalClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    document.addEventListener('click', handleGlobalClick, true);
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => {
+      document.removeEventListener('click', handleGlobalClick, true);
+      document.removeEventListener('keydown', handleKeyDown, true);
+    };
+  }, [menuOpen]);
   const [updateMessage, setUpdateMessage] = useState('');
 
   // --- Collaboration state ---
@@ -1676,7 +1723,18 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
     for (const book of booksInUse) {
       map[book] = {};
       for (const stage of orderedStages) {
-        map[book][stage] = tasks.filter((t) => t.book === book && t.stage === stage);
+        const cellTasks: ProjectTask[] = [];
+        for (const t of tasks.filter((task) => task.book === book)) {
+          const status = getTaskStageStatus(t, stage, orderedStages);
+          if (status !== undefined) {
+            cellTasks.push({
+              ...t,
+              stage,
+              status,
+            });
+          }
+        }
+        map[book][stage] = cellTasks;
       }
     }
     return map;
@@ -1685,12 +1743,18 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
   const stageSummary = useMemo(() => {
     const summary: Record<string, { total: number; complete: number; flagged: number }> = {};
     for (const stage of orderedStages) {
-      const stageTasks = tasks.filter((t) => t.stage === stage);
-      summary[stage] = {
-        total: stageTasks.length,
-        complete: stageTasks.filter((t) => t.status === 'complete').length,
-        flagged: stageTasks.filter((t) => t.status === 'flagged').length,
-      };
+      let total = 0;
+      let complete = 0;
+      let flagged = 0;
+      for (const t of tasks) {
+        const status = getTaskStageStatus(t, stage, orderedStages);
+        if (status !== undefined) {
+          total++;
+          if (status === 'complete') complete++;
+          if (status === 'flagged') flagged++;
+        }
+      }
+      summary[stage] = { total, complete, flagged };
     }
     return summary;
   }, [tasks, orderedStages]);
@@ -2179,26 +2243,82 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
       {/* Header */}
       <div className="tw:px-3 tw:py-2 tw:bg-white tw:border-b tw:shadow-sm tw:flex tw:items-center tw:justify-between tw:no-print">
         <div className="tw:flex tw:items-center tw:gap-2">
-          <button
-            onClick={toggleSidebar}
-            className="tw:p-1.5 tw:rounded-md tw:text-slate-600 tw:hover:bg-slate-100 tw:hover:text-slate-800 tw:transition-colors tw:cursor-pointer tw:flex tw:items-center tw:justify-center tw:no-print"
-            title={sidebarVisible ? 'Ocultar ajustes' : 'Mostrar ajustes'}
-          >
-            <svg
-              className="tw:w-5 tw:h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              xmlns="http://www.w3.org/2000/svg"
+          <div className="tw:flex tw:items-center tw:gap-2 tw:relative" ref={menuRef}>
+            <button
+              type="button"
+              onClick={() => setMenuOpen((v) => !v)}
+              className={`tw:p-1.5 tw:rounded-md tw:transition-colors tw:cursor-pointer tw:flex tw:items-center tw:justify-center tw:border ${
+                menuOpen
+                  ? 'tw:bg-indigo-50 tw:text-indigo-600 tw:border-indigo-100'
+                  : 'tw:text-slate-600 tw:hover:bg-slate-100 tw:hover:text-slate-800 tw:border-transparent'
+              }`}
+              title="Menú de opciones"
+              aria-label="Menú de opciones"
+              aria-expanded={menuOpen}
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M4 6h16M4 12h16M4 18h16"
-              />
-            </svg>
-          </button>
+              <svg
+                className="tw:w-5 tw:h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M4 6h16M4 12h16M4 18h16"
+                />
+              </svg>
+            </button>
+
+            {menuOpen && (
+              <div
+                className="tw:absolute tw:left-0 tw:top-full tw:mt-1.5 tw:w-72 tw:bg-white tw:border tw:border-slate-200 tw:rounded-xl tw:shadow-2xl tw:overflow-hidden tw:text-sm"
+                style={{ zIndex: 10000 }}
+              >
+                {/* Adjustments section */}
+                <div className="tw:px-4 tw:pt-3.5 tw:pb-2">
+                  <div className="tw:text-[10px] tw:font-bold tw:uppercase tw:tracking-wider tw:text-slate-400 tw:mb-1.5">
+                    Filtros / Ajustes
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      toggleSidebar();
+                      setMenuOpen(false);
+                    }}
+                    className="tw:w-full tw:flex tw:items-center tw:gap-2.5 tw:px-2.5 tw:py-2 tw:rounded-lg tw:text-slate-700 tw:hover:bg-slate-50 tw:transition-colors tw:cursor-pointer tw:text-left"
+                  >
+                    <span className="tw:text-base">🎛️</span>
+                    <span className="tw:flex-1 tw:font-medium">
+                      {sidebarVisible ? 'Ocultar ajustes' : 'Mostrar ajustes'}
+                    </span>
+                  </button>
+                </div>
+
+                <div className="tw:h-px tw:bg-slate-100" />
+
+                {/* Settings section */}
+                <div className="tw:px-4 tw:pt-3.5 tw:pb-3.5">
+                  <div className="tw:text-[10px] tw:font-bold tw:uppercase tw:tracking-wider tw:text-slate-400 tw:mb-1.5">
+                    Configuración
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAvatarSettings(true);
+                      setMenuOpen(false);
+                    }}
+                    className="tw:w-full tw:flex tw:items-center tw:gap-2.5 tw:px-2.5 tw:py-2 tw:rounded-lg tw:text-slate-700 tw:hover:bg-slate-50 tw:transition-colors tw:cursor-pointer tw:text-left"
+                  >
+                    <span className="tw:text-base">🖼️</span>
+                    <span className="tw:flex-1 tw:font-medium">Configurar Avatar</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
           <span className="tw:font-semibold tw:text-sm tw:text-gray-700">Resumen del Proyecto</span>
         </div>
         <div className="tw:flex tw:items-center tw:gap-2 tw:text-xs tw:text-gray-600 tw:flex-wrap">
@@ -2245,6 +2365,12 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
           >
             ↻
           </button>
+
+          <Avatar
+            name={currentUser}
+            onClick={() => setShowAvatarSettings(true)}
+            className="tw:ml-1"
+          />
         </div>
       </div>
 
@@ -3484,6 +3610,13 @@ globalThis.webViewComponent = function ProjectOverviewWebView({
             </div>
           )}
         </div>
+      )}
+
+      {showAvatarSettings && (
+        <AvatarSettingsModal
+          currentUser={currentUser}
+          onClose={() => setShowAvatarSettings(false)}
+        />
       )}
     </div>
   );

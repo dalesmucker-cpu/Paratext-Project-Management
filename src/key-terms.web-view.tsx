@@ -25,6 +25,8 @@ import {
 import { papiRetry, isPapiDisconnectedError } from './utils/papi-retry';
 import { usePapiDisconnect } from './utils/use-papi-disconnect';
 import { useLocalizedStrings } from './utils/i18n';
+import { Avatar } from './components/avatar';
+import { AvatarSettingsModal } from './components/avatar-settings-modal';
 import type {
   KeyTermsStore,
   KeyTerm,
@@ -417,6 +419,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
     {},
   );
   const [currentUser, setCurrentUser] = useState('Traductor');
+  const [showAvatarSettings, setShowAvatarSettings] = useState(false);
   const [projectThreads, setProjectThreads] = useState<ParatextNoteThread[]>([]);
   const [editingCommentKey, setEditingCommentKey] = useState<string | null>(null);
 
@@ -1599,6 +1602,12 @@ globalThis.webViewComponent = function KeyTermsWebView({
             >
               {tx('changeProject')}
             </button>
+
+            <Avatar
+              name={currentUser}
+              onClick={() => setShowAvatarSettings(true)}
+              className="tw:ml-1"
+            />
           </div>
         </div>
 
@@ -2299,6 +2308,13 @@ globalThis.webViewComponent = function KeyTermsWebView({
           </div>
         )}
       </div>
+
+      {showAvatarSettings && (
+        <AvatarSettingsModal
+          currentUser={currentUser}
+          onClose={() => setShowAvatarSettings(false)}
+        />
+      )}
     </div>
   );
 };

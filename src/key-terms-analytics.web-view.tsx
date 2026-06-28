@@ -19,6 +19,9 @@ import {
   Languages,
 } from 'lucide-react';
 import { papiRetry, isPapiDisconnectedError } from './utils/papi-retry';
+import { ReconnectBanner } from './components/reconnect-banner';
+import { Avatar } from './components/avatar';
+import { AvatarSettingsModal } from './components/avatar-settings-modal';
 import { usePapiDisconnect } from './utils/use-papi-disconnect';
 import type { KeyTermsStore, KeyTerm, VerseMatchStatus } from './types/key-terms.types';
 import { BIBLE_BOOKS, type BibleBook } from './types/shared.constants';
@@ -31,6 +34,30 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
 }: WebViewProps) {
   const [lang, setLang] = useWebViewState<string>('lang', 'es');
   const { tx, toggleLang } = useLocalizedStrings(lang, setLang, 'keyTermsAnalytics');
+
+  const [currentUser, setCurrentUser] = useState('Usuario');
+  const [showAvatarSettings, setShowAvatarSettings] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Click outside menu detection
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handleGlobalClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    document.addEventListener('click', handleGlobalClick, true);
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => {
+      document.removeEventListener('click', handleGlobalClick, true);
+      document.removeEventListener('keydown', handleKeyDown, true);
+    };
+  }, [menuOpen]);
 
   const [store, setStore] = useState<KeyTermsStore | null>(null);
   const [loading, setLoading] = useState(false);
@@ -76,13 +103,18 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
     setError('');
     clearDisconnected();
     try {
-      const dataStr = await papiRetry(
-        () => papi.commands.sendCommand('paratextProjectManager.getKeyTermsData', projectId),
+      const [dataStr, userResult] = await papiRetry(
+        () =>
+          Promise.all([
+            papi.commands.sendCommand('paratextProjectManager.getKeyTermsData', projectId),
+            papi.commands.sendCommand('paratextProjectManager.getCurrentUser'),
+          ]),
         { isCancelled: () => !isCurrentRequest() },
       );
       if (!isCurrentRequest()) return;
       const parsed = JSON.parse(dataStr) as KeyTermsStore;
       setStore(parsed);
+      if (userResult) setCurrentUser(userResult);
     } catch (e: any) {
       if (isCurrentRequest()) {
         if (isPapiDisconnectedError(e)) {
@@ -565,6 +597,61 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
       {/* Top Header */}
       <div className="tw:px-6 tw:py-4 tw:bg-white dark:tw:bg-slate-900 tw:border-b tw:border-slate-200 dark:tw:border-slate-800 tw:flex tw:flex-col md:tw:flex-row tw:items-start md:tw:items-center tw:gap-4 tw:justify-between tw:flex-shrink-0">
         <div className="tw:flex tw:items-center tw:gap-3 tw:min-w-0">
+          <div className="tw:flex tw:items-center tw:gap-2 tw:relative tw:no-print" ref={menuRef}>
+            <button
+              type="button"
+              onClick={() => setMenuOpen((v) => !v)}
+              className={`tw:p-1.5 tw:rounded-md tw:transition-colors tw:cursor-pointer tw:flex tw:items-center tw:justify-center tw:border ${
+                menuOpen
+                  ? 'tw:bg-indigo-50 tw:text-indigo-600 tw:border-indigo-100'
+                  : 'tw:text-slate-600 tw:hover:bg-slate-100 tw:hover:text-slate-800 tw:border-transparent'
+              }`}
+              title="Menú de opciones"
+              aria-label="Menú de opciones"
+              aria-expanded={menuOpen}
+            >
+              <svg
+                className="tw:w-5 tw:h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M4 6h16M4 12h16M4 18h16"
+                />
+              </svg>
+            </button>
+
+            {menuOpen && (
+              <div
+                className="tw:absolute tw:left-0 tw:top-full tw:mt-1.5 tw:w-72 tw:bg-white tw:border tw:border-slate-200 tw:rounded-xl tw:shadow-2xl tw:overflow-hidden tw:text-sm"
+                style={{ zIndex: 10000 }}
+              >
+                {/* Settings section */}
+                <div className="tw:px-4 tw:pt-3.5 tw:pb-3.5">
+                  <div className="tw:text-[10px] tw:font-bold tw:uppercase tw:tracking-wider tw:text-slate-400 tw:mb-1.5">
+                    Configuración
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAvatarSettings(true);
+                      setMenuOpen(false);
+                    }}
+                    className="tw:w-full tw:flex tw:items-center tw:gap-2.5 tw:px-2.5 tw:py-2 tw:rounded-lg tw:text-slate-700 tw:hover:bg-slate-50 tw:transition-colors tw:cursor-pointer tw:text-left"
+                  >
+                    <span className="tw:text-base">🖼️</span>
+                    <span className="tw:flex-1 tw:font-medium">Configurar Avatar</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="tw:bg-indigo-50 tw:p-2 tw:rounded-xl tw:ring-1 tw:ring-indigo-200 dark:tw:bg-indigo-900/30 dark:tw:ring-indigo-800 tw:flex-shrink-0">
             <PieChart size={20} className="tw:text-indigo-600 dark:tw:text-indigo-400" />
           </div>
@@ -647,6 +734,12 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
           >
             {tx('changeProject')}
           </button>
+
+          <Avatar
+            name={currentUser}
+            onClick={() => setShowAvatarSettings(true)}
+            className="tw:ml-1"
+          />
         </div>
       </div>
 
@@ -954,6 +1047,13 @@ globalThis.webViewComponent = function KeyTermsAnalyticsWebView({
           )}
         </div>
       </div>
+
+      {showAvatarSettings && (
+        <AvatarSettingsModal
+          currentUser={currentUser}
+          onClose={() => setShowAvatarSettings(false)}
+        />
+      )}
     </div>
   );
 };
