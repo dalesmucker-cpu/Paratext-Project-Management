@@ -12,6 +12,7 @@ import { AudioPlayer, AttachmentViewer } from './components/note-media-component
 import { ReconnectBanner } from './components/reconnect-banner';
 import { Avatar } from './components/avatar';
 import { AvatarSettingsModal } from './components/avatar-settings-modal';
+import { CollabSettingsModal } from './components/collab-settings-modal';
 
 function renderTextWithLinks(text: string, baseKey: string): React.ReactNode[] | string {
   const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
@@ -817,6 +818,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   const [notesPopupVerseNum, setNotesPopupVerseNum] = useState<number | null>(null);
   const [currentUser, setCurrentUser] = useState('');
   const [showAvatarSettings, setShowAvatarSettings] = useState(false);
+  const [showCollabModal, setShowCollabModal] = useState(false);
   const [collabCursors, setCollabCursors] = useState<
     Record<
       string,
@@ -2841,6 +2843,19 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                         <span className="tw:text-base">🖼️</span>
                         <span className="tw:flex-1 tw:font-medium">Configurar Avatar</span>
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowCollabModal(true);
+                          setMenuOpen(false);
+                        }}
+                        className="tw:w-full tw:flex tw:items-center tw:gap-2.5 tw:px-2.5 tw:py-2 tw:rounded-lg tw:text-slate-700 tw:hover:bg-slate-50 tw:transition-colors tw:cursor-pointer tw:text-left"
+                      >
+                        <span className="tw:text-base">🤝</span>
+                        <span className="tw:flex-1 tw:font-medium">
+                          Colaboración en tiempo real
+                        </span>
+                      </button>
                     </div>
                   </div>
                 )}
@@ -3821,6 +3836,14 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
         <AvatarSettingsModal
           currentUser={currentUser}
           onClose={() => setShowAvatarSettings(false)}
+        />
+      )}
+
+      {showCollabModal && (
+        <CollabSettingsModal
+          projectId={projectId}
+          currentUser={currentUser}
+          onClose={() => setShowCollabModal(false)}
         />
       )}
     </div>
