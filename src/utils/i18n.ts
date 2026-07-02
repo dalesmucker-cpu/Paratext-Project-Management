@@ -89,6 +89,10 @@ const en: Dict = {
   'verifier.renderingAdded': 'Rendering "%1" added',
   'verifier.noTermSelectedForRendering':
     'No key term selected — open Key Terms and select a term first',
+  'verifier.collapseHeader': 'Collapse filters',
+  'verifier.expandHeader': 'Expand filters',
+  'verifier.collapseToolbar': 'Collapse toolbar',
+  'verifier.expandToolbar': 'Expand toolbar',
 
   'analytics.title': 'Key Terms Analytics Dashboard',
   'analytics.consistencyCheck': 'Consistency check',
@@ -398,6 +402,10 @@ const es: Dict = {
   'verifier.renderingAdded': 'Traducción "%1" agregada',
   'verifier.noTermSelectedForRendering':
     'Ningún término clave seleccionado — abre Términos Clave y selecciona un término primero',
+  'verifier.collapseHeader': 'Contraer filtros',
+  'verifier.expandHeader': 'Expandir filtros',
+  'verifier.collapseToolbar': 'Contraer barra de herramientas',
+  'verifier.expandToolbar': 'Expandir barra de herramientas',
 
   'analytics.title': 'Tablero de Analíticas de Términos Clave',
   'analytics.consistencyCheck': 'Verificación de Consistencia',

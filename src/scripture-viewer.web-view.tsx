@@ -1629,7 +1629,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     return () => {
       unsubscribe();
     };
-  }, [projectId, selectedBook, selectedChapter, scrollGroupId, setScrRef]);
+  }, [projectId, selectedBook, selectedChapter, scrollGroupId, setScrRef, triggerVerseFlash]);
 
   // Keep refs of current values to avoid stale closures in scroll group sync
   const selectedBookRef = useRef(selectedBook);
@@ -1657,8 +1657,9 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     } else if (verseChanged) {
       setSelectedVerseNum(verseNum);
       setIsEditingVerse(false);
+      triggerVerseFlash(verseNum);
     }
-  }, [scrRef]);
+  }, [scrRef, triggerVerseFlash]);
 
   // Helper to navigate to a new reference and explicitly push it to the scroll group
   const navigateToReference = useCallback(
@@ -2256,16 +2257,22 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     if (selectedBook) {
       loadChapter(selectedBook, selectedChapter);
       if (pendingVerseRef.current !== null) {
-        const pv = pendingVerseRef.current;
-        setSelectedVerseNum(pv);
-        pendingVerseRef.current = null;
-        triggerVerseFlash(pv);
+        setSelectedVerseNum(pendingVerseRef.current);
       } else {
         setSelectedVerseNum(null);
       }
       resetForms();
     }
   }, [selectedBook, selectedChapter]);
+
+  // Trigger verse flash and scroll when chapter loading finishes
+  useEffect(() => {
+    if (!loading && pendingVerseRef.current !== null) {
+      const pv = pendingVerseRef.current;
+      pendingVerseRef.current = null;
+      triggerVerseFlash(pv);
+    }
+  }, [chapterBlocks, loading, triggerVerseFlash]);
 
   const resetForms = () => {
     setShowNewNoteForm(false);
@@ -3299,8 +3306,11 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                                 onDragStart={(e) => {
                                   try {
                                     const sel = window.getSelection();
-                                    const dragged =
-                                      (sel ? sel.toString() : '').trim() || child.text;
+                                    const dragged = (sel ? sel.toString() : '').trim();
+                                    if (!dragged) {
+                                      e.preventDefault();
+                                      return;
+                                    }
                                     e.dataTransfer.effectAllowed = 'copy';
                                     e.dataTransfer.setData('text/plain', dragged);
                                     e.dataTransfer.setData(
@@ -3379,7 +3389,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                                 <sup
                                   className={`tw:select-none tw:font-bold tw:mr-1 tw:px-1 tw:rounded ${
                                     flashVerseNum === child.number
-                                      ? 'verse-flash tw:text-white'
+                                      ? 'verse-flash tw:text-slate-950'
                                       : 'tw:text-slate-400'
                                   }`}
                                   style={{ fontSize: '0.65em', top: '-0.3em' }}

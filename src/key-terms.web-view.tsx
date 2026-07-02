@@ -519,6 +519,8 @@ globalThis.webViewComponent = function KeyTermsWebView({
   // Collapsible panels
   const [morphPanelOpen, setMorphPanelOpen] = useState(false);
   const [collabPanelOpen, setCollabPanelOpen] = useState(true);
+  const [sidebarHeaderOpen, setSidebarHeaderOpen] = useState(true);
+  const [mainToolbarOpen, setMainToolbarOpen] = useState(true);
 
   // Morphology Rule Editor states
   const [newPrefix, setNewPrefix] = useState('');
@@ -1477,9 +1479,23 @@ globalThis.webViewComponent = function KeyTermsWebView({
         >
           <div className="tw:p-3 tw:border-b tw:border-slate-800/80 tw:space-y-2.5">
             <div className="tw:flex tw:items-center tw:justify-between tw:gap-2">
-              <span className="tw:font-bold tw:text-sm tw:text-white tw:truncate">
-                {tx('title')}
-              </span>
+              <button
+                type="button"
+                onClick={() => setSidebarHeaderOpen((o) => !o)}
+                title={sidebarHeaderOpen ? tx('collapseHeader') : tx('expandHeader')}
+                aria-label={sidebarHeaderOpen ? tx('collapseHeader') : tx('expandHeader')}
+                aria-expanded={sidebarHeaderOpen}
+                className="tw:flex tw:items-center tw:gap-1 tw:min-w-0 tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30 tw:rounded"
+              >
+                <span className="tw:font-bold tw:text-sm tw:text-white tw:truncate">
+                  {tx('title')}
+                </span>
+                {sidebarHeaderOpen ? (
+                  <ChevronUp size={14} className="tw:flex-shrink-0 tw:text-slate-400" />
+                ) : (
+                  <ChevronDown size={14} className="tw:flex-shrink-0 tw:text-slate-400" />
+                )}
+              </button>
               <button
                 type="button"
                 onClick={() => loadData()}
@@ -1492,107 +1508,119 @@ globalThis.webViewComponent = function KeyTermsWebView({
             </div>
 
             {/* Search Input */}
-            <div className="tw:relative">
-              <Search
-                size={12}
-                className="tw:absolute tw:left-2.5 tw:top-1/2 tw:-translate-y-1/2 tw:text-slate-500 tw:pointer-events-none"
-                aria-hidden="true"
-              />
-              <input
-                type="text"
-                placeholder={tx('searchPlaceholder')}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="tw:w-full tw:border tw:border-slate-800 tw:rounded-xl tw:pl-7 tw:pr-7 tw:py-1.5 tw:text-xs tw:bg-slate-900 tw:text-slate-100 tw:placeholder:tw:text-slate-500 tw:focus:outline-none tw:focus:ring-2 tw:focus:ring-indigo-500/50 tw:focus:border-indigo-500"
-              />
-              {searchTerm && (
-                <button
-                  type="button"
-                  onClick={() => setSearchTerm('')}
-                  aria-label="Clear search"
-                  className="tw:absolute tw:right-2 tw:top-1/2 tw:-translate-y-1/2 tw:text-slate-500 hover:tw:text-white tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30 tw:rounded"
-                >
-                  <X size={12} />
-                </button>
-              )}
-            </div>
+            {sidebarHeaderOpen && (
+              <div className="tw:relative">
+                <Search
+                  size={12}
+                  className="tw:absolute tw:left-2.5 tw:top-1/2 tw:-translate-y-1/2 tw:text-slate-500 tw:pointer-events-none"
+                  aria-hidden="true"
+                />
+                <input
+                  type="text"
+                  placeholder={tx('searchPlaceholder')}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="tw:w-full tw:border tw:border-slate-800 tw:rounded-xl tw:pl-7 tw:pr-7 tw:py-1.5 tw:text-xs tw:bg-slate-900 tw:text-slate-100 tw:placeholder:tw:text-slate-500 tw:focus:outline-none tw:focus:ring-2 tw:focus:ring-indigo-500/50 tw:focus:border-indigo-500"
+                />
+                {searchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchTerm('')}
+                    aria-label="Clear search"
+                    className="tw:absolute tw:right-2 tw:top-1/2 tw:-translate-y-1/2 tw:text-slate-500 hover:tw:text-white tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30 tw:rounded"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Semantic Domain Filter */}
-            <div className="tw:flex tw:flex-col tw:gap-1">
-              <label className="tw:text-[10px] tw:text-slate-400 tw:font-semibold tw:uppercase">
-                {tx('semanticDomain')}
-              </label>
-              <select
-                value={filterDomain}
-                onChange={(e) => setFilterDomain(e.target.value)}
-                className="tw:w-full tw:border tw:border-slate-800 tw:rounded-xl tw:px-2 tw:py-1 tw:text-xs tw:bg-slate-900 tw:text-slate-100 tw:focus:outline-none tw:focus:ring-2 tw:focus:ring-indigo-500/50 tw:focus:border-indigo-500"
-              >
-                <option value="all">{tx('allDomains')}</option>
-                {allDomains.map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {sidebarHeaderOpen && (
+              <div className="tw:flex tw:flex-col tw:gap-1">
+                <label className="tw:text-[10px] tw:text-slate-400 tw:font-semibold tw:uppercase">
+                  {tx('semanticDomain')}
+                </label>
+                <select
+                  value={filterDomain}
+                  onChange={(e) => setFilterDomain(e.target.value)}
+                  className="tw:w-full tw:border tw:border-slate-800 tw:rounded-xl tw:px-2 tw:py-1 tw:text-xs tw:bg-slate-900 tw:text-slate-100 tw:focus:outline-none tw:focus:ring-2 tw:focus:ring-indigo-500/50 tw:focus:border-indigo-500"
+                >
+                  <option value="all">{tx('allDomains')}</option>
+                  {allDomains.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Sort By Filter */}
-            <div className="tw:flex tw:flex-col tw:gap-1">
-              <label className="tw:text-[10px] tw:text-slate-400 tw:font-semibold tw:uppercase">
-                {tx('sortByLabel')}
-              </label>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
-                className="tw:w-full tw:border tw:border-slate-800 tw:rounded-xl tw:px-2 tw:py-1 tw:text-xs tw:bg-slate-900 tw:text-slate-100 tw:focus:outline-none tw:focus:ring-2 tw:focus:ring-indigo-500/50 tw:focus:border-indigo-500"
-              >
-                <option value="gloss">{tx('sortGloss')}</option>
-                <option value="reference">{tx('sortReference')}</option>
-                <option value="notes">{tx('sortNotes')}</option>
-              </select>
-            </div>
+            {sidebarHeaderOpen && (
+              <div className="tw:flex tw:flex-col tw:gap-1">
+                <label className="tw:text-[10px] tw:text-slate-400 tw:font-semibold tw:uppercase">
+                  {tx('sortByLabel')}
+                </label>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as any)}
+                  className="tw:w-full tw:border tw:border-slate-800 tw:rounded-xl tw:px-2 tw:py-1 tw:text-xs tw:bg-slate-900 tw:text-slate-100 tw:focus:outline-none tw:focus:ring-2 tw:focus:ring-indigo-500/50 tw:focus:border-indigo-500"
+                >
+                  <option value="gloss">{tx('sortGloss')}</option>
+                  <option value="reference">{tx('sortReference')}</option>
+                  <option value="notes">{tx('sortNotes')}</option>
+                </select>
+              </div>
+            )}
 
             {/* Completion Filter */}
-            <div className="tw:flex tw:gap-1 tw:flex-wrap">
-              {filterTabs.map((opt) => (
-                <button
-                  type="button"
-                  key={opt.key}
-                  onClick={() => setFilterCompletion(opt.key)}
-                  aria-pressed={filterCompletion === opt.key}
-                  className={`tw:flex-1 tw:min-w-[60px] tw:py-0.5 tw:px-1.5 tw:text-[10px] tw:rounded-lg tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30 ${filterCompletion === opt.key ? 'tw:bg-slate-800 tw:text-white tw:font-medium' : 'tw:text-slate-400 tw:border-transparent hover:tw:bg-slate-800/70'}`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
+            {sidebarHeaderOpen && (
+              <div className="tw:flex tw:gap-1 tw:flex-wrap">
+                {filterTabs.map((opt) => (
+                  <button
+                    type="button"
+                    key={opt.key}
+                    onClick={() => setFilterCompletion(opt.key)}
+                    aria-pressed={filterCompletion === opt.key}
+                    className={`tw:flex-1 tw:min-w-[60px] tw:py-0.5 tw:px-1.5 tw:text-[10px] tw:rounded-lg tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30 ${filterCompletion === opt.key ? 'tw:bg-slate-800 tw:text-white tw:font-medium' : 'tw:text-slate-400 tw:border-transparent hover:tw:bg-slate-800/70'}`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
 
-            {/* Status legend (always visible) */}
-            <div
-              aria-label="Status legend"
-              className="tw:flex tw:items-center tw:gap-2 tw:flex-wrap tw:pt-1 tw:text-[9px] tw:text-slate-400"
-            >
-              <span className="tw:inline-flex tw:items-center tw:gap-1">
-                <span className="tw:w-1.5 tw:h-1.5 tw:rounded-full tw:bg-emerald-500" />
-                {tx('statusComplete')}
-              </span>
-              <span className="tw:inline-flex tw:items-center tw:gap-1">
-                <span className="tw:w-1.5 tw:h-1.5 tw:rounded-full tw:bg-amber-500" />
-                {tx('statusPartial')}
-              </span>
-              <span className="tw:inline-flex tw:items-center tw:gap-1">
-                <span className="tw:w-1.5 tw:h-1.5 tw:rounded-full tw:bg-rose-600" />
-                {tx('statusMissing')}
-              </span>
-            </div>
+            {/* Status legend */}
+            {sidebarHeaderOpen && (
+              <div
+                aria-label="Status legend"
+                className="tw:flex tw:items-center tw:gap-2 tw:flex-wrap tw:pt-1 tw:text-[9px] tw:text-slate-400"
+              >
+                <span className="tw:inline-flex tw:items-center tw:gap-1">
+                  <span className="tw:w-1.5 tw:h-1.5 tw:rounded-full tw:bg-emerald-500" />
+                  {tx('statusComplete')}
+                </span>
+                <span className="tw:inline-flex tw:items-center tw:gap-1">
+                  <span className="tw:w-1.5 tw:h-1.5 tw:rounded-full tw:bg-amber-500" />
+                  {tx('statusPartial')}
+                </span>
+                <span className="tw:inline-flex tw:items-center tw:gap-1">
+                  <span className="tw:w-1.5 tw:h-1.5 tw:rounded-full tw:bg-rose-600" />
+                  {tx('statusMissing')}
+                </span>
+              </div>
+            )}
 
             {/* Micro stats bar */}
-            <div className="tw:pt-1 tw:text-[10px] tw:text-slate-400 tw:flex tw:justify-between tw:flex-wrap tw:gap-1">
-              <span>{tx('completed', String(completionStats.percent))}</span>
-              <span>
-                {tx('termsCount', String(filteredTerms.length), String(store?.terms.length || 0))}
-              </span>
-            </div>
+            {sidebarHeaderOpen && (
+              <div className="tw:pt-1 tw:text-[10px] tw:text-slate-400 tw:flex tw:justify-between tw:flex-wrap tw:gap-1">
+                <span>{tx('completed', String(completionStats.percent))}</span>
+                <span>
+                  {tx('termsCount', String(filteredTerms.length), String(store?.terms.length || 0))}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* List area */}
@@ -1687,58 +1715,83 @@ globalThis.webViewComponent = function KeyTermsWebView({
       {/* Main panel - Detail view */}
       <div className="tw:flex-1 tw:flex tw:flex-col tw:h-full tw:overflow-hidden tw:min-w-0 tw:bg-[#f8fafc] dark:tw:bg-slate-900">
         {/* Top toolbar */}
-        <div className="tw:px-3 sm:tw:px-4 tw:py-3 tw:bg-white dark:tw:bg-slate-900 tw:border-b tw:border-slate-200 dark:tw:border-slate-800 tw:flex tw:items-center tw:justify-between tw:gap-2 tw:flex-wrap">
-          <div className="tw:flex tw:items-center tw:gap-2 sm:tw:gap-3 tw:min-w-0 tw:flex-1">
-            <button
-              type="button"
-              onClick={() => setSidebarVisible((v) => !v)}
-              title={sidebarVisible ? tx('toggleSidebarHide') : tx('toggleSidebarShow')}
-              aria-label={sidebarVisible ? tx('toggleSidebarHide') : tx('toggleSidebarShow')}
-              className="tw:p-1.5 tw:rounded-lg tw:text-slate-500 dark:tw:text-slate-400 hover:tw:bg-slate-50 dark:hover:tw:bg-slate-800 tw:cursor-pointer tw:flex-shrink-0 tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30"
-            >
-              <Menu size={18} />
-            </button>
-            <span className="tw:font-bold tw:text-slate-900 dark:tw:text-slate-100 tw:truncate tw:text-sm sm:tw:text-base">
-              {tx('title')}
-            </span>
-          </div>
-
-          <div className="tw:flex tw:items-center tw:gap-2 sm:tw:gap-3 tw:flex-wrap">
-            {saving && (
-              <span
-                role="status"
-                aria-live="polite"
-                className="tw:inline-flex tw:items-center tw:gap-1.5 tw:text-xs tw:text-slate-500 dark:tw:text-slate-400"
+        {mainToolbarOpen ? (
+          <div className="tw:px-3 sm:tw:px-4 tw:py-3 tw:bg-white dark:tw:bg-slate-900 tw:border-b tw:border-slate-200 dark:tw:border-slate-800 tw:flex tw:items-center tw:justify-between tw:gap-2 tw:flex-wrap">
+            <div className="tw:flex tw:items-center tw:gap-2 sm:tw:gap-3 tw:min-w-0 tw:flex-1">
+              <button
+                type="button"
+                onClick={() => setSidebarVisible((v) => !v)}
+                title={sidebarVisible ? tx('toggleSidebarHide') : tx('toggleSidebarShow')}
+                aria-label={sidebarVisible ? tx('toggleSidebarHide') : tx('toggleSidebarShow')}
+                className="tw:p-1.5 tw:rounded-lg tw:text-slate-500 dark:tw:text-slate-400 hover:tw:bg-slate-50 dark:hover:tw:bg-slate-800 tw:cursor-pointer tw:flex-shrink-0 tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30"
               >
-                <span className="tw:w-1.5 tw:h-1.5 tw:bg-indigo-600 tw:rounded-full tw:animate-pulse" />
-                <span className="tw:hidden sm:tw:inline">{tx('saving')}</span>
+                <Menu size={18} />
+              </button>
+              <span className="tw:font-bold tw:text-slate-900 dark:tw:text-slate-100 tw:truncate tw:text-sm sm:tw:text-base">
+                {tx('title')}
               </span>
-            )}
-            <button
-              type="button"
-              onClick={toggleLang}
-              title={tx('toggleLanguage')}
-              aria-label={tx('toggleLanguage')}
-              className="tw:inline-flex tw:items-center tw:gap-1 tw:px-2 tw:py-1.5 tw:bg-white dark:tw:bg-slate-900 tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:rounded-lg tw:text-xs tw:font-semibold tw:text-slate-500 dark:tw:text-slate-400 hover:tw:bg-slate-50 dark:hover:tw:bg-slate-800 tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30"
-            >
-              <Languages size={12} />
-              <span className="tw:uppercase">{lang}</span>
-            </button>
-            <button
-              type="button"
-              className="tw:inline-flex tw:items-center tw:gap-1.5 tw:px-2.5 sm:tw:px-3 tw:py-1.5 tw:bg-indigo-50 dark:tw:bg-indigo-900/30 tw:text-indigo-600 dark:tw:text-indigo-400 tw:border tw:border-indigo-200 dark:tw:border-indigo-800 tw:rounded-xl tw:text-xs tw:font-medium hover:tw:bg-indigo-100 dark:tw:bg-indigo-900/40 tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30"
-              onClick={() => selectProject()}
-            >
-              {tx('changeProject')}
-            </button>
+            </div>
 
-            <Avatar
-              name={currentUser}
-              onClick={() => setShowAvatarSettings(true)}
-              className="tw:ml-1"
-            />
+            <div className="tw:flex tw:items-center tw:gap-2 sm:tw:gap-3 tw:flex-wrap">
+              {saving && (
+                <span
+                  role="status"
+                  aria-live="polite"
+                  className="tw:inline-flex tw:items-center tw:gap-1.5 tw:text-xs tw:text-slate-500 dark:tw:text-slate-400"
+                >
+                  <span className="tw:w-1.5 tw:h-1.5 tw:bg-indigo-600 tw:rounded-full tw:animate-pulse" />
+                  <span className="tw:hidden sm:tw:inline">{tx('saving')}</span>
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={toggleLang}
+                title={tx('toggleLanguage')}
+                aria-label={tx('toggleLanguage')}
+                className="tw:inline-flex tw:items-center tw:gap-1 tw:px-2 tw:py-1.5 tw:bg-white dark:tw:bg-slate-900 tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:rounded-lg tw:text-xs tw:font-semibold tw:text-slate-500 dark:tw:text-slate-400 hover:tw:bg-slate-50 dark:hover:tw:bg-slate-800 tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30"
+              >
+                <Languages size={12} />
+                <span className="tw:uppercase">{lang}</span>
+              </button>
+              <button
+                type="button"
+                className="tw:inline-flex tw:items-center tw:gap-1.5 tw:px-2.5 sm:tw:px-3 tw:py-1.5 tw:bg-indigo-50 dark:tw:bg-indigo-900/30 tw:text-indigo-600 dark:tw:text-indigo-400 tw:border tw:border-indigo-200 dark:tw:border-indigo-800 tw:rounded-xl tw:text-xs tw:font-medium hover:tw:bg-indigo-100 dark:tw:bg-indigo-900/40 tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30"
+                onClick={() => selectProject()}
+              >
+                {tx('changeProject')}
+              </button>
+
+              <Avatar
+                name={currentUser}
+                onClick={() => setShowAvatarSettings(true)}
+                className="tw:ml-1"
+              />
+              <button
+                type="button"
+                onClick={() => setMainToolbarOpen(false)}
+                title={tx('collapseToolbar')}
+                aria-label={tx('collapseToolbar')}
+                aria-expanded="true"
+                className="tw:p-1 tw:rounded tw:text-slate-400 dark:tw:text-slate-500 hover:tw:bg-slate-50 dark:hover:tw:bg-slate-800 tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30"
+              >
+                <ChevronUp size={16} />
+              </button>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="tw:flex tw:justify-end tw:px-2 tw:py-1 tw:bg-white dark:tw:bg-slate-900 tw:border-b tw:border-slate-200 dark:tw:border-slate-800">
+            <button
+              type="button"
+              onClick={() => setMainToolbarOpen(true)}
+              title={tx('expandToolbar')}
+              aria-label={tx('expandToolbar')}
+              aria-expanded="false"
+              className="tw:p-1 tw:rounded tw:text-slate-500 dark:tw:text-slate-400 hover:tw:bg-slate-50 dark:hover:tw:bg-slate-800 tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-indigo-500/30"
+            >
+              <ChevronDown size={16} />
+            </button>
+          </div>
+        )}
 
         {error && (
           <div
