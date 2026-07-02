@@ -16,7 +16,6 @@
 /* CUSTOM: Added `tw:` prefix */
 @import 'tailwindcss' prefix(tw);
 @import 'tw-animate-css';
-@import 'shadcn/tailwind.css';
 @import '@fontsource-variable/ibm-plex-sans';
 
 /* CUSTOM: need some config from tailwind.config.ts which can't be inlined in this file */
