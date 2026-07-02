@@ -187,6 +187,14 @@ declare module 'papi-shared-types' {
       projectId: string,
       dataJson: string,
     ) => Promise<string>;
+    /** Directly persists a rendering for a specific key term (drag-and-drop / inline add) */
+    'paratextProjectManager.addRenderingToTerm': (
+      projectId: string,
+      termId: string,
+      renderingText: string,
+      verseRef: string,
+      proposedBy: string,
+    ) => Promise<string>;
     /** Scans a chapter's USFM for key terms and renderings match status */
     'paratextProjectManager.scanChapterRenderings': (
       projectId: string,

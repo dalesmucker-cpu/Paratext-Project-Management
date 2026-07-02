@@ -2,6 +2,7 @@
 import { WebViewProps } from '@papi/core';
 import papi from '@papi/frontend';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { DragEvent as ReactDragEvent } from 'react';
 import type { VerseMatchStatus } from './types/key-terms.types';
 import { papiRetry, isPapiDisconnectedError } from './utils/papi-retry';
 import { usePapiDisconnect } from './utils/use-papi-disconnect';
@@ -86,6 +87,13 @@ globalThis.webViewComponent = function DraftingTermsWebView({ projectId }: WebVi
   const [textSize, setTextSize] = useState<TextSize>(
     () => (localStorage.getItem('drafting_terms_text_size') as TextSize) || 'normal',
   );
+
+  // Current user (for proposedBy when adding renderings) and drag-and-drop / inline
+  // add-rendering affordances.
+  const [currentUser, setCurrentUser] = useState('Traductor');
+  const [dropActiveTermId, setDropActiveTermId] = useState<string | null>(null);
+  const [addingRenderingFor, setAddingRenderingFor] = useState<string | null>(null);
+  const [newRenderingText, setNewRenderingText] = useState('');
 
   // Click-outside handler for the hamburger dropdown
   useEffect(() => {
@@ -193,30 +201,30 @@ globalThis.webViewComponent = function DraftingTermsWebView({ projectId }: WebVi
 
   // Listen to verse-selection events from the Scripture Viewer.
   useEffect(() => {
-    const unsubscribe = papi.network.getNetworkEvent<Ref>(
-      'paratextProjectManager.onVerseSelected',
-    )((eventData) => {
-      if (!eventData || eventData.projectId !== projectId) return;
-      const ref: Ref = {
-        projectId: eventData.projectId,
-        bookCode: eventData.bookCode,
-        chapter: eventData.chapter,
-        verse: eventData.verse,
-      };
-      const cur = currentRefRef.current;
-      if (
-        cur &&
-        cur.bookCode === ref.bookCode &&
-        cur.chapter === ref.chapter &&
-        cur.verse === ref.verse
-      ) {
-        return;
-      }
-      setCurrentRef(ref);
-      loadMatches(ref.bookCode, ref.chapter).catch((err) => {
-        if (isPapiDisconnectedError(err)) handleCatch(err);
-      });
-    });
+    const unsubscribe = papi.network.getNetworkEvent<Ref>('paratextProjectManager.onVerseSelected')(
+      (eventData) => {
+        if (!eventData || eventData.projectId !== projectId) return;
+        const ref: Ref = {
+          projectId: eventData.projectId,
+          bookCode: eventData.bookCode,
+          chapter: eventData.chapter,
+          verse: eventData.verse,
+        };
+        const cur = currentRefRef.current;
+        if (
+          cur &&
+          cur.bookCode === ref.bookCode &&
+          cur.chapter === ref.chapter &&
+          cur.verse === ref.verse
+        ) {
+          return;
+        }
+        setCurrentRef(ref);
+        loadMatches(ref.bookCode, ref.chapter).catch((err) => {
+          if (isPapiDisconnectedError(err)) handleCatch(err);
+        });
+      },
+    );
     return () => {
       unsubscribe();
     };
@@ -235,6 +243,93 @@ globalThis.webViewComponent = function DraftingTermsWebView({ projectId }: WebVi
       }
     },
     [projectId, handleCatch],
+  );
+
+  // Resolve the current translator user (used as `proposedBy` for new renderings).
+  useEffect(() => {
+    if (!projectId || !ready) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const user = await papi.commands.sendCommand('paratextProjectManager.getCurrentUser');
+        if (!cancelled && user) setCurrentUser(user);
+      } catch (e) {
+        if (isPapiDisconnectedError(e)) setError(handleCatch(e));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, ready, handleCatch]);
+
+  // Persist a rendering for a specific key term via the backend command, then refresh
+  // the verse scan so the Usado/Faltante badge updates immediately.
+  const addRenderingToTerm = useCallback(
+    async (termId: string, text: string, verseRef: string) => {
+      const clean = (text || '').trim();
+      if (!clean) return;
+      try {
+        const res = await papi.commands.sendCommand(
+          'paratextProjectManager.addRenderingToTerm',
+          projectId,
+          termId,
+          clean,
+          verseRef,
+          currentUser,
+        );
+        if (typeof res === 'string' && res.startsWith('error')) {
+          setError(`No se pudo guardar la traducción: ${res}`);
+          return;
+        }
+        if (currentRef) await loadMatches(currentRef.bookCode, currentRef.chapter);
+      } catch (e) {
+        if (isPapiDisconnectedError(e)) setError(handleCatch(e));
+        else console.error('Failed to add rendering to term:', e);
+      }
+    },
+    [projectId, currentRef, currentUser, loadMatches, handleCatch],
+  );
+
+  // Drop handler for a term card — accepts a word dragged from the Scripture Viewer.
+  const handleDropOnTerm = useCallback(
+    (termId: string, e: ReactDragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setDropActiveTermId(null);
+      const dt = e.dataTransfer;
+      let text = '';
+      let verseRef = '';
+      try {
+        const raw = dt.getData('application/x-paratext-rendering');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          text = (parsed?.text || '').trim();
+          if (parsed?.bookCode) {
+            verseRef = `${parsed.bookCode} ${parsed.chapter}:${parsed.verse}`;
+          }
+        }
+      } catch (_) {
+        /* ignore parse errors, fall back to text/plain */
+      }
+      if (!text) text = (dt.getData('text/plain') || '').trim();
+      if (!text) return;
+      void addRenderingToTerm(termId, text, verseRef);
+    },
+    [addRenderingToTerm],
+  );
+
+  const submitInlineRendering = useCallback(
+    async (termId: string) => {
+      const text = newRenderingText.trim();
+      setAddingRenderingFor(null);
+      setNewRenderingText('');
+      if (!text) return;
+      const verseRef = currentRef
+        ? `${currentRef.bookCode} ${currentRef.chapter}:${currentRef.verse}`
+        : '';
+      await addRenderingToTerm(termId, text, verseRef);
+    },
+    [newRenderingText, currentRef, addRenderingToTerm],
   );
 
   const openDictionary = useCallback(
@@ -302,16 +397,24 @@ globalThis.webViewComponent = function DraftingTermsWebView({ projectId }: WebVi
 
   // Text size scale: applies to lemma, gloss, and the suggested-translation chips
   const fontScale = {
-    compact: { lemma: 'tw:text-sm', gloss: 'tw:text-[11px]', rend: 'tw:text-[9px]', body: 'tw:text-[10px]' },
-    normal: { lemma: 'tw:text-lg', gloss: 'tw:text-xs', rend: 'tw:text-[10px]', body: 'tw:text-[11px]' },
+    compact: {
+      lemma: 'tw:text-sm',
+      gloss: 'tw:text-[11px]',
+      rend: 'tw:text-[9px]',
+      body: 'tw:text-[10px]',
+    },
+    normal: {
+      lemma: 'tw:text-lg',
+      gloss: 'tw:text-xs',
+      rend: 'tw:text-[10px]',
+      body: 'tw:text-[11px]',
+    },
     large: { lemma: 'tw:text-xl', gloss: 'tw:text-sm', rend: 'tw:text-xs', body: 'tw:text-sm' },
   }[textSize];
 
   return (
     <div className="tw:h-full tw:w-full tw:flex tw:flex-col tw:bg-slate-50 tw:text-slate-800">
-      {error && (
-        <ReconnectBanner error={error} disconnected={disconnected} variant="bar" />
-      )}
+      {error && <ReconnectBanner error={error} disconnected={disconnected} variant="bar" />}
 
       {/* Header */}
       <header className="tw:px-5 tw:py-4 tw:bg-white tw:border-b tw:border-slate-200 tw:shrink-0 tw:relative">
@@ -349,7 +452,9 @@ globalThis.webViewComponent = function DraftingTermsWebView({ projectId }: WebVi
 
           {currentRef && verseMatches.length > 0 && (
             <div className="tw:text-right tw:shrink-0">
-              <div className={`tw:text-[10px] tw:font-bold tw:uppercase tw:tracking-wider ${statusTextColor}`}>
+              <div
+                className={`tw:text-[10px] tw:font-bold tw:uppercase tw:tracking-wider ${statusTextColor}`}
+              >
                 {statusText}
               </div>
               <div className="tw:mt-1 tw:w-28 tw:h-1.5 tw:bg-slate-200 tw:rounded-full tw:overflow-hidden">
@@ -508,8 +613,11 @@ globalThis.webViewComponent = function DraftingTermsWebView({ projectId }: WebVi
         ) : (
           <div className="tw:p-4 tw:space-y-4">
             <div className="tw:px-1 tw:text-[10.5px] tw:font-bold tw:text-slate-500 tw:uppercase tw:tracking-wider">
-              Términos requeridos en {currentRef.bookCode} {currentRef.chapter}:
-              {currentRef.verse}
+              Términos requeridos en {currentRef.bookCode} {currentRef.chapter}:{currentRef.verse}
+            </div>
+            <div className="tw:px-1 tw:-mt-2 tw:text-[10px] tw:text-slate-400 tw:italic">
+              Arrastra una palabra del Lector de Escritura sobre un término, o usa “＋ Agregar
+              traducción”.
             </div>
 
             <div className="tw:space-y-2.5">
@@ -518,9 +626,23 @@ globalThis.webViewComponent = function DraftingTermsWebView({ projectId }: WebVi
                 return (
                   <article
                     key={m.termId}
+                    onDragOver={(e) => {
+                      if (
+                        e.dataTransfer?.types?.includes('application/x-paratext-rendering') ||
+                        e.dataTransfer?.types?.includes('text/plain')
+                      ) {
+                        e.preventDefault();
+                        setDropActiveTermId(m.termId);
+                      }
+                    }}
+                    onDragLeave={(e) => {
+                      e.preventDefault();
+                      setDropActiveTermId((cur) => (cur === m.termId ? null : cur));
+                    }}
+                    onDrop={(e) => handleDropOnTerm(m.termId, e)}
                     className={`tw:relative tw:bg-white tw:p-3.5 tw:pl-4 tw:rounded-xl tw:border tw:shadow-sm tw:transition-all hover:tw:shadow-md ${
                       found ? 'tw:border-emerald-200' : 'tw:border-rose-200'
-                    }`}
+                    } ${dropActiveTermId === m.termId ? 'tw:ring-2 tw:ring-indigo-400 tw:bg-indigo-50/40' : ''}`}
                   >
                     <div
                       aria-hidden="true"
@@ -542,7 +664,9 @@ globalThis.webViewComponent = function DraftingTermsWebView({ projectId }: WebVi
                           {m.lemma}
                         </button>
                         {/* Gloss — secondary, italic, indigo accent */}
-                        <div className={`${fontScale.gloss} tw:text-indigo-600 tw:italic tw:mt-1 tw:font-medium`}>
+                        <div
+                          className={`${fontScale.gloss} tw:text-indigo-600 tw:italic tw:mt-1 tw:font-medium`}
+                        >
                           {m.gloss}
                         </div>
                       </div>
@@ -576,7 +700,17 @@ globalThis.webViewComponent = function DraftingTermsWebView({ projectId }: WebVi
                       )}
                     </div>
 
-                    <div className="tw:mt-2.5 tw:pt-2.5 tw:border-t tw:border-slate-100 tw:flex tw:items-center tw:justify-end">
+                    <div className="tw:mt-2.5 tw:pt-2.5 tw:border-t tw:border-slate-100 tw:flex tw:items-center tw:justify-between tw:gap-2 tw:flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAddingRenderingFor(addingRenderingFor === m.termId ? null : m.termId);
+                          setNewRenderingText('');
+                        }}
+                        className={`${fontScale.body} tw:font-semibold tw:text-emerald-600 hover:tw:text-emerald-800 hover:tw:underline tw:cursor-pointer tw:bg-transparent tw:border-none tw:inline-flex tw:items-center tw:gap-1`}
+                      >
+                        ＋ Agregar traducción
+                      </button>
                       <button
                         type="button"
                         onClick={() => openKeyTermsFor(m.termId)}
@@ -586,6 +720,35 @@ globalThis.webViewComponent = function DraftingTermsWebView({ projectId }: WebVi
                         <span aria-hidden="true">→</span>
                       </button>
                     </div>
+
+                    {addingRenderingFor === m.termId && (
+                      <div className="tw:mt-2 tw:flex tw:items-center tw:gap-1.5">
+                        <input
+                          autoFocus
+                          type="text"
+                          value={newRenderingText}
+                          onChange={(e) => setNewRenderingText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              void submitInlineRendering(m.termId);
+                            } else if (e.key === 'Escape') {
+                              setAddingRenderingFor(null);
+                              setNewRenderingText('');
+                            }
+                          }}
+                          placeholder="Escribe o pega la traducción usada…"
+                          className="tw:flex-1 tw:min-w-0 tw:px-2 tw:py-1 tw:text-xs tw:bg-white tw:text-slate-800 tw:border tw:border-slate-300 tw:rounded-lg tw:focus:outline-none tw:focus:ring-2 tw:focus:ring-indigo-500/40 tw:focus:border-indigo-400"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void submitInlineRendering(m.termId)}
+                          className="tw:px-2.5 tw:py-1 tw:text-xs tw:font-semibold tw:bg-indigo-600 tw:text-white tw:rounded-lg hover:tw:bg-indigo-700 tw:cursor-pointer tw:border-none"
+                        >
+                          Guardar
+                        </button>
+                      </div>
+                    )}
                   </article>
                 );
               })}

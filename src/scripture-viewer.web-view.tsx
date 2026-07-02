@@ -1285,6 +1285,26 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
             return (
               <span
                 key={index}
+                draggable
+                onDragStart={(e) => {
+                  e.stopPropagation();
+                  try {
+                    const tokenText = typeof part === 'string' ? part : '';
+                    e.dataTransfer.effectAllowed = 'copy';
+                    e.dataTransfer.setData('text/plain', tokenText);
+                    e.dataTransfer.setData(
+                      'application/x-paratext-rendering',
+                      JSON.stringify({
+                        text: tokenText,
+                        bookCode,
+                        chapter: selectedChapter,
+                        verse: verseNum,
+                      }),
+                    );
+                  } catch (err) {
+                    console.error('Failed to start drag from key-term token:', err);
+                  }
+                }}
                 className={`key-term-hover-container tw:relative tw:inline-block tw:cursor-pointer ${underlineClass}`}
                 onClick={async (e) => {
                   e.stopPropagation();

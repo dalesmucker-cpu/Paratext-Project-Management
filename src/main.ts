@@ -31,7 +31,12 @@ import pullRequestsWebView from './pull-requests.web-view?inline';
 import pullRequestsStyles from './pull-requests.web-view.scss?inline';
 
 import type { PendingTimeSyncEntry } from './types/task.types';
-import type { KeyTermsStore, VerseMatchStatus, MatchResult } from './types/key-terms.types';
+import type {
+  KeyTermsStore,
+  Rendering,
+  VerseMatchStatus,
+  MatchResult,
+} from './types/key-terms.types';
 import type { PullRequestsStore, PullRequest, QuorumConfig } from './types/pull-requests.types';
 import { loadLegacyKeyTermsAsync } from './utils/key-terms-parser';
 import { matchRendering } from './utils/key-terms-matcher';
@@ -1762,6 +1767,57 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
         return 'ok';
       } catch (e: any) {
         logger.warn(`saveKeyTermsData failed for "${projectId}": ${e}`);
+        return `error: ${e.message || e}`;
+      }
+    },
+  );
+
+  // Directly persist a rendering for a specific key term (used by drag-and-drop and
+  // inline "add rendering" affordances in the Drafting Terms view). Does not depend
+  // on the Key Terms view's "selected term" — the target term is identified by id.
+  const addRenderingToTermPromise = papi.commands.registerCommand(
+    'paratextProjectManager.addRenderingToTerm',
+    async (
+      projectId: string,
+      termId: string,
+      renderingText: string,
+      verseRef: string,
+      proposedBy: string,
+    ): Promise<string> => {
+      try {
+        const cleanText = (renderingText || '').trim();
+        if (!cleanText) return 'error: empty rendering';
+        const projectDir = await resolveProjectDir(projectId);
+        const store = await loadOrUpdateKeyTermsStore(projectId, projectDir);
+        const now = new Date().toISOString();
+        const fromTag = verseRef ? `from:${verseRef}` : '';
+        const newRend: Rendering = {
+          id: `r-${Date.now()}`,
+          text: cleanText,
+          status: 'proposed',
+          contextTags: fromTag ? [fromTag] : [],
+          votes: [],
+          proposedBy: proposedBy || 'Usuario',
+          createdAt: now,
+          updatedAt: now,
+        };
+        let found = false;
+        const terms = store.terms.map((t) => {
+          if (t.id === termId) {
+            found = true;
+            return { ...t, renderings: [...(t.renderings || []), newRend], updatedAt: now };
+          }
+          return t;
+        });
+        if (!found) return 'error: term not found';
+        const keyTermsPath = `${projectDir}${SEP}${KEY_TERMS_FILENAME}`;
+        await runFileHelper('write', keyTermsPath, JSON.stringify({ ...store, terms }, null, 2));
+        if (collabEventEmitter) {
+          collabEventEmitter.emit({ type: 'key_terms_update', payload: { projectId } });
+        }
+        return 'ok';
+      } catch (e: any) {
+        logger.warn(`addRenderingToTerm failed for "${projectId}"/${termId}: ${e}`);
         return `error: ${e.message || e}`;
       }
     },
@@ -4881,6 +4937,7 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     await getUpdateStatusPromise,
     await getKeyTermsDataPromise,
     await saveKeyTermsDataPromise,
+    await addRenderingToTermPromise,
     await scanChapterRenderingsPromise,
     await scanBookRenderingsPromise,
     await keyTermsProviderPromise,
