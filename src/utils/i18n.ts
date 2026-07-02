@@ -79,6 +79,16 @@ const en: Dict = {
   'verifier.sortGloss': 'Alphabetical (Gloss)',
   'verifier.sortReference': 'Biblical Reference',
   'verifier.sortNotes': 'Discussion Notes',
+  'verifier.foundManual': '✓ Found (manual)',
+  'verifier.markAsFound': 'Mark as found',
+  'verifier.markAsFoundTitle': 'Mark this verse as found (manual override)',
+  'verifier.removeManualMark': 'Remove manual "found" mark',
+  'verifier.removeManualMarkTitle': 'Remove the manual "found" override for this verse',
+  'verifier.addRenderingFromScripture': 'Add "%1" as rendering for the selected key term',
+  'verifier.dropRenderingHere': 'Drop here to add as rendering',
+  'verifier.renderingAdded': 'Rendering "%1" added',
+  'verifier.noTermSelectedForRendering':
+    'No key term selected — open Key Terms and select a term first',
 
   'analytics.title': 'Key Terms Analytics Dashboard',
   'analytics.consistencyCheck': 'Consistency check',
@@ -377,6 +387,17 @@ const es: Dict = {
   'verifier.sortGloss': 'Alfabético (Glosa)',
   'verifier.sortReference': 'Referencia bíblica',
   'verifier.sortNotes': 'Notas de discusión',
+  'verifier.foundManual': '✓ Encontrado (manual)',
+  'verifier.markAsFound': 'Marcar como encontrado',
+  'verifier.markAsFoundTitle': 'Marcar este versículo como encontrado (override manual)',
+  'verifier.removeManualMark': 'Quitar marca manual de "encontrado"',
+  'verifier.removeManualMarkTitle': 'Quitar el override manual de "encontrado" para este versículo',
+  'verifier.addRenderingFromScripture':
+    'Agregar "%1" como traducción para el término clave seleccionado',
+  'verifier.dropRenderingHere': 'Suelta aquí para agregar como traducción',
+  'verifier.renderingAdded': 'Traducción "%1" agregada',
+  'verifier.noTermSelectedForRendering':
+    'Ningún término clave seleccionado — abre Términos Clave y selecciona un término primero',
 
   'analytics.title': 'Tablero de Analíticas de Términos Clave',
   'analytics.consistencyCheck': 'Verificación de Consistencia',

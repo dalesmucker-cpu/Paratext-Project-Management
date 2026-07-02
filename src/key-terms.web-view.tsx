@@ -418,6 +418,7 @@ globalThis.webViewComponent = function KeyTermsWebView({
   const [expandedRendDiscussions, setExpandedRendDiscussions] = useState<Record<string, boolean>>(
     {},
   );
+  const [renderingsDropActive, setRenderingsDropActive] = useState(false);
   const [currentUser, setCurrentUser] = useState('Traductor');
   const [showAvatarSettings, setShowAvatarSettings] = useState(false);
   const [projectThreads, setProjectThreads] = useState<ParatextNoteThread[]>([]);
@@ -968,6 +969,134 @@ globalThis.webViewComponent = function KeyTermsWebView({
     invalidateScanCache,
     termChapterKeys,
   ]);
+
+  // Add a rendering that was sent from the Scripture Viewer (right-click "Agregar como traducción"
+  // or DnD). The verse ref is recorded as a context tag so the source is traceable.
+  const addRenderingFromScripture = useCallback(
+    async (text: string, verseRef: string) => {
+      if (!store || !selectedTermId) return false;
+      const cleanText = text.trim();
+      if (!cleanText) return false;
+      const now = new Date().toISOString();
+      const fromTag = verseRef ? `from:${verseRef}` : '';
+      const newRend: Rendering = {
+        id: `r-${Date.now()}`,
+        text: cleanText,
+        status: 'proposed',
+        contextTags: fromTag ? [fromTag] : [],
+        votes: [],
+        proposedBy: currentUser,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      const terms = store.terms.map((t) => {
+        if (t.id === selectedTermId) {
+          return {
+            ...t,
+            renderings: [...(t.renderings || []), newRend],
+            updatedAt: now,
+          };
+        }
+        return t;
+      });
+      await persistStore({ ...store, terms });
+      invalidateScanCache(termChapterKeys(selectedTermId));
+      setTimeout(() => scanChapter({ forceRescan: true }), 300);
+      return true;
+    },
+    [
+      store,
+      selectedTermId,
+      currentUser,
+      persistStore,
+      scanChapter,
+      invalidateScanCache,
+      termChapterKeys,
+    ],
+  );
+
+  // Mark a verse reference as "found" manually, even if the rendering isn't
+  // literally present in the verse text. Recorded with author + timestamp for audit.
+  const markRefAsFound = useCallback(
+    async (ref: string) => {
+      if (!store || !selectedTermId) return;
+      const now = new Date().toISOString();
+      const terms = store.terms.map((t) => {
+        if (t.id !== selectedTermId) return t;
+        const existing = t.manualFoundRefs || [];
+        if (existing.some((o) => o.reference === ref)) return t;
+        return {
+          ...t,
+          manualFoundRefs: [...existing, { reference: ref, markedBy: currentUser, timestamp: now }],
+          updatedAt: now,
+        };
+      });
+      await persistStore({ ...store, terms });
+      invalidateScanCache(termChapterKeys(selectedTermId));
+      setTimeout(() => scanChapter({ forceRescan: true }), 300);
+    },
+    [
+      store,
+      selectedTermId,
+      currentUser,
+      persistStore,
+      scanChapter,
+      invalidateScanCache,
+      termChapterKeys,
+    ],
+  );
+
+  // Remove a manual "found" override.
+  const unmarkRefAsFound = useCallback(
+    async (ref: string) => {
+      if (!store || !selectedTermId) return;
+      const now = new Date().toISOString();
+      const terms = store.terms.map((t) => {
+        if (t.id !== selectedTermId) return t;
+        const existing = t.manualFoundRefs || [];
+        return {
+          ...t,
+          manualFoundRefs: existing.filter((o) => o.reference !== ref),
+          updatedAt: now,
+        };
+      });
+      await persistStore({ ...store, terms });
+      invalidateScanCache(termChapterKeys(selectedTermId));
+      setTimeout(() => scanChapter({ forceRescan: true }), 300);
+    },
+    [store, selectedTermId, persistStore, scanChapter, invalidateScanCache, termChapterKeys],
+  );
+
+  // Listen for "add rendering to selected term" events from the Scripture Viewer
+  // (triggered by right-click → "Agregar como traducción" or native drag-and-drop).
+  useEffect(() => {
+    if (!papi.network || !papi.network.getNetworkEvent) return undefined;
+    const unsubscribe = papi.network.getNetworkEvent<{
+      projectId: string;
+      renderingText: string;
+      verseRef: string;
+    }>('paratextProjectManager.onAddRenderingToSelectedTerm')((event) => {
+      if (!event) return;
+      if (event.projectId && event.projectId !== projectId) return;
+      (async () => {
+        if (!selectedTermId) {
+          setError(tx('noTermSelectedForRendering'));
+          return;
+        }
+        const ok = await addRenderingFromScripture(event.renderingText, event.verseRef);
+        if (ok) {
+          setError(tx('renderingAdded', event.renderingText));
+        }
+      })().catch((e) => {
+        if (isPapiDisconnectedError(e)) setError(handleCatch(e));
+        else console.error('Failed to add rendering from Scripture event:', e);
+      });
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [projectId, selectedTermId, addRenderingFromScripture, tx, handleCatch]);
 
   const updateRenderingStatus = useCallback(
     async (renderingId: string, status: RenderingStatus) => {
@@ -1687,10 +1816,76 @@ globalThis.webViewComponent = function KeyTermsWebView({
             </div>
 
             {/* Renderings Card */}
-            <div className="tw:bg-white dark:tw:bg-slate-900 tw:p-4 tw:rounded-2xl tw:border tw:border-slate-200 dark:tw:border-slate-800 tw:shadow-sm tw:space-y-4">
-              <h3 className="tw:font-bold tw:text-sm tw:text-slate-900 dark:tw:text-slate-100 tw:uppercase tw:tracking-wider">
-                {tx('renderingsTitle')}
-              </h3>
+            <div
+              className={`tw:bg-white dark:tw:bg-slate-900 tw:p-4 tw:rounded-2xl tw:border tw:shadow-sm tw:space-y-4 tw:transition-colors ${
+                renderingsDropActive
+                  ? 'tw:border-indigo-400 tw:ring-2 tw:ring-indigo-300/50'
+                  : 'tw:border-slate-200 dark:tw:border-slate-800'
+              }`}
+              onDragOver={(e) => {
+                if (!selectedTermId) return;
+                if (
+                  e.dataTransfer.types.includes('application/x-paratext-rendering') ||
+                  e.dataTransfer.types.includes('text/plain')
+                ) {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'copy';
+                  if (!renderingsDropActive) setRenderingsDropActive(true);
+                }
+              }}
+              onDragLeave={(e) => {
+                // Only deactivate when the cursor leaves the card entirely
+                if (
+                  e.currentTarget instanceof Element &&
+                  !e.currentTarget.contains(e.relatedTarget as Node)
+                ) {
+                  setRenderingsDropActive(false);
+                }
+              }}
+              onDrop={async (e) => {
+                e.preventDefault();
+                setRenderingsDropActive(false);
+                if (!selectedTermId) {
+                  setError(tx('noTermSelectedForRendering'));
+                  return;
+                }
+                let text = '';
+                let verseRef = '';
+                const custom = e.dataTransfer.getData('application/x-paratext-rendering');
+                if (custom) {
+                  try {
+                    const parsed = JSON.parse(custom);
+                    text = String(parsed.text || '').trim();
+                    if (parsed.bookCode && parsed.chapter && parsed.verse) {
+                      verseRef = `${parsed.bookCode} ${parsed.chapter}:${parsed.verse}`;
+                    }
+                  } catch {
+                    /* fall through to text/plain */
+                  }
+                }
+                if (!text) {
+                  text = e.dataTransfer.getData('text/plain').trim();
+                }
+                if (!text) return;
+                const ok = await addRenderingFromScripture(text, verseRef);
+                if (ok) {
+                  setError(tx('renderingAdded', text));
+                }
+              }}
+            >
+              <div className="tw:flex tw:items-center tw:justify-between tw:gap-2 tw:flex-wrap">
+                <h3 className="tw:font-bold tw:text-sm tw:text-slate-900 dark:tw:text-slate-100 tw:uppercase tw:tracking-wider">
+                  {tx('renderingsTitle')}
+                </h3>
+                {renderingsDropActive && (
+                  <span
+                    className="tw:inline-flex tw:items-center tw:gap-1 tw:text-[10px] tw:font-semibold tw:text-indigo-600 dark:tw:text-indigo-400 tw:uppercase tw:tracking-wider tw:animate-pulse"
+                    aria-live="polite"
+                  >
+                    {tx('dropRenderingHere')}
+                  </span>
+                )}
+              </div>
 
               <div className="tw:flex tw:gap-2 tw:flex-wrap sm:tw:flex-nowrap">
                 <input
@@ -2079,8 +2274,28 @@ globalThis.webViewComponent = function KeyTermsWebView({
                 {selectedTerm.references &&
                   selectedTerm.references.map((ref) => {
                     const match = verseMatches[`${selectedTerm.id}-${ref}`];
+                    const manualOverride = (selectedTerm.manualFoundRefs || []).find(
+                      (o) => o.reference === ref,
+                    );
+                    const isManualFound = !!manualOverride;
                     let badge: React.ReactElement;
-                    if (match?.matchResult.found) {
+                    if (isManualFound) {
+                      badge = (
+                        <span
+                          className="tw:inline-flex tw:items-center tw:gap-1 tw:px-2 tw:py-0.5 tw:bg-sky-500/15 tw:text-sky-700 dark:tw:text-sky-400 tw:border tw:border-sky-500/30 tw:rounded-lg tw:text-[10px] tw:font-semibold"
+                          title={
+                            manualOverride?.markedBy
+                              ? `Marked by ${manualOverride.markedBy} on ${new Date(
+                                  manualOverride.timestamp,
+                                ).toLocaleString()}`
+                              : ''
+                          }
+                        >
+                          <Check size={10} />
+                          {tx('foundManual')}
+                        </span>
+                      );
+                    } else if (match?.matchResult.found) {
                       badge = (
                         <span className="tw:inline-flex tw:items-center tw:gap-1 tw:px-2 tw:py-0.5 tw:bg-emerald-500/15 tw:text-emerald-700 dark:tw:text-emerald-400 tw:border tw:border-emerald-500/30 tw:rounded-lg tw:text-[10px] tw:font-semibold">
                           <Check size={10} />
@@ -2114,7 +2329,31 @@ globalThis.webViewComponent = function KeyTermsWebView({
                           <ChevronRight size={12} />
                           {ref}
                         </button>
-                        {badge}
+                        <div className="tw:flex tw:items-center tw:gap-1.5 tw:flex-shrink-0">
+                          {badge}
+                          {isManualFound ? (
+                            <button
+                              type="button"
+                              onClick={() => unmarkRefAsFound(ref)}
+                              aria-label={tx('removeManualMark')}
+                              title={tx('removeManualMarkTitle')}
+                              className="tw:inline-flex tw:items-center tw:justify-center tw:w-5 tw:h-5 tw:rounded-md tw:text-slate-500 dark:tw:text-slate-400 hover:tw:bg-rose-50 dark:hover:tw:bg-rose-950/40 hover:tw:text-rose-600 dark:hover:tw:text-rose-400 tw:transition-colors tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-1 tw:focus-visible:ring-indigo-500/30"
+                            >
+                              <X size={10} />
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => markRefAsFound(ref)}
+                              aria-label={tx('markAsFound')}
+                              title={tx('markAsFoundTitle')}
+                              className="tw:inline-flex tw:items-center tw:justify-center tw:gap-1 tw:px-1.5 tw:py-0.5 tw:rounded-md tw:text-sky-700 dark:tw:text-sky-400 tw:border tw:border-sky-200 dark:tw:border-sky-900 hover:tw:bg-sky-50 dark:hover:tw:bg-sky-950/40 tw:transition-colors tw:cursor-pointer tw:focus-visible:outline-none tw:focus-visible:ring-1 tw:focus-visible:ring-indigo-500/30 tw:text-[10px] tw:font-semibold"
+                            >
+                              <Check size={10} />
+                              {tx('markAsFound')}
+                            </button>
+                          )}
+                        </div>
                       </div>
                     );
                   })}

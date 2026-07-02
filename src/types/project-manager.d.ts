@@ -28,6 +28,15 @@ declare module 'papi-shared-types' {
     'paratextProjectManager.openScriptureViewer': (
       projectId?: string,
     ) => Promise<string | undefined>;
+    /** Opens the Drafting Terms web view (key terms for the selected verse) for a project */
+    'paratextProjectManager.openDraftingTerms': (projectId?: string) => Promise<string | undefined>;
+    /** Broadcasts a verse-selection event (from Scripture Viewer) to the Drafting Terms window */
+    'paratextProjectManager.selectVerse': (
+      projectId: string,
+      bookCode: string,
+      chapter: number,
+      verse: number,
+    ) => Promise<string>;
     /** Gets all notes/threads for a project */
     'paratextProjectManager.getProjectNotes': (
       projectId: string,
@@ -67,6 +76,19 @@ declare module 'papi-shared-types' {
       projectId: string,
       bookCode: string,
       chapter: number,
+    ) => Promise<string>;
+    /** Gets raw USFM text for a chapter (markers preserved). */
+    'paratextProjectManager.getChapterRawUsfm': (
+      projectId: string,
+      bookCode: string,
+      chapter: number,
+    ) => Promise<string>;
+    /** Saves raw USFM text for a whole chapter (markers preserved). */
+    'paratextProjectManager.saveChapterRawUsfm': (
+      projectId: string,
+      bookCode: string,
+      chapter: number,
+      rawUsfm: string,
     ) => Promise<string>;
     /** Updates a verse text in USFM file */
     'paratextProjectManager.updateVerseText': (
@@ -250,6 +272,15 @@ declare module 'papi-shared-types' {
     'paratextProjectManager.tasksDriveGetPendingSync': () => Promise<string>;
     /** Emits key term selection event */
     'paratextProjectManager.selectKeyTerm': (projectId: string, termId: string) => Promise<string>;
+    /**
+     * Emits a network event asking the Key Terms view to add a rendering (from Scripture selection)
+     * to its currently-selected term
+     */
+    'paratextProjectManager.addRenderingToSelectedTerm': (
+      projectId: string,
+      renderingText: string,
+      verseRef: string,
+    ) => Promise<string>;
     /** Broadcasts live verse editing cursor / typing events */
     'paratextProjectManager.broadcastVerseEdit': (
       username: string,

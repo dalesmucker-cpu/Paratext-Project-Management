@@ -357,6 +357,47 @@ function countChapters(fileContent) {
   return matches ? matches.length : 0;
 }
 
+// Locate a book's .SFM file inside the project directory, honoring FileNamePrePart/PostPart.
+function resolveBookFile(projectDir, bookCode) {
+  let postPart = '.SFM';
+  let prePart = '';
+  const settingsPath = path.join(projectDir, 'Settings.xml');
+  try {
+    const xml = fs.readFileSync(settingsPath, 'utf8');
+    const postMatch = /<FileNamePostPart>([^<]+)<\/FileNamePostPart>/i.exec(xml);
+    if (postMatch) postPart = postMatch[1].trim();
+    const preMatch = /<FileNamePrePart>([^<]+)<\/FileNamePrePart>/i.exec(xml);
+    if (preMatch) prePart = preMatch[1].trim();
+  } catch (_) {}
+
+  const files = fs.readdirSync(projectDir);
+  const regex = new RegExp(
+    `^${escapeRegex(prePart)}\\d*${bookCode}${escapeRegex(postPart)}$`,
+    'i',
+  );
+  const foundFile = files.find((f) => regex.test(f));
+  if (!foundFile) return null;
+  return { filePath: path.join(projectDir, foundFile), fileName: foundFile };
+}
+
+// Split fileContent into the chapter specified by `chapter` and the chapters before/after it.
+// Returns null if the chapter marker isn't found in the file.
+function extractChapterSlice(fileContent, chapter) {
+  const chapterRegex = new RegExp(
+    `(\\\\c\\s+${chapter}\\b)([\\s\\S]*?)(?=\\\\c\\s+\\d+|$)`,
+    'i',
+  );
+  const chapMatch = chapterRegex.exec(fileContent);
+  if (!chapMatch) return null;
+  return {
+    chapHeader: chapMatch[1],
+    chapBody: chapMatch[2],
+    startIndex: chapMatch.index,
+    length: chapMatch[0].length,
+    totalChapters: countChapters(fileContent),
+  };
+}
+
 function parseUsfmChapter(content) {
   const lines = content.split(/\r?\n/);
   const blocks = [];
@@ -1460,6 +1501,69 @@ async function handleAction(action, args) {
       const totalChapters = countChapters(fileContent);
 
       return { blocks, totalChapters };
+    }
+
+    case 'getChapterRawUsfm': {
+      const [projectId, projectDir, bookCode, chapter] = args;
+      if (projectDir) projectDirs.set(projectId, projectDir);
+      try {
+        const found = resolveBookFile(projectDir, bookCode);
+        if (!found) throw new Error(`Book file not found for code ${bookCode}`);
+        const fileContent = await fs.promises.readFile(found.filePath, 'utf8');
+        const slice = extractChapterSlice(fileContent, chapter);
+        if (!slice) {
+          return { rawUsfm: '', totalChapters: countChapters(fileContent) };
+        }
+        return {
+          rawUsfm: slice.chapHeader + slice.chapBody,
+          totalChapters: slice.totalChapters,
+        };
+      } catch (e) {
+        return { rawUsfm: '', error: e.message || String(e) };
+      }
+    }
+
+    case 'saveChapterRawUsfm': {
+      const [projectId, projectDir, bookCode, chapter, rawUsfm] = args;
+      if (projectDir) projectDirs.set(projectId, projectDir);
+      try {
+        const found = resolveBookFile(projectDir, bookCode);
+        if (!found) {
+          return { status: 'error', error: `Book file not found for code ${bookCode}` };
+        }
+        const fileContent = fs.readFileSync(found.filePath, 'utf8');
+        const slice = extractChapterSlice(fileContent, chapter);
+        if (!slice) {
+          return { status: 'error', error: `Chapter ${chapter} not found in ${found.fileName}` };
+        }
+
+        // If the editor kept the leading \c marker, use the text verbatim; otherwise
+        // preserve the original chapter header so we don't lose the \c N line.
+        let newChapterBlock = (rawUsfm || '').replace(/\s+$/, '');
+        const hasHeader = /^\\c\s+\d+\b/i.test(newChapterBlock);
+        if (!hasHeader) {
+          const bodyTrim = newChapterBlock.replace(/^\s+/, '');
+          newChapterBlock = (slice.chapHeader + (bodyTrim ? ' ' + bodyTrim : '')).replace(
+            /\s+$/,
+            '',
+          );
+        }
+        const newline = fileContent.includes('\r\n') ? '\r\n' : '\n';
+        const updatedFileContent =
+          fileContent.substring(0, slice.startIndex) +
+          newChapterBlock +
+          newline +
+          fileContent.substring(slice.startIndex + slice.length);
+
+        // Atomic write: temp file + rename to avoid partial writes.
+        const tmpPath = `${found.filePath}.tmp-chap-${Date.now()}`;
+        fs.writeFileSync(tmpPath, updatedFileContent, 'utf8');
+        fs.renameSync(tmpPath, found.filePath);
+
+        return { status: 'ok' };
+      } catch (saveErr) {
+        return { status: 'error', error: saveErr.message || String(saveErr) };
+      }
     }
 
     case 'updateVerseText': {

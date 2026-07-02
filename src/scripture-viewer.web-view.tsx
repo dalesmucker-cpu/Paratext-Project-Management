@@ -247,6 +247,9 @@ const getCleanTextFromDOM = (element: HTMLElement): string => {
         if (parent.closest('[data-cursor="true"]') || parent.closest('[aria-label="nota"]')) {
           return;
         }
+        if (parent.closest('[data-key-term-tooltip]')) {
+          return;
+        }
         const fnEl = parent.closest('[data-footnote="true"]');
         if (fnEl) {
           return;
@@ -260,10 +263,12 @@ const getCleanTextFromDOM = (element: HTMLElement): string => {
         el.getAttribute('data-cursor') === 'true' || el.closest('[data-cursor="true"]');
       const isNoteIcon =
         el.getAttribute('aria-label') === 'nota' || el.closest('[aria-label="nota"]');
+      const isKeyTermTooltip =
+        el.hasAttribute('data-key-term-tooltip') || el.closest('[data-key-term-tooltip]');
       const fnEl =
         el.getAttribute('data-footnote') === 'true' ? el : el.closest('[data-footnote="true"]');
 
-      if (isCursor || isNoteIcon) {
+      if (isCursor || isNoteIcon || isKeyTermTooltip) {
         return;
       }
       if (fnEl) {
@@ -298,6 +303,9 @@ const getCleanOffsetAndContext = (
           if (element.closest('[data-cursor="true"]') || element.closest('[aria-label="nota"]')) {
             return true;
           }
+          if (element.closest('[data-key-term-tooltip]')) {
+            return true;
+          }
           const fnEl = element.closest('[data-footnote="true"]');
           if (fnEl) {
             return true;
@@ -312,6 +320,9 @@ const getCleanOffsetAndContext = (
       const element = node.parentElement;
       if (element) {
         if (element.closest('[data-cursor="true"]') || element.closest('[aria-label="nota"]')) {
+          return false;
+        }
+        if (element.closest('[data-key-term-tooltip]')) {
           return false;
         }
         const fnEl = element.closest('[data-footnote="true"]');
@@ -330,10 +341,12 @@ const getCleanOffsetAndContext = (
         el.getAttribute('data-cursor') === 'true' || el.closest('[data-cursor="true"]');
       const isNoteIcon =
         el.getAttribute('aria-label') === 'nota' || el.closest('[aria-label="nota"]');
+      const isKeyTermTooltip =
+        el.hasAttribute('data-key-term-tooltip') || el.closest('[data-key-term-tooltip]');
       const fnEl =
         el.getAttribute('data-footnote') === 'true' ? el : el.closest('[data-footnote="true"]');
 
-      if (isCursor || isNoteIcon) {
+      if (isCursor || isNoteIcon || isKeyTermTooltip) {
         if (el.contains(targetContainer)) {
           return true;
         }
@@ -374,6 +387,9 @@ const setCaretAtCleanOffset = (element: HTMLElement, targetOffset: number) => {
         if (parent.closest('[data-cursor="true"]') || parent.closest('[aria-label="nota"]')) {
           return false;
         }
+        if (parent.closest('[data-key-term-tooltip]')) {
+          return false;
+        }
         const fnEl = parent.closest('[data-footnote="true"]');
         if (fnEl) {
           const title = fnEl.getAttribute('title') || '';
@@ -412,10 +428,12 @@ const setCaretAtCleanOffset = (element: HTMLElement, targetOffset: number) => {
         el.getAttribute('data-cursor') === 'true' || el.closest('[data-cursor="true"]');
       const isNoteIcon =
         el.getAttribute('aria-label') === 'nota' || el.closest('[aria-label="nota"]');
+      const isKeyTermTooltip =
+        el.hasAttribute('data-key-term-tooltip') || el.closest('[data-key-term-tooltip]');
       const fnEl =
         el.getAttribute('data-footnote') === 'true' ? el : el.closest('[data-footnote="true"]');
 
-      if (isCursor || isNoteIcon) {
+      if (isCursor || isNoteIcon || isKeyTermTooltip) {
         return false;
       }
       if (fnEl) {
@@ -717,6 +735,146 @@ function ToggleSwitch({
   );
 }
 
+function RawUsfmEditor({
+  projectId,
+  bookCode,
+  chapter,
+  handleCatch,
+  onSaved,
+}: {
+  projectId?: string;
+  bookCode: string;
+  chapter: number;
+  handleCatch: (e: any, fallbackPrefix?: string) => void;
+  onSaved: () => void;
+}) {
+  const [rawUsfm, setRawUsfm] = useState('');
+  const [original, setOriginal] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const reqRef = useRef(0);
+
+  useEffect(() => {
+    if (!projectId || !bookCode || !chapter) return undefined;
+    const requestId = ++reqRef.current;
+    const isCurrent = () => requestId === reqRef.current;
+    setLoading(true);
+    setError('');
+    papiRetry(
+      () =>
+        papi.commands.sendCommand(
+          'paratextProjectManager.getChapterRawUsfm',
+          projectId,
+          bookCode,
+          chapter,
+        ),
+      { isCancelled: () => !isCurrent() },
+    )
+      .then((res) => {
+        if (!isCurrent()) return;
+        try {
+          const parsed = JSON.parse(res) as { rawUsfm?: string; error?: string };
+          if (parsed.error) {
+            setError(`Error: ${parsed.error}`);
+            setRawUsfm('');
+            setOriginal('');
+          } else {
+            const text = parsed.rawUsfm || '';
+            setRawUsfm(text);
+            setOriginal(text);
+          }
+        } catch (e: any) {
+          setError(`Error al parsear USFM: ${e.message || String(e)}`);
+        }
+      })
+      .catch((e) => {
+        if (!isCurrent()) return;
+        if (isPapiDisconnectedError(e)) setError(handleCatch(e, 'Error al cargar USFM. '));
+        else setError(`Error al cargar USFM: ${e.message || String(e)}`);
+      })
+      .finally(() => {
+        if (isCurrent()) setLoading(false);
+      });
+    return () => {};
+  }, [projectId, bookCode, chapter, handleCatch]);
+
+  const dirty = rawUsfm !== original;
+
+  const handleSave = async () => {
+    if (!projectId || !dirty || saving) return;
+    setSaving(true);
+    setError('');
+    try {
+      const res = await papi.commands.sendCommand(
+        'paratextProjectManager.saveChapterRawUsfm',
+        projectId,
+        bookCode,
+        chapter,
+        rawUsfm,
+      );
+      const parsed = JSON.parse(res) as { status?: string; error?: string };
+      if (parsed.status === 'ok') {
+        setOriginal(rawUsfm);
+        onSaved();
+      } else {
+        setError(`Error al guardar: ${parsed.error || res}`);
+      }
+    } catch (e: any) {
+      if (isPapiDisconnectedError(e)) setError(handleCatch(e, 'Error al guardar USFM. '));
+      else setError(`Error al guardar: ${e.message || String(e)}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="tw:space-y-3">
+      <div className="tw:flex tw:items-center tw:justify-between tw:flex-wrap tw:gap-2 tw:px-1">
+        <div className="tw:text-xs tw:text-slate-500">
+          Modo USFM crudo — edita los marcadores y texto directamente.
+        </div>
+        <div className="tw:flex tw:items-center tw:gap-2">
+          <button
+            type="button"
+            onClick={() => setRawUsfm(original)}
+            disabled={!dirty || saving}
+            className="tw:px-3 tw:py-1.5 tw:bg-slate-100 tw:hover:bg-slate-200 tw:rounded-md tw:text-xs tw:font-semibold tw:text-slate-700 tw:cursor-pointer disabled:tw:opacity-40 disabled:tw:cursor-not-allowed tw:transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={!dirty || saving}
+            className="tw:px-3 tw:py-1.5 tw:bg-indigo-600 tw:hover:bg-indigo-700 tw:rounded-md tw:text-xs tw:font-semibold tw:text-white tw:cursor-pointer disabled:tw:opacity-40 disabled:tw:cursor-not-allowed tw:transition-colors"
+          >
+            {saving ? 'Guardando...' : 'Guardar'}
+          </button>
+        </div>
+      </div>
+      {error && (
+        <div className="tw:text-xs tw:text-rose-700 tw:bg-rose-50 tw:border tw:border-rose-200 tw:rounded-md tw:px-3 tw:py-2">
+          {error}
+        </div>
+      )}
+      {loading ? (
+        <div className="tw:p-6 tw:text-center tw:text-slate-400 tw:italic tw:text-sm">
+          Cargando USFM...
+        </div>
+      ) : (
+        <textarea
+          value={rawUsfm}
+          onChange={(e) => setRawUsfm(e.target.value)}
+          spellCheck={false}
+          className="tw:w-full tw:min-h-[60vh] tw:border tw:border-slate-300 tw:rounded-lg tw:p-3 tw:font-mono tw:text-xs tw:leading-relaxed tw:bg-white tw:text-slate-900 focus:tw:outline-none focus:tw:border-indigo-400 tw:resize-y"
+          style={{ whiteSpace: 'pre', fontFamily: 'Consolas, "Courier New", monospace' }}
+        />
+      )}
+    </div>
+  );
+}
+
 globalThis.webViewComponent = function ScriptureViewerWebView({
   projectId,
   updateWebViewDefinition,
@@ -839,11 +997,6 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
     () => localStorage.getItem('key_terms_overlay_enabled') === 'true',
   );
   const [chapterKeyTermsMatches, setChapterKeyTermsMatches] = useState<Record<string, any>>({});
-  const [activeVersePopup, setActiveVersePopup] = useState<{
-    verseNum: number;
-    reference: string;
-    expected: any[];
-  } | null>(null);
 
   // Reader Settings States
   const [versesOnOwnLine, setVersesOnOwnLine] = useState(() => {
@@ -855,8 +1008,11 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   const [notesDisplayStyle, setNotesDisplayStyle] = useState(() => {
     return localStorage.getItem('scripture_viewer_notes_display_style') || 'highlight';
   });
-  const [showDraftingSidebar, setShowDraftingSidebar] = useState(() => {
-    return localStorage.getItem('scripture_viewer_drafting_sidebar') !== 'false';
+  const [margins, setMargins] = useState(() => {
+    return localStorage.getItem('scripture_viewer_margins') || 'medium';
+  });
+  const [showUsfmMarkers, setShowUsfmMarkers] = useState(() => {
+    return localStorage.getItem('scripture_viewer_show_usfm_markers') === 'true';
   });
 
   const getCursorColors = (user: string) => {
@@ -1064,7 +1220,12 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   );
 
   const highlightKeyTermsInNode = useCallback(
-    (node: React.ReactNode, verseNum: number, bookCode: string): React.ReactNode => {
+    (
+      node: React.ReactNode,
+      verseNum: number,
+      bookCode: string,
+      isEditing = false,
+    ): React.ReactNode => {
       if (!keyTermsOverlayEnabled) return node;
 
       const matches = Object.values(chapterKeyTermsMatches).filter(
@@ -1110,6 +1271,12 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
           });
 
           if (match) {
+            // While the verse is being edited, render the matched word as plain text so the
+            // contentEditable DOM stays clean (no tooltip/cursor-handler spans that could leak
+            // into the saved USFM). Key-term click-to-open is disabled in edit mode so the
+            // editor doesn't blur mid-edit (which previously pasted tooltip text into the verse).
+            if (isEditing) return <React.Fragment key={index}>{part}</React.Fragment>;
+
             const isExact = match.matchResult?.matchType === 'exact';
             const underlineClass = isExact
               ? 'tw:border-b-2 tw:border-dashed tw:border-emerald-500 tw:bg-emerald-50/20'
@@ -1142,7 +1309,11 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                 }}
               >
                 {part}
-                <span className="key-term-tooltip-content tw:invisible tw:absolute tw:bottom-full tw:left-1/2 tw:-translate-x-1/2 tw:mb-1 tw:bg-slate-800 tw:text-white tw:text-[10px] tw:p-2 tw:rounded-lg tw:shadow-md tw:w-48 tw:whitespace-normal tw:z-50 tw:opacity-0 tw:transition-opacity tw:duration-200 pointer-events-none">
+                <span
+                  data-key-term-tooltip="true"
+                  aria-hidden="true"
+                  className="key-term-tooltip-content tw:invisible tw:absolute tw:bottom-full tw:left-1/2 tw:-translate-x-1/2 tw:mb-1 tw:bg-slate-800 tw:text-white tw:text-[10px] tw:p-2 tw:rounded-lg tw:shadow-md tw:w-48 tw:whitespace-normal tw:z-50 tw:opacity-0 tw:transition-opacity tw:duration-200 pointer-events-none"
+                >
                   <div className="tw:font-bold tw:text-indigo-300 tw:font-serif tw:text-xs">
                     {match.lemma}
                   </div>
@@ -1162,7 +1333,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
         const element = node as React.ReactElement<any>;
         if (element.props && element.props.children) {
           const children = React.Children.map(element.props.children, (child) =>
-            highlightKeyTermsInNode(child, verseNum, bookCode),
+            highlightKeyTermsInNode(child, verseNum, bookCode, isEditing),
           );
           return React.cloneElement(element, { ...element.props, key: element.key }, children);
         }
@@ -1172,7 +1343,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
       if (Array.isArray(node)) {
         return node.map((child, idx) => (
           <React.Fragment key={idx}>
-            {highlightKeyTermsInNode(child, verseNum, bookCode)}
+            {highlightKeyTermsInNode(child, verseNum, bookCode, isEditing)}
           </React.Fragment>
         ));
       }
@@ -1511,15 +1682,33 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
   const selectVerse = useCallback(
     (verseNum: number | null) => {
       setSelectedVerseNum(verseNum);
-      if (verseNum !== null && scrollGroupId !== undefined && setScrRef) {
-        setScrRef({
-          book: selectedBookRef.current,
-          chapterNum: selectedChapterRef.current,
-          verseNum,
-        });
+      if (verseNum !== null) {
+        const curBook = selectedBookRef.current;
+        const curChapter = selectedChapterRef.current;
+        if (scrollGroupId !== undefined && setScrRef) {
+          setScrRef({
+            book: curBook,
+            chapterNum: curChapter,
+            verseNum,
+          });
+        }
+        if (curBook && curChapter && projectId) {
+          papi.commands
+            .sendCommand(
+              'paratextProjectManager.selectVerse',
+              projectId,
+              curBook,
+              curChapter,
+              verseNum,
+            )
+            .catch((err) => {
+              if (isPapiDisconnectedError(err)) handleCatch(err);
+              else console.error('Failed to broadcast verse selection:', err);
+            });
+        }
       }
     },
-    [scrollGroupId, setScrRef],
+    [scrollGroupId, setScrRef, projectId, handleCatch],
   );
 
   const currentUserRef = useRef(currentUser);
@@ -2455,9 +2644,7 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
 
     // If currently editing a different verse, blur it first
     if (isEditingVerse && selectedVerseNum !== null && selectedVerseNum !== verseNum) {
-      const prevEditable = document.querySelector(
-        `#verse-${selectedVerseNum} [contenteditable="true"]`,
-      );
+      const prevEditable = document.querySelector(`#verse-${selectedVerseNum} [contenteditable]`);
       prevEditable?.blur();
     }
     selectVerse(verseNum);
@@ -2676,6 +2863,27 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                         <span className="tw:text-base">📚</span>
                         <span className="tw:flex-1 tw:font-medium">Cambiar Recurso</span>
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMenuOpen(false);
+                          if (!projectId) {
+                            selectProject();
+                            return;
+                          }
+                          papi.commands
+                            .sendCommand('paratextProjectManager.openDraftingTerms', projectId)
+                            .catch((err) => {
+                              if (isPapiDisconnectedError(err)) handleCatch(err);
+                              else console.error('Failed to open drafting terms:', err);
+                            });
+                        }}
+                        className="tw:w-full tw:flex tw:items-center tw:gap-2.5 tw:px-2.5 tw:py-2 tw:rounded-lg tw:text-slate-700 tw:hover:bg-slate-50 tw:transition-colors tw:cursor-pointer tw:text-left"
+                        title="Abrir la ventana Términos para Redactar"
+                      >
+                        <span className="tw:text-base">✍️</span>
+                        <span className="tw:flex-1 tw:font-medium">Términos para Redactar</span>
+                      </button>
                       <div className="tw:flex tw:items-center tw:gap-2.5 tw:px-2.5 tw:py-2">
                         <span className="tw:text-base">👤</span>
                         <div className="tw:flex-1 tw:flex tw:items-center tw:justify-between tw:text-left tw:font-medium tw:text-slate-700">
@@ -2731,22 +2939,6 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                             localStorage.setItem(
                               'key_terms_overlay_enabled',
                               nextVal ? 'true' : 'false',
-                            );
-                          }}
-                        />
-                      </div>
-
-                      <div className="tw:flex tw:items-center tw:justify-between tw:px-2.5 tw:py-1.5">
-                        <span className="tw:font-medium tw:text-slate-700">
-                          ✍️ Redactar (Términos)
-                        </span>
-                        <ToggleSwitch
-                          checked={showDraftingSidebar}
-                          onChange={(nextVal) => {
-                            setShowDraftingSidebar(nextVal);
-                            localStorage.setItem(
-                              'scripture_viewer_drafting_sidebar',
-                              String(nextVal),
                             );
                           }}
                         />
@@ -2829,6 +3021,41 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                           <option value="dialog">Globo de Diálogo (💬)</option>
                           <option value="tag">Etiqueta (🏷️)</option>
                         </select>
+                      </div>
+
+                      <div className="tw:flex tw:items-center tw:justify-between tw:gap-3 tw:px-2.5 tw:py-1.5">
+                        <span className="tw:font-medium tw:text-slate-700 tw:shrink-0">
+                          Márgenes Laterales
+                        </span>
+                        <select
+                          value={margins}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setMargins(val);
+                            localStorage.setItem('scripture_viewer_margins', val);
+                          }}
+                          className="tw:border tw:border-slate-200 tw:bg-slate-50 tw:rounded-lg tw:px-2 tw:py-1.5 tw:text-xs tw:text-slate-700 focus:tw:outline-none focus:tw:border-indigo-400 tw:cursor-pointer tw:w-36"
+                        >
+                          <option value="narrow">Estrechos (Texto Ancho)</option>
+                          <option value="medium">Normales (Predeterminado)</option>
+                          <option value="wide">Anchos (Texto Estrecho)</option>
+                        </select>
+                      </div>
+
+                      <div className="tw:flex tw:items-center tw:justify-between tw:px-2.5 tw:py-1.5">
+                        <span className="tw:font-medium tw:text-slate-700">
+                          Marcadores USFM (edición cruda)
+                        </span>
+                        <ToggleSwitch
+                          checked={showUsfmMarkers}
+                          onChange={(val) => {
+                            setShowUsfmMarkers(val);
+                            localStorage.setItem(
+                              'scripture_viewer_show_usfm_markers',
+                              val ? 'true' : 'false',
+                            );
+                          }}
+                        />
                       </div>
 
                       <div className="tw:h-px tw:bg-slate-100 tw:my-1.5" />
@@ -2960,8 +3187,14 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
           {/* Scrollable text sheet */}
           <div className="tw:flex-1 tw:overflow-y-auto tw:p-8 tw:leading-relaxed tw:text-slate-800">
             <div
-              className="tw:max-w-2xl tw:mx-auto tw:space-y-6"
+              className="tw:mx-auto tw:space-y-6"
               style={{
+                maxWidth:
+                  margins === 'narrow'
+                    ? '56rem' // 896px (max-w-4xl)
+                    : margins === 'wide'
+                      ? '32rem' // 512px (max-w-lg)
+                      : '42rem', // 672px (max-w-2xl, default)
                 fontSize: `${fontSize}px`,
                 fontFamily:
                   fontFamily === 'sans-serif'
@@ -2977,344 +3210,254 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
                             : 'system-ui, -apple-system, sans-serif',
               }}
             >
-              {error && (
-                <ReconnectBanner
-                  error={error}
-                  disconnected={disconnected}
-                  onRetry={() => loadChapter(selectedBook, selectedChapter)}
-                  variant="bar"
+              {showUsfmMarkers ? (
+                <RawUsfmEditor
+                  projectId={projectId}
+                  bookCode={selectedBook}
+                  chapter={selectedChapter}
+                  handleCatch={handleCatch}
+                  onSaved={() => loadChapter(selectedBook, selectedChapter)}
                 />
-              )}
-
-              {loading && chapterBlocks.length === 0 ? (
-                <div className="tw:p-12 tw:text-center tw:text-gray-400 tw:italic tw:text-sm">
-                  Cargando el texto de la Escritura...
-                </div>
               ) : (
-                chapterBlocks.map((block, bIdx) => {
-                  if (block.type === 'heading') {
-                    return (
-                      <h3
-                        key={bIdx}
-                        className="tw:text-lg tw:font-bold tw:text-slate-900 tw:mt-6 tw:mb-3 tw:text-justify"
-                      >
-                        {block.text}
-                      </h3>
-                    );
-                  }
+                <>
+                  {error && (
+                    <ReconnectBanner
+                      error={error}
+                      disconnected={disconnected}
+                      onRetry={() => loadChapter(selectedBook, selectedChapter)}
+                      variant="bar"
+                    />
+                  )}
 
-                  const isPoetry = block.type === 'poetry';
-                  const indentClass = isPoetry ? `tw:pl-${(block.indent || 1) * 4}` : '';
-
-                  return (
-                    <p
-                      key={bIdx}
-                      className={`tw:mb-4 ${isPoetry ? 'tw:mb-2' : ''} ${indentClass} tw:text-justify`}
-                    >
-                      {block.children.map((child, cIdx) => {
-                        if (child.type === 'text') {
-                          return <span key={cIdx}>{renderFootnotes(child.text)}</span>;
-                        }
-
-                        const isSelected = selectedVerseNum === child.number;
-                        const isEditing = isEditingVerse && isSelected;
-                        const editorsWithCursors = Object.entries(collabCursors)
-                          .filter(([user, cursor]) => {
-                            return (
-                              user !== currentUser &&
-                              cursor.projectId === projectId &&
-                              cursor.book === selectedBook &&
-                              cursor.chapter === selectedChapter &&
-                              cursor.verse === child.number
-                            );
-                          })
-                          .map(([user, cursor]) => ({ user, offset: cursor.offset ?? 0 }));
-
-                        const otherEditingUsers = Object.entries(collabCursors).filter(
-                          ([user, cursor]) =>
-                            user !== currentUser &&
-                            cursor.projectId === projectId &&
-                            cursor.book === selectedBook &&
-                            cursor.chapter === selectedChapter &&
-                            cursor.verse === child.number,
-                        );
-                        const otherEditor = otherEditingUsers[0];
-                        const otherEditorHighlight = otherEditor
-                          ? getCursorColors(otherEditor[0]).highlight
-                          : null;
-
-                        const isEmpty = !child.text || child.text.trim().length === 0;
+                  {loading && chapterBlocks.length === 0 ? (
+                    <div className="tw:p-12 tw:text-center tw:text-gray-400 tw:italic tw:text-sm">
+                      Cargando el texto de la Escritura...
+                    </div>
+                  ) : (
+                    chapterBlocks.map((block, bIdx) => {
+                      if (block.type === 'heading') {
                         return (
-                          <span
-                            key={cIdx}
-                            id={`verse-${child.number}`}
-                            onClick={() => handleVerseClick(child.number, child.text)}
-                            onContextMenu={(e) =>
-                              handleVerseContextMenu(e, child.number, child.text)
-                            }
-                            className={`tw:relative tw:rounded tw:transition-all tw:py-0.5 tw:cursor-text ${
-                              versesOnOwnLine ? 'tw:block tw:mb-2' : 'tw:inline'
-                            }`}
-                            style={{
-                              ...(otherEditorHighlight
-                                ? {
-                                    backgroundColor: otherEditorHighlight,
-                                    padding: '2px 4px',
-                                    borderRadius: '4px',
-                                  }
-                                : {}),
-                              // Show the dashed placeholder only when not actively editing
-                              ...(isEmpty && !isEditing
-                                ? {
-                                    minWidth: '32px',
-                                    display: 'inline-block',
-                                    height: '1.2em',
-                                    verticalAlign: 'middle',
-                                    borderBottom: '1px dashed #94a3b8',
-                                    marginRight: '4px',
-                                  }
-                                : {}),
-                            }}
+                          <h3
+                            key={bIdx}
+                            className="tw:text-lg tw:font-bold tw:text-slate-900 tw:mt-6 tw:mb-3 tw:text-justify"
                           >
-                            {/* Verse number tag */}
-                            {keyTermsOverlayEnabled &&
-                              (() => {
-                                const verseMatches = Object.values(chapterKeyTermsMatches).filter(
-                                  (m: any) =>
-                                    isVerseInRef(
-                                      selectedBook,
-                                      selectedChapter,
-                                      child.number,
-                                      m.reference,
-                                    ),
-                                );
-                                if (verseMatches.length === 0) return null;
-                                const totalExpected = verseMatches.length;
-                                const totalFound = verseMatches.filter(
-                                  (m: any) => m.matchResult?.found,
-                                ).length;
-                                const verseRef = `${selectedBook} ${selectedChapter}:${child.number}`;
-                                return (
-                                  <span
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setActiveVersePopup({
-                                        verseNum: child.number,
-                                        reference: verseRef,
-                                        expected: verseMatches,
-                                      });
-                                    }}
-                                    className="tw:inline-flex tw:items-center tw:justify-center tw:w-5 tw:h-5 tw:cursor-pointer tw:mr-0.5 tw:align-middle"
-                                    title={`Términos clave: ${totalFound}/${totalExpected} encontrados. Haga clic para ver detalles.`}
-                                    style={{ position: 'relative', top: '-1px' }}
-                                  >
-                                    <span
-                                      className={`tw:w-2.5 tw:h-2.5 tw:rounded-full tw:transition-transform hover:tw:scale-125 ${
-                                        totalFound === totalExpected
-                                          ? 'tw:bg-emerald-500'
-                                          : totalFound > 0
-                                            ? 'tw:bg-amber-500'
-                                            : 'tw:bg-rose-500'
-                                      }`}
-                                    />
-                                  </span>
-                                );
-                              })()}
-                            <sup
-                              className={`tw:select-none tw:font-bold tw:mr-1 tw:px-1 tw:rounded ${
-                                flashVerseNum === child.number
-                                  ? 'verse-flash tw:text-white'
-                                  : 'tw:text-slate-400'
-                              }`}
-                              style={{ fontSize: '0.65em', top: '-0.3em' }}
-                            >
-                              {child.numberStr || child.number}
-                            </sup>
+                            {block.text}
+                          </h3>
+                        );
+                      }
 
-                            {/* Verse text content */}
-                            {isEditing ? (
-                              <EditableVerse
-                                initialText={child.text}
-                                initialOffset={initialOffset}
-                                onSave={async (newText) => {
-                                  await handleContentEditableSave(newText, child.number);
-                                }}
-                                onCancel={() => {
-                                  setIsEditingVerse(false);
-                                  setSelectedVerseNum(null);
-                                }}
+                      const isPoetry = block.type === 'poetry';
+                      const indentClass = isPoetry ? `tw:pl-${(block.indent || 1) * 4}` : '';
+
+                      return (
+                        <p
+                          key={bIdx}
+                          className={`tw:mb-4 ${isPoetry ? 'tw:mb-2' : ''} ${indentClass} tw:text-justify`}
+                        >
+                          {block.children.map((child, cIdx) => {
+                            if (child.type === 'text') {
+                              return <span key={cIdx}>{renderFootnotes(child.text)}</span>;
+                            }
+
+                            const isSelected = selectedVerseNum === child.number;
+                            const isEditing = isEditingVerse && isSelected;
+                            const editorsWithCursors = Object.entries(collabCursors)
+                              .filter(([user, cursor]) => {
+                                return (
+                                  user !== currentUser &&
+                                  cursor.projectId === projectId &&
+                                  cursor.book === selectedBook &&
+                                  cursor.chapter === selectedChapter &&
+                                  cursor.verse === child.number
+                                );
+                              })
+                              .map(([user, cursor]) => ({ user, offset: cursor.offset ?? 0 }));
+
+                            const otherEditingUsers = Object.entries(collabCursors).filter(
+                              ([user, cursor]) =>
+                                user !== currentUser &&
+                                cursor.projectId === projectId &&
+                                cursor.book === selectedBook &&
+                                cursor.chapter === selectedChapter &&
+                                cursor.verse === child.number,
+                            );
+                            const otherEditor = otherEditingUsers[0];
+                            const otherEditorHighlight = otherEditor
+                              ? getCursorColors(otherEditor[0]).highlight
+                              : null;
+
+                            const isEmpty = !child.text || child.text.trim().length === 0;
+                            return (
+                              <span
+                                key={cIdx}
+                                id={`verse-${child.number}`}
+                                onClick={() => handleVerseClick(child.number, child.text)}
                                 onContextMenu={(e) =>
                                   handleVerseContextMenu(e, child.number, child.text)
                                 }
-                                onCursorChange={(offset) => {
-                                  handleCursorChange(child.number, offset);
+                                draggable
+                                onDragStart={(e) => {
+                                  try {
+                                    const sel = window.getSelection();
+                                    const dragged =
+                                      (sel ? sel.toString() : '').trim() || child.text;
+                                    e.dataTransfer.effectAllowed = 'copy';
+                                    e.dataTransfer.setData('text/plain', dragged);
+                                    e.dataTransfer.setData(
+                                      'application/x-paratext-rendering',
+                                      JSON.stringify({
+                                        text: dragged,
+                                        bookCode: selectedBook,
+                                        chapter: selectedChapter,
+                                        verse: child.number,
+                                      }),
+                                    );
+                                  } catch (err) {
+                                    console.error('Failed to start drag from verse:', err);
+                                  }
                                 }}
-                                onUndoStateChange={(canUndoNow) => {
-                                  setVerseEditorCanUndo(canUndoNow);
-                                }}
-                                onEditBroadcast={(text) => {
-                                  handleVerseEditBroadcast(child.number, text);
+                                className={`tw:relative tw:rounded tw:transition-all tw:py-0.5 tw:cursor-text ${
+                                  versesOnOwnLine ? 'tw:block tw:mb-2' : 'tw:inline'
+                                }`}
+                                style={{
+                                  ...(otherEditorHighlight
+                                    ? {
+                                        backgroundColor: otherEditorHighlight,
+                                        padding: '2px 4px',
+                                        borderRadius: '4px',
+                                      }
+                                    : {}),
+                                  // Show the dashed placeholder only when not actively editing
+                                  ...(isEmpty && !isEditing
+                                    ? {
+                                        minWidth: '32px',
+                                        display: 'inline-block',
+                                        height: '1.2em',
+                                        verticalAlign: 'middle',
+                                        borderBottom: '1px dashed #94a3b8',
+                                        marginRight: '4px',
+                                      }
+                                    : {}),
                                 }}
                               >
-                                {highlightKeyTermsInNode(
-                                  renderFootnotes(
-                                    injectCursorsIntoElements(
-                                      highlightText(
-                                        child.text,
-                                        chapterNotesByVerse[child.number] ?? [],
+                                {/* Verse number tag */}
+                                {keyTermsOverlayEnabled &&
+                                  (() => {
+                                    const verseMatches = Object.values(
+                                      chapterKeyTermsMatches,
+                                    ).filter((m: any) =>
+                                      isVerseInRef(
+                                        selectedBook,
+                                        selectedChapter,
                                         child.number,
+                                        m.reference,
                                       ),
-                                      editorsWithCursors,
-                                    ),
-                                  ),
-                                  child.number,
-                                  selectedBook,
-                                )}
-                              </EditableVerse>
-                            ) : (
-                              <span>
-                                {highlightKeyTermsInNode(
-                                  renderFootnotes(
-                                    injectCursorsIntoElements(
-                                      highlightText(
-                                        child.text,
-                                        chapterNotesByVerse[child.number] ?? [],
-                                        child.number,
+                                    );
+                                    if (verseMatches.length === 0) return null;
+                                    const totalExpected = verseMatches.length;
+                                    const totalFound = verseMatches.filter(
+                                      (m: any) => m.matchResult?.found,
+                                    ).length;
+                                    return (
+                                      <span
+                                        className="tw:inline-flex tw:items-center tw:justify-center tw:w-5 tw:h-5 tw:mr-0.5 tw:align-middle"
+                                        title={`Términos clave: ${totalFound}/${totalExpected} encontrados. Véase la ventana "Términos para Redactar".`}
+                                        style={{ position: 'relative', top: '-1px' }}
+                                      >
+                                        <span
+                                          className={`tw:w-2.5 tw:h-2.5 tw:rounded-full ${
+                                            totalFound === totalExpected
+                                              ? 'tw:bg-emerald-500'
+                                              : totalFound > 0
+                                                ? 'tw:bg-amber-500'
+                                                : 'tw:bg-rose-500'
+                                          }`}
+                                        />
+                                      </span>
+                                    );
+                                  })()}
+                                <sup
+                                  className={`tw:select-none tw:font-bold tw:mr-1 tw:px-1 tw:rounded ${
+                                    flashVerseNum === child.number
+                                      ? 'verse-flash tw:text-white'
+                                      : 'tw:text-slate-400'
+                                  }`}
+                                  style={{ fontSize: '0.65em', top: '-0.3em' }}
+                                >
+                                  {child.numberStr || child.number}
+                                </sup>
+
+                                {/* Verse text content */}
+                                {isEditing ? (
+                                  <EditableVerse
+                                    initialText={child.text}
+                                    initialOffset={initialOffset}
+                                    onSave={async (newText) => {
+                                      await handleContentEditableSave(newText, child.number);
+                                    }}
+                                    onCancel={() => {
+                                      setIsEditingVerse(false);
+                                      setSelectedVerseNum(null);
+                                    }}
+                                    onContextMenu={(e) =>
+                                      handleVerseContextMenu(e, child.number, child.text)
+                                    }
+                                    onCursorChange={(offset) => {
+                                      handleCursorChange(child.number, offset);
+                                    }}
+                                    onUndoStateChange={(canUndoNow) => {
+                                      setVerseEditorCanUndo(canUndoNow);
+                                    }}
+                                    onEditBroadcast={(text) => {
+                                      handleVerseEditBroadcast(child.number, text);
+                                    }}
+                                  >
+                                    {highlightKeyTermsInNode(
+                                      renderFootnotes(
+                                        injectCursorsIntoElements(
+                                          highlightText(
+                                            child.text,
+                                            chapterNotesByVerse[child.number] ?? [],
+                                            child.number,
+                                          ),
+                                          editorsWithCursors,
+                                        ),
                                       ),
-                                      editorsWithCursors,
-                                    ),
-                                  ),
-                                  child.number,
-                                  selectedBook,
+                                      child.number,
+                                      selectedBook,
+                                      true,
+                                    )}
+                                  </EditableVerse>
+                                ) : (
+                                  <span>
+                                    {highlightKeyTermsInNode(
+                                      renderFootnotes(
+                                        injectCursorsIntoElements(
+                                          highlightText(
+                                            child.text,
+                                            chapterNotesByVerse[child.number] ?? [],
+                                            child.number,
+                                          ),
+                                          editorsWithCursors,
+                                        ),
+                                      ),
+                                      child.number,
+                                      selectedBook,
+                                    )}
+                                  </span>
                                 )}
                               </span>
-                            )}
-                          </span>
-                        );
-                      })}
-                    </p>
-                  );
-                })
+                            );
+                          })}
+                        </p>
+                      );
+                    })
+                  )}
+                </>
               )}
             </div>
           </div>
         </div>
-
-        {/* Right Sidebar: Key Terms for Drafting (zero clicks) */}
-        {showDraftingSidebar && (
-          <div className="tw:w-80 tw:border-l tw:border-slate-200 tw:bg-slate-50 tw:flex tw:flex-col tw:h-full tw:overflow-hidden tw:shrink-0 tw:no-print">
-            {/* Sidebar Header */}
-            <div className="tw:px-4 tw:py-3 tw:bg-white tw:border-b tw:border-slate-200 tw:flex tw:items-center tw:justify-between tw:shrink-0">
-              <span className="tw:font-bold tw:text-slate-800 tw:text-xs uppercase tw:tracking-wider">
-                ✍️ Términos para Redactar
-              </span>
-              {selectedVerseNum && (
-                <span className="tw:px-2 tw:py-0.5 tw:bg-slate-100 tw:text-slate-600 tw:rounded-full tw:text-[10px] tw:font-semibold">
-                  Versículo {selectedVerseNum}
-                </span>
-              )}
-            </div>
-
-            {/* Sidebar Content */}
-            <div className="tw:flex-grow tw:overflow-y-auto tw:p-4 tw:space-y-4">
-              {!selectedVerseNum ? (
-                <div className="tw:text-center tw:text-slate-400 tw:italic tw:py-12 tw:text-xs">
-                  Haz clic en un versículo para ver los términos clave que debes usar.
-                </div>
-              ) : (
-                (() => {
-                  const verseMatches = Object.values(chapterKeyTermsMatches).filter((m: any) =>
-                    isVerseInRef(selectedBook, selectedChapter, selectedVerseNum, m.reference),
-                  );
-
-                  if (verseMatches.length === 0) {
-                    return (
-                      <div className="tw:text-center tw:text-slate-400 tw:italic tw:py-12 tw:text-xs">
-                        No hay términos clave registrados para {selectedBook} {selectedChapter}:
-                        {selectedVerseNum}.
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <div className="tw:space-y-3">
-                      <div className="tw:text-[10.5px] tw:font-bold tw:text-slate-500 uppercase tw:tracking-wider">
-                        Términos requeridos en {selectedBook} {selectedChapter}:{selectedVerseNum}:
-                      </div>
-                      <div className="tw:space-y-2.5">
-                        {verseMatches.map((m: any) => (
-                          <div
-                            key={m.termId}
-                            className="tw:bg-white tw:p-3 tw:rounded-xl tw:border tw:border-slate-200 tw:shadow-sm tw:space-y-2 tw:transition-all hover:tw:shadow-md"
-                          >
-                            <div className="tw:flex tw:items-start tw:justify-between tw:gap-2">
-                              <div>
-                                <button
-                                  onClick={() => {
-                                    papi.commands
-                                      .sendCommand(
-                                        'paratextProjectManager.openHebrewGreekDictionary',
-                                        m.strongs || m.lemma,
-                                      )
-                                      .catch((err) => {
-                                        if (isPapiDisconnectedError(err)) handleCatch(err);
-                                        else console.error(err);
-                                      });
-                                  }}
-                                  className="tw:text-left tw:font-bold tw:text-xs tw:text-slate-700 hover:tw:text-indigo-600 hover:tw:underline tw:cursor-pointer tw:bg-transparent tw:border-none tw:p-0"
-                                  title={
-                                    m.strongs
-                                      ? `Diccionario Strong: ${m.strongs}`
-                                      : `Buscar definición: ${m.lemma}`
-                                  }
-                                >
-                                  {m.gloss}
-                                </button>
-                                <div className="tw:text-[10px] tw:text-slate-400 tw:font-serif tw:mt-0.5">
-                                  {m.lemma}
-                                </div>
-                              </div>
-                              {m.matchResult?.found ? (
-                                <span className="tw:text-[9px] tw:bg-emerald-50 tw:text-emerald-700 tw:px-2 tw:py-0.5 tw:border tw:border-emerald-250 tw:rounded-full tw:font-semibold tw:whitespace-nowrap">
-                                  ✓ Usado
-                                </span>
-                              ) : (
-                                <span className="tw:text-[9px] tw:bg-rose-50 tw:text-rose-700 tw:px-2 tw:py-0.5 tw:border tw:border-rose-250 tw:rounded-full tw:font-semibold tw:whitespace-nowrap">
-                                  ✗ Faltante
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Expected Renderings */}
-                            <div className="tw:text-[10px] tw:text-slate-500">
-                              <span className="tw:font-semibold">Traducciones sugeridas:</span>
-                              {m.expectedRenderings && m.expectedRenderings.length > 0 ? (
-                                <div className="tw:flex tw:flex-wrap tw:gap-1 tw:mt-1">
-                                  {m.expectedRenderings.map((r: string, rIdx: number) => (
-                                    <span
-                                      key={rIdx}
-                                      className="tw:text-[9px] tw:bg-indigo-50/50 tw:text-indigo-600 tw:px-1.5 tw:py-0.5 tw:rounded tw:border tw:border-indigo-100"
-                                    >
-                                      {r}
-                                    </span>
-                                  ))}
-                                </div>
-                              ) : (
-                                <span className="tw:italic tw:text-slate-400 tw:ml-1">
-                                  Ninguna registrada
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })()
-              )}
-            </div>
-          </div>
-        )}
       </div>
       {/* Context menu for selection */}
       {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
@@ -3336,6 +3479,35 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
               className="tw:w-full tw:text-left tw:px-3 tw:py-2 tw:hover:bg-slate-100 tw:text-slate-700 tw:font-semibold tw:flex tw:items-center tw:gap-1.5 tw:cursor-pointer tw:border-none tw:bg-white"
             >
               Agregar nota
+            </button>
+          )}
+
+          {selectedText && projectId && selectedBook && selectedChapter && selectedVerseNum && (
+            <button
+              type="button"
+              onClick={async () => {
+                setContextMenu(null);
+                const text = selectedText.trim();
+                if (!text || !projectId || !selectedBook || !selectedVerseNum) return;
+                const verseRef = `${selectedBook} ${selectedChapter}:${selectedVerseNum}`;
+                try {
+                  await papi.commands.sendCommand('paratextProjectManager.openKeyTerms', projectId);
+                  await papi.commands.sendCommand(
+                    'paratextProjectManager.addRenderingToSelectedTerm',
+                    projectId,
+                    text,
+                    verseRef,
+                  );
+                } catch (err) {
+                  if (isPapiDisconnectedError(err)) handleCatch(err);
+                  else console.error('Failed to add rendering from Scripture:', err);
+                }
+              }}
+              className="tw:w-full tw:text-left tw:px-3 tw:py-2 tw:hover:bg-slate-100 tw:text-slate-700 tw:font-semibold tw:flex tw:items-center tw:gap-1.5 tw:cursor-pointer tw:border-none tw:bg-white"
+              title="Add the selected text as a rendering for the currently-selected key term"
+            >
+              <span aria-hidden="true">🔗</span>
+              <span className="tw:truncate">Agregar como traducción</span>
             </button>
           )}
 
@@ -3382,96 +3554,6 @@ globalThis.webViewComponent = function ScriptureViewerWebView({
           >
             Crear Pull Request
           </button>
-        </div>
-      )}
-
-      {/* Floating Key Terms Details Popup */}
-      {activeVersePopup && (
-        <div
-          className="tw:fixed tw:inset-0 tw:z-[9999] tw:flex tw:items-center tw:justify-center tw:bg-slate-900/40 tw:backdrop-blur-sm"
-          onClick={() => setActiveVersePopup(null)}
-        >
-          <div
-            className="tw:bg-white tw:rounded-xl tw:shadow-2xl tw:border tw:border-slate-200 tw:w-96 tw:max-w-[90vw] tw:p-4 tw:space-y-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="tw:flex tw:items-center tw:justify-between tw:border-b tw:border-slate-100 tw:pb-2">
-              <span className="tw:font-bold tw:text-slate-800 tw:text-sm">
-                Términos Clave: {activeVersePopup.reference}
-              </span>
-              <button
-                onClick={() => setActiveVersePopup(null)}
-                className="tw:text-slate-400 tw:hover:text-slate-600 tw:text-sm tw:cursor-pointer tw:bg-transparent tw:border-none"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="tw:space-y-2.5 tw:max-h-60 tw:overflow-y-auto">
-              {activeVersePopup.expected.map((m: any) => (
-                <div
-                  key={m.termId}
-                  className="tw:flex tw:items-center tw:justify-between tw:gap-2 tw:p-2 tw:bg-slate-50 tw:rounded-lg tw:border tw:border-slate-100"
-                >
-                  <div className="tw:space-y-0.5">
-                    <div className="tw:font-bold tw:text-xs tw:text-slate-700">{m.gloss}</div>
-                    <div className="tw:text-[10px] tw:text-slate-400 tw:font-serif">{m.lemma}</div>
-                    {m.expectedRenderings && m.expectedRenderings.length > 0 ? (
-                      <div className="tw:flex tw:flex-wrap tw:gap-1 tw:mt-1.5">
-                        {m.expectedRenderings.map((r: string, rIdx: number) => (
-                          <span
-                            key={rIdx}
-                            className="tw:text-[9px] tw:bg-indigo-50 tw:text-indigo-700 tw:px-1.5 tw:py-0.5 tw:rounded tw:border tw:border-indigo-100 tw:font-medium"
-                          >
-                            {r}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="tw:text-[10px] tw:text-amber-600 tw:italic tw:mt-1">
-                        Sin renderings aprobados
-                      </div>
-                    )}
-                  </div>
-                  <div className="tw:flex tw:items-center tw:gap-2">
-                    {m.matchResult?.found ? (
-                      <span className="tw:text-[10px] tw:bg-emerald-50 tw:text-emerald-700 tw:px-2 tw:py-0.5 tw:border tw:border-emerald-200 tw:rounded-full tw:font-semibold">
-                        ✓ Encontrado
-                      </span>
-                    ) : (
-                      <span className="tw:text-[10px] tw:bg-rose-50 tw:text-rose-700 tw:px-2 tw:py-0.5 tw:border tw:border-rose-200 tw:rounded-full tw:font-semibold">
-                        ✗ Faltante
-                      </span>
-                    )}
-                    <button
-                      onClick={async () => {
-                        if (!projectId) return;
-                        setActiveVersePopup(null);
-                        try {
-                          await papi.commands.sendCommand(
-                            'paratextProjectManager.openKeyTerms',
-                            projectId,
-                          );
-                          // Small delay to allow the webview to finish opening/focusing before emitting the select event
-                          await new Promise((r) => setTimeout(r, 400));
-                          await papi.commands.sendCommand(
-                            'paratextProjectManager.selectKeyTerm',
-                            projectId,
-                            m.termId,
-                          );
-                        } catch (e) {
-                          if (isPapiDisconnectedError(e)) handleCatch(e);
-                          else console.error('Failed to open key terms from popup:', e);
-                        }
-                      }}
-                      className="tw:text-[10px] tw:text-indigo-600 tw:hover:underline tw:font-medium tw:cursor-pointer tw:bg-transparent tw:border-none"
-                    >
-                      Editar
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       )}
 

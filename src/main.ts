@@ -21,6 +21,8 @@ import notesViewerWebView from './notes-viewer.web-view?inline';
 import notesViewerStyles from './notes-viewer.web-view.scss?inline';
 import scriptureViewerWebView from './scripture-viewer.web-view?inline';
 import scriptureViewerStyles from './scripture-viewer.web-view.scss?inline';
+import draftingTermsWebView from './drafting-terms.web-view?inline';
+import draftingTermsStyles from './drafting-terms.web-view.scss?inline';
 import keyTermsWebView from './key-terms.web-view?inline';
 import keyTermsStyles from './key-terms.web-view.scss?inline';
 import keyTermsAnalyticsWebView from './key-terms-analytics.web-view?inline';
@@ -39,6 +41,7 @@ const MY_TASKS_TYPE = 'paratextProjectManager.myTasks';
 const PROJECT_OVERVIEW_TYPE = 'paratextProjectManager.projectOverview';
 const NOTES_VIEWER_TYPE = 'paratextProjectManager.notesViewer';
 const SCRIPTURE_VIEWER_TYPE = 'paratextProjectManager.scriptureViewer';
+const DRAFTING_TERMS_TYPE = 'paratextProjectManager.draftingTerms';
 const KEY_TERMS_TYPE = 'paratextProjectManager.keyTerms';
 const KEY_TERMS_ANALYTICS_TYPE = 'paratextProjectManager.keyTermsAnalytics';
 const PULL_REQUESTS_TYPE = 'paratextProjectManager.pullRequests';
@@ -1026,6 +1029,25 @@ const scriptureViewerProvider: IWebViewProvider = {
   },
 };
 
+const draftingTermsProvider: IWebViewProvider = {
+  async getWebView(
+    savedWebView: SavedWebViewDefinition,
+    openWebViewOptions?: any,
+  ): Promise<WebViewDefinition | undefined> {
+    if (savedWebView.webViewType !== DRAFTING_TERMS_TYPE)
+      throw new Error(`Wrong webview type: ${savedWebView.webViewType}`);
+    const projectId =
+      savedWebView.projectId ?? openWebViewOptions?.projectId ?? takePendingProjectId(savedWebView);
+    return {
+      ...savedWebView,
+      projectId,
+      title: 'Términos para Redactar',
+      content: draftingTermsWebView,
+      styles: draftingTermsStyles,
+    };
+  },
+};
+
 const keyTermsProvider: IWebViewProvider = {
   async getWebView(
     savedWebView: SavedWebViewDefinition,
@@ -1153,6 +1175,10 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
   const scriptureViewerProviderPromise = papi.webViewProviders.registerWebViewProvider(
     SCRIPTURE_VIEWER_TYPE,
     scriptureViewerProvider,
+  );
+  const draftingTermsProviderPromise = papi.webViewProviders.registerWebViewProvider(
+    DRAFTING_TERMS_TYPE,
+    draftingTermsProvider,
   );
   const keyTermsProviderPromise = papi.webViewProviders.registerWebViewProvider(
     KEY_TERMS_TYPE,
@@ -1829,6 +1855,18 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
               }
             }
 
+            // Apply manual "found" override if the user has marked this ref as found
+            // (e.g., the rendering is implied rather than literally present in the text).
+            const manualOverride = (term.manualFoundRefs || []).find((o) => o.reference === ref);
+            if (manualOverride) {
+              bestMatch = {
+                found: true,
+                matchType: 'manual',
+                matchedText: manualOverride.note?.trim() || '(manual)',
+                confidence: 1,
+              };
+            }
+
             matches.push({
               reference: ref,
               termId: term.id,
@@ -2393,6 +2431,30 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     },
   );
 
+  // Network Event Emitter for verse selection (from Scripture Viewer when user clicks a verse).
+  // Distinct from onNavigateToVerse, which is for external callers telling Scripture Viewer
+  // to jump to a verse. The Drafting Terms web view subscribes to this.
+  const verseSelectedEmitter = papi.network.createNetworkEventEmitter<{
+    projectId: string;
+    bookCode: string;
+    chapter: number;
+    verse: number;
+  }>('paratextProjectManager.onVerseSelected');
+
+  const selectVersePromise = papi.commands.registerCommand(
+    'paratextProjectManager.selectVerse',
+    async (
+      projectId: string,
+      bookCode: string,
+      chapter: number,
+      verse: number,
+    ): Promise<string> => {
+      lastNavigatedVerse = { projectId, bookCode, chapter, verse };
+      verseSelectedEmitter.emit({ projectId, bookCode, chapter, verse });
+      return 'ok';
+    },
+  );
+
   // Network Event Emitter for key term selection
   const selectKeyTermEmitter = papi.network.createNetworkEventEmitter<{
     projectId: string;
@@ -2403,6 +2465,21 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     'paratextProjectManager.selectKeyTerm',
     async (projectId: string, termId: string): Promise<string> => {
       selectKeyTermEmitter.emit({ projectId, termId });
+      return 'ok';
+    },
+  );
+
+  // Network Event Emitter for "add rendering to currently-selected key term from Scripture"
+  const addRenderingToSelectedTermEmitter = papi.network.createNetworkEventEmitter<{
+    projectId: string;
+    renderingText: string;
+    verseRef: string;
+  }>('paratextProjectManager.onAddRenderingToSelectedTerm');
+
+  const addRenderingToSelectedTermPromise = papi.commands.registerCommand(
+    'paratextProjectManager.addRenderingToSelectedTerm',
+    async (projectId: string, renderingText: string, verseRef: string): Promise<string> => {
+      addRenderingToSelectedTermEmitter.emit({ projectId, renderingText, verseRef });
       return 'ok';
     },
   );
@@ -2443,6 +2520,27 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
       const webViewId = `scripture-viewer-${pid}`;
       setPendingProjectId(webViewId, pid);
       return papi.webViews.openWebView(SCRIPTURE_VIEWER_TYPE, undefined, {
+        existingId: webViewId,
+        projectId: pid,
+      } as any);
+    },
+  );
+
+  const openDraftingTermsPromise = papi.commands.registerCommand(
+    'paratextProjectManager.openDraftingTerms',
+    async (projectId?: string) => {
+      let pid = projectId;
+      if (!pid) {
+        pid = await papi.dialogs.selectProject({
+          title: 'Abrir Términos para Redactar',
+          prompt: 'Selecciona un proyecto:',
+          includeProjectInterfaces: 'platformScripture.USJ_Chapter',
+        });
+      }
+      if (!pid) return undefined;
+      const webViewId = `drafting-terms-${pid}`;
+      setPendingProjectId(webViewId, pid);
+      return papi.webViews.openWebView(DRAFTING_TERMS_TYPE, undefined, {
         existingId: webViewId,
         projectId: pid,
       } as any);
@@ -2701,6 +2799,69 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
       } catch (e) {
         logger.warn(`updateVerseText failed: ${e}`);
         return `error: ${e}`;
+      }
+    },
+  );
+
+  const getChapterRawUsfmPromise = papi.commands.registerCommand(
+    'paratextProjectManager.getChapterRawUsfm',
+    async (projectId: string, bookCode: string, chapter: number): Promise<string> => {
+      try {
+        const projectDir = await resolveProjectDir(projectId);
+        await sendToNotesHelper('registerProjectDir', [projectId, projectDir]);
+        const res = await sendToNotesHelper('getChapterRawUsfm', [
+          projectId,
+          projectDir,
+          bookCode,
+          chapter,
+        ]);
+        return JSON.stringify(res);
+      } catch (e) {
+        logger.warn(`getChapterRawUsfm failed: ${e}`);
+        return JSON.stringify({ rawUsfm: '', error: String(e) });
+      }
+    },
+  );
+
+  const saveChapterRawUsfmPromise = papi.commands.registerCommand(
+    'paratextProjectManager.saveChapterRawUsfm',
+    async (
+      projectId: string,
+      bookCode: string,
+      chapter: number,
+      rawUsfm: string,
+    ): Promise<string> => {
+      try {
+        const projectDir = await resolveProjectDir(projectId);
+        await sendToNotesHelper('registerProjectDir', [projectId, projectDir]);
+        const saveResult = (await sendToNotesHelper('saveChapterRawUsfm', [
+          projectId,
+          projectDir,
+          bookCode,
+          chapter,
+          rawUsfm,
+        ])) as { status: string; error?: string };
+
+        if (saveResult && saveResult.status === 'error') {
+          logger.warn(`saveChapterRawUsfm failed: ${saveResult.error}`);
+          return JSON.stringify({ status: 'error', error: saveResult.error });
+        }
+
+        // Broadcast so other stations reload chapter text if collab is active
+        const payload = { projectId, book: bookCode, chapter };
+        collabEventEmitter.emit({ type: 'chapter_raw_update', payload });
+        if (localCollabRole !== 'none') {
+          try {
+            await sendToNotesHelper('broadcastCollab', [{ type: 'chapter_raw_update', payload }]);
+          } catch (helperErr) {
+            logger.warn(`Failed to broadcast chapter_raw_update to helper: ${helperErr}`);
+          }
+        }
+
+        return JSON.stringify({ status: 'ok' });
+      } catch (e) {
+        logger.warn(`saveChapterRawUsfm failed: ${e}`);
+        return JSON.stringify({ status: 'error', error: String(e) });
       }
     },
   );
@@ -4682,8 +4843,11 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     await setTeamMembersPromise,
     await notesViewerProviderPromise,
     await scriptureViewerProviderPromise,
+    await draftingTermsProviderPromise,
     await openNotesViewerPromise,
     await openScriptureViewerPromise,
+    await openDraftingTermsPromise,
+    await selectVersePromise,
     await getProjectNotesPromise,
     await saveProjectNotePromise,
     await deleteProjectNotePromise,
@@ -4691,6 +4855,8 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     await markNoteAsReadPromise,
     await getProjectBooksPromise,
     await getChapterTextPromise,
+    await getChapterRawUsfmPromise,
+    await saveChapterRawUsfmPromise,
     await updateVerseTextPromise,
     await getNotesSettingsPromise,
     await saveNotesSettingsPromise,
@@ -4725,6 +4891,8 @@ export async function activate(context: ExecutionActivationContext): Promise<voi
     await openPullRequestsPromise,
     await selectKeyTermPromise,
     selectKeyTermEmitter,
+    await addRenderingToSelectedTermPromise,
+    addRenderingToSelectedTermEmitter,
     collabEventEmitter,
     await getPullRequestsPromise,
     await savePullRequestsPromise,

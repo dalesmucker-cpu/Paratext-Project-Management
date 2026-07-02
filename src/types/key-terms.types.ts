@@ -28,6 +28,13 @@ export interface Rendering {
   updatedAt: string; // ISO string
 }
 
+export interface ManualFoundOverride {
+  reference: string; // "GEN 1:1"
+  markedBy: string;
+  timestamp: string; // ISO string
+  note?: string;
+}
+
 export interface KeyTerm {
   id: string; // original identifier, e.g. from BiblicalTerms.xml or generated
   lemma: string; // Greek or Hebrew word
@@ -38,6 +45,7 @@ export interface KeyTerm {
   references: string[]; // Verses where this term appears (format: "BOOK C:V", e.g., "GEN 1:1")
   renderings: Rendering[];
   notes: TermNote[];
+  manualFoundRefs?: ManualFoundOverride[]; // User-marked "found" overrides for refs where the rendering isn't detected in the text
   updatedAt: string; // ISO string
 }
 
@@ -65,7 +73,7 @@ export interface KeyTermsStore {
 
 export interface MatchResult {
   found: boolean;
-  matchType: 'exact' | 'regex' | 'wildcard' | 'affix' | 'fuzzy' | 'none';
+  matchType: 'exact' | 'regex' | 'wildcard' | 'affix' | 'fuzzy' | 'manual' | 'none';
   matchedText?: string;
   editDistance?: number;
   confidence: number; // 0 to 1

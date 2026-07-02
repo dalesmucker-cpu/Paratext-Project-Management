@@ -19,6 +19,7 @@
     "onCommand:paratextProjectManager.openMyTasks",
     "onCommand:paratextProjectManager.openProjectOverview",
     "onCommand:paratextProjectManager.openScriptureViewer",
+    "onCommand:paratextProjectManager.openDraftingTerms",
     "onCommand:paratextProjectManager.openNotesViewer",
     "onCommand:paratextProjectManager.openKeyTerms",
     "onCommand:paratextProjectManager.openKeyTermsAnalytics",
